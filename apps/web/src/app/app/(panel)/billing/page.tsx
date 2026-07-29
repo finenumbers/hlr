@@ -27,6 +27,10 @@ export default function CabinetBillingPage() {
     queryKey: ['cabinet', 'tariff', tenantId],
     queryFn: () => api.cabinet.tariff(),
     enabled: Boolean(tenantId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   return (

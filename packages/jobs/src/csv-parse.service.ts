@@ -214,6 +214,67 @@ export class CsvParseService {
       };
     }
 
+    if (!job.unitSellPrice) {
+      const failed = await this.deps.store.finalizeJob({
+        jobId: job.id,
+        status: 'FAILED',
+        errorCode: 'PRICE_SNAPSHOT_MISSING',
+        errorMessage: 'CSV job shell has no unitSellPrice snapshot',
+      });
+      return {
+        job: failed ?? job,
+        workUnits: 0,
+        batchesEnqueued: 0,
+        deduplicatedPhoneCount: normalized.deduplicatedCount,
+        failed: true,
+      };
+    }
+
+    if (!this.deps.assertCanAffordFrozen) {
+      throw new Error(
+        'CsvParseService requires assertCanAffordFrozen (frozen unit price × count)',
+      );
+    }
+
+    try {
+      await this.deps.assertCanAffordFrozen({
+        tenantId: job.tenantId,
+        checkType: job.checkType,
+        unitCount: normalized.phones.length,
+        unitSellPrice: job.unitSellPrice,
+      });
+    } catch (error) {
+      const code =
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { name?: string }).name === 'BillingError' &&
+        typeof (error as { code?: unknown }).code === 'string'
+          ? (error as { code: string }).code
+          : 'CSV_AFFORDABILITY_FAILED';
+      const message = error instanceof Error ? error.message : 'Cannot afford CSV job';
+      const failed = await this.deps.store.finalizeJob({
+        jobId: job.id,
+        status: 'FAILED',
+        errorCode: code,
+        errorMessage: message,
+      });
+      this.logger.warn('jobs.csv_parse.affordability_failed', {
+        jobId: job.id,
+        tenantId: job.tenantId,
+        checkType: job.checkType,
+        unitCount: normalized.phones.length,
+        unitSellPrice: job.unitSellPrice,
+        code,
+      });
+      return {
+        job: failed ?? job,
+        workUnits: 0,
+        batchesEnqueued: 0,
+        deduplicatedPhoneCount: normalized.deduplicatedCount,
+        failed: true,
+      };
+    }
+
     const { job: updated, items } = await this.deps.store.attachItemsToJob({
       jobId: job.id,
       tenantId: job.tenantId,

@@ -9,6 +9,7 @@ import {
 } from './state-machine.js';
 import type { JobsStore } from './ports.js';
 import type {
+  CreateJobInput,
   JobItemRecord,
   JobRecord,
   JobRuntimeSettings,
@@ -62,6 +63,7 @@ export class InMemoryJobsStore implements JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
     // Mirror Postgres @@unique([tenantId, idempotencyKey]) for race-path tests.
@@ -78,6 +80,7 @@ export class InMemoryJobsStore implements JobsStore {
       }
     }
 
+    const snap = input.priceSnapshot ?? null;
     const now = new Date();
     const job: JobRecord = {
       id: randomUUID(),
@@ -88,9 +91,16 @@ export class InMemoryJobsStore implements JobsStore {
       itemCount: input.phones.length,
       successCount: 0,
       failureCount: 0,
-      estimatedCost: null,
+      estimatedCost:
+        snap && input.phones.length > 0
+          ? String(Number(snap.unitSellPrice) * input.phones.length)
+          : null,
       actualCost: null,
       currency: input.currency,
+      unitSellPrice: snap?.unitSellPrice ?? null,
+      unitProviderCost: snap?.unitProviderCost ?? null,
+      tariffPlanId: snap?.tariffPlanId ?? null,
+      tariffPlanCode: snap?.tariffPlanCode ?? null,
       originalFilename: input.originalFilename,
       idempotencyKey: input.idempotencyKey,
       createdByUserId: input.createdByUserId,
@@ -115,9 +125,13 @@ export class InMemoryJobsStore implements JobsStore {
         phoneE164,
         providerCode: 'smsc',
         providerMessageId: null,
-        estimatedCost: null,
+        estimatedCost: snap?.unitSellPrice ?? null,
         actualCost: null,
         currency: input.currency,
+        unitSellPrice: snap?.unitSellPrice ?? null,
+        unitProviderCost: snap?.unitProviderCost ?? null,
+        tariffPlanId: snap?.tariffPlanId ?? null,
+        tariffPlanCode: snap?.tariffPlanCode ?? null,
         resultStatus: null,
         isReachable: null,
         imsi: null,
@@ -151,8 +165,19 @@ export class InMemoryJobsStore implements JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<JobRecord> {
+    if (
+      !input.priceSnapshot?.unitSellPrice ||
+      !input.priceSnapshot.unitProviderCost ||
+      !input.priceSnapshot.tariffPlanId ||
+      !input.priceSnapshot.tariffPlanCode
+    ) {
+      throw new Error(
+        'createJobShell requires a full priceSnapshot (unitSellPrice, unitProviderCost, tariffPlanId, tariffPlanCode)',
+      );
+    }
     const result = await this.createJobWithItems({ ...input, phones: [] });
     return result.job;
   }
@@ -179,9 +204,13 @@ export class InMemoryJobsStore implements JobsStore {
         phoneE164,
         providerCode: 'smsc',
         providerMessageId: null,
-        estimatedCost: null,
+        estimatedCost: job.unitSellPrice,
         actualCost: null,
         currency: input.currency,
+        unitSellPrice: job.unitSellPrice,
+        unitProviderCost: job.unitProviderCost,
+        tariffPlanId: job.tariffPlanId,
+        tariffPlanCode: job.tariffPlanCode,
         resultStatus: null,
         isReachable: null,
         imsi: null,
@@ -203,6 +232,10 @@ export class InMemoryJobsStore implements JobsStore {
       return cloneItem(item);
     });
     job.itemCount = input.phones.length;
+    job.estimatedCost =
+      job.unitSellPrice !== null
+        ? String(Number(job.unitSellPrice) * input.phones.length)
+        : job.estimatedCost;
     job.updatedAt = now;
     this.jobs.set(job.id, job);
     return { job: cloneJob(job), items };

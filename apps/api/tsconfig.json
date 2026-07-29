@@ -6,5 +6,6 @@
     "baseUrl": ".",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.e2e.test.ts", "src/test/**"]
 }

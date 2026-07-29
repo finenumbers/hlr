@@ -60,6 +60,20 @@ Idempotency key conventions:
 
 `TariffPlan.isDefault` is catalog metadata only and is **not** auto-applied in billing. Provider cost (`providerCost`) is never mixed into client charge fields (`JobItem.estimatedCost` / `actualCost` are sell-side).
 
+**Job price snapshot:** at job accept the API freezes `unitSellPrice` / `unitProviderCost` / plan ids onto `Job` / `JobItem` via `jobPriceSnapshotFromEstimate`. `createJobShell` and `CreateJobService.create` require a full snapshot.
+
+`reserveForJobItem` requires:
+
+1. `input.checkType === jobItem.checkType` (`CHECK_TYPE_MISMATCH`)
+2. Full snapshot fields present (`PRICE_SNAPSHOT_MISSING` — **no** live re-price for sell or provider cost)
+3. Live assignment still valid for that `checkType` (gate only)
+
+HOLD amount is always the snapshot sell price. Capture follows the HOLD (Policy B).
+
+**CSV after parse:** `assertCanAffordFrozen({ unitSellPrice: job.unitSellPrice, unitCount })` — total = frozen × N; still gates live assignment. Must not call live `estimate` for the total.
+
+Display: cabinet `quoteProducts`; admin `inspectProductTariffs` → `none` | `active` | `invalid`.
+
 ## Jobs integration
 
 ```ts

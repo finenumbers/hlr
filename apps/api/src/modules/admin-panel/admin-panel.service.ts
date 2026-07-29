@@ -24,6 +24,7 @@ import { TenantsService } from '../tenants/tenants.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
+import { mapTenantTariffsSummary } from './tenant-tariff-summary';
 
 const BCRYPT_COST = 12;
 
@@ -191,7 +192,9 @@ export class AdminPanelService {
             select: {
               checkType: true,
               tariffPlanId: true,
-              tariffPlan: { select: { code: true, name: true, checkType: true } },
+              tariffPlan: {
+                select: { code: true, name: true, checkType: true, isActive: true },
+              },
             },
           },
           _count: {
@@ -282,10 +285,59 @@ export class AdminPanelService {
             updatedAt: tenant.wallet.updatedAt,
           }
         : null,
-      tariffs: mapTenantTariffsDetail(tenant.tenantTariffs),
+      tariffs: await this.resolveTenantTariffViews(id, tenant.tenantTariffs),
       counts: tenant._count,
       apiKeysPreview: apiKeys.items,
       webhooksPreview: webhooks.items,
+    };
+  }
+
+  /**
+   * Admin tariff slots: `none` | `active` | `invalid` (row exists but not billable).
+   * Sell price only when status=active (same resolver as client charge).
+   */
+  private async resolveTenantTariffViews(
+    tenantId: string,
+    rows: TariffAssignmentDetail[],
+  ) {
+    const inspected = await this.billing.inspectProductTariffs(tenantId);
+    const mapSlot = (
+      status: (typeof inspected)['hlr'],
+      row: TariffAssignmentDetail | undefined,
+    ) => {
+      if (status.status === 'none') {
+        return null;
+      }
+      if (status.status === 'active' && status.quote) {
+        return {
+          status: 'active' as const,
+          tariffPlanId: status.quote.tariffPlanId,
+          code: status.quote.tariffPlanCode,
+          name: status.quote.tariffPlanName,
+          sellPrice: status.quote.unitSellPrice,
+          priceOverride: row?.priceOverride?.toString() ?? null,
+        };
+      }
+      return {
+        status: 'invalid' as const,
+        tariffPlanId: row?.tariffPlanId ?? null,
+        code: row?.tariffPlan.code ?? null,
+        name: row?.tariffPlan.name ?? null,
+        sellPrice: null,
+        priceOverride: row?.priceOverride?.toString() ?? null,
+        reasonCode: status.reasonCode ?? null,
+        reasonMessage: status.reasonMessage ?? null,
+      };
+    };
+    return {
+      hlr: mapSlot(
+        inspected.hlr,
+        rows.find((r) => r.checkType === 'HLR'),
+      ),
+      ping: mapSlot(
+        inspected.ping,
+        rows.find((r) => r.checkType === 'PING'),
+      ),
     };
   }
 
@@ -1037,7 +1089,12 @@ function normalizeEmail(email: string): string {
 type TariffAssignmentSummary = {
   checkType: 'HLR' | 'PING';
   tariffPlanId: string;
-  tariffPlan: { code: string; name: string; checkType: 'HLR' | 'PING' };
+  tariffPlan: {
+    code: string;
+    name: string;
+    checkType: 'HLR' | 'PING';
+    isActive: boolean;
+  };
 };
 
 type TariffAssignmentDetail = TariffAssignmentSummary & {
@@ -1047,51 +1104,7 @@ type TariffAssignmentDetail = TariffAssignmentSummary & {
     name: string;
     checkType: 'HLR' | 'PING';
     sellPrice: { toString(): string };
+    isActive: boolean;
   };
 };
 
-function mapTenantTariffsSummary(rows: TariffAssignmentSummary[]) {
-  const hlr = rows.find((r) => r.checkType === 'HLR');
-  const ping = rows.find((r) => r.checkType === 'PING');
-  return {
-    hlr: hlr
-      ? {
-          tariffPlanId: hlr.tariffPlanId,
-          code: hlr.tariffPlan.code,
-          name: hlr.tariffPlan.name,
-        }
-      : null,
-    ping: ping
-      ? {
-          tariffPlanId: ping.tariffPlanId,
-          code: ping.tariffPlan.code,
-          name: ping.tariffPlan.name,
-        }
-      : null,
-  };
-}
-
-function mapTenantTariffsDetail(rows: TariffAssignmentDetail[]) {
-  const hlr = rows.find((r) => r.checkType === 'HLR');
-  const ping = rows.find((r) => r.checkType === 'PING');
-  return {
-    hlr: hlr
-      ? {
-          tariffPlanId: hlr.tariffPlanId,
-          code: hlr.tariffPlan.code,
-          name: hlr.tariffPlan.name,
-          sellPrice: (hlr.priceOverride ?? hlr.tariffPlan.sellPrice).toString(),
-          priceOverride: hlr.priceOverride?.toString() ?? null,
-        }
-      : null,
-    ping: ping
-      ? {
-          tariffPlanId: ping.tariffPlanId,
-          code: ping.tariffPlan.code,
-          name: ping.tariffPlan.name,
-          sellPrice: (ping.priceOverride ?? ping.tariffPlan.sellPrice).toString(),
-          priceOverride: ping.priceOverride?.toString() ?? null,
-        }
-      : null,
-  };
-}

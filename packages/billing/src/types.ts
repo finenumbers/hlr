@@ -12,6 +12,7 @@ export type BillingLogger = {
 export type ResolvedTariff = {
   tariffPlanId: string;
   tariffPlanCode: string;
+  tariffPlanName: string;
   tenantTariffId: string | null;
   currency: string;
   checkType: BillingCheckType;
@@ -31,7 +32,7 @@ export type CostEstimate = {
   estimatedSellTotal: string;
   estimatedProviderTotal: string;
   currency: string;
-  tariff: Omit<ResolvedTariff, 'sellPrice' | 'providerCost'> & {
+  tariff: Omit<ResolvedTariff, 'sellPrice' | 'providerCost' | 'tariffPlanName'> & {
     sellPrice: string;
     providerCost: string;
   };

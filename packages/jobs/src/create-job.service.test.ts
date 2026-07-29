@@ -3,7 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { CreateJobService } from './create-job.service.js';
 import { InMemoryJobsQueue } from './memory-queue.js';
 import { InMemoryJobsStore } from './memory-store.js';
-import { JobsValidationError } from './types.js';
+import { JobsValidationError, type JobPriceSnapshot } from './types.js';
+
+const snap = (checkType: 'HLR' | 'PING' = 'HLR'): JobPriceSnapshot => ({
+  unitSellPrice: checkType === 'HLR' ? '1.5' : '2.5',
+  unitProviderCost: '0.4',
+  tariffPlanId: `plan-${checkType.toLowerCase()}`,
+  tariffPlanCode: `code-${checkType.toLowerCase()}`,
+  currency: 'RUB',
+});
 
 describe('CreateJobService', () => {
   it('creates job, dedupes phones, and enqueues submit batches', async () => {
@@ -17,6 +25,7 @@ describe('CreateJobService', () => {
       checkType: 'HLR',
       source: 'BULK',
       phones: ['+79991234567', '79991234567', '+79997654321', '+79991112233'],
+      priceSnapshot: snap('HLR'),
     });
 
     expect(result.deduplicated).toBe(false);
@@ -42,6 +51,7 @@ describe('CreateJobService', () => {
       source: 'API',
       phones: ['+79991234567'],
       idempotencyKey: 'idem-1',
+      priceSnapshot: snap('PING'),
     });
     queue.clear();
 
@@ -51,6 +61,7 @@ describe('CreateJobService', () => {
       source: 'API',
       phones: ['+79991234567'],
       idempotencyKey: 'idem-1',
+      priceSnapshot: snap('PING'),
     });
 
     expect(second.deduplicated).toBe(true);
@@ -91,6 +102,7 @@ describe('CreateJobService', () => {
         source: 'API',
         phones: ['+79991234567'],
         idempotencyKey: 'race-1',
+        priceSnapshot: snap('HLR'),
       }),
       service.create({
         tenantId: 'tenant-1',
@@ -98,6 +110,7 @@ describe('CreateJobService', () => {
         source: 'API',
         phones: ['+79991234567'],
         idempotencyKey: 'race-1',
+        priceSnapshot: snap('HLR'),
       }),
     ]);
 

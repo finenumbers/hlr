@@ -33,6 +33,7 @@ export type {
   JobItemRecord,
   JobProgress,
   JobRuntimeSettings,
+  JobPriceSnapshot,
   CreateJobInput,
   CreateJobResult,
   CsvParsePayload,

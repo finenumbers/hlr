@@ -35,6 +35,19 @@ const silentLogger: JobsLogger = {
   error() {},
 };
 
+/** Prefer stable billing codes (e.g. TARIFF_NOT_CONFIGURED) over generic SUBMIT_FAILED. */
+function billingFailureCode(error: unknown): string | null {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: string }).name === 'BillingError' &&
+    typeof (error as { code?: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
+
 /** Attach optional requestId for cross-process log correlation. */
 function withRequestId<T extends object>(
   base: T,
@@ -190,7 +203,7 @@ export class JobLifecycleService {
         const message = error instanceof Error ? error.message : 'Submit failed';
         const code = isProviderError(error)
           ? String(error.providerErrorCode ?? error.kind)
-          : 'SUBMIT_FAILED';
+          : billingFailureCode(error) ?? 'SUBMIT_FAILED';
 
         const failedItem = await this.deps.store.updateItemAfterSubmit({
           jobItemId: claimed.id,

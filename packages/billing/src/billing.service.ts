@@ -1,6 +1,6 @@
-import type { PrismaClient } from '@finenumbers/db';
+import type { Prisma, PrismaClient } from '@finenumbers/db';
 
-import { BillingError } from './errors.js';
+import { BillingError, isBillingError } from './errors.js';
 import {
   adjustmentIdempotencyKey,
   debitIdempotencyKey,
@@ -17,11 +17,16 @@ import { LedgerService } from './ledger.service.js';
 import {
   assertPositiveMoney,
   money,
+  moneyFromSafeInteger,
   moneyMin,
   moneySub,
   moneyToString,
   moneyZero,
 } from './money.js';
+import {
+  priceSnapshotFromResolved,
+  type PriceSnapshotDto,
+} from './price-quote.js';
 import { TariffResolver } from './tariff-resolver.js';
 import type {
   AdjustmentResult,
@@ -237,17 +242,119 @@ export class BillingService {
   private async resolveJobItemContext(jobItemId: string): Promise<{
     jobId: string;
     phoneE164: string | null;
+    checkType: 'HLR' | 'PING';
+    unitSellPrice: Prisma.Decimal | null;
+    unitProviderCost: Prisma.Decimal | null;
+    tariffPlanId: string | null;
+    tariffPlanCode: string | null;
+    currency: string;
   }> {
     const item = await this.prisma.jobItem.findUnique({
       where: { id: jobItemId },
-      select: { jobId: true, phoneE164: true },
+      select: {
+        jobId: true,
+        phoneE164: true,
+        checkType: true,
+        unitSellPrice: true,
+        unitProviderCost: true,
+        tariffPlanId: true,
+        tariffPlanCode: true,
+        currency: true,
+      },
     });
     if (!item) {
       throw new BillingError('VALIDATION_FAILED', `Job item ${jobItemId} not found`, {
         details: { jobItemId },
       });
     }
-    return { jobId: item.jobId, phoneE164: item.phoneE164 };
+    if (item.checkType !== 'HLR' && item.checkType !== 'PING') {
+      throw new BillingError('VALIDATION_FAILED', `Job item ${jobItemId} has invalid checkType`, {
+        details: { jobItemId, checkType: item.checkType },
+      });
+    }
+    return {
+      jobId: item.jobId,
+      phoneE164: item.phoneE164,
+      checkType: item.checkType,
+      unitSellPrice: item.unitSellPrice,
+      unitProviderCost: item.unitProviderCost,
+      tariffPlanId: item.tariffPlanId,
+      tariffPlanCode: item.tariffPlanCode,
+      currency: item.currency,
+    };
+  }
+
+  /**
+   * Display/quote helper: billable assignment for one product, or null.
+   * Uses the same resolver as estimate/reserve (effective window + active plan).
+   */
+  async quoteProduct(
+    tenantId: string,
+    checkType: BillingCheckType,
+  ): Promise<PriceSnapshotDto | null> {
+    const resolved = await this.tariffs.tryResolveForTenant(tenantId, checkType);
+    if (!resolved) {
+      return null;
+    }
+    return priceSnapshotFromResolved(resolved);
+  }
+
+  async quoteProducts(tenantId: string): Promise<{
+    hlr: PriceSnapshotDto | null;
+    ping: PriceSnapshotDto | null;
+  }> {
+    const [hlr, ping] = await Promise.all([
+      this.quoteProduct(tenantId, 'HLR'),
+      this.quoteProduct(tenantId, 'PING'),
+    ]);
+    return { hlr, ping };
+  }
+
+  /**
+   * Admin-oriented status: distinguish missing assignment vs present-but-not-billable.
+   */
+  async inspectProductTariff(
+    tenantId: string,
+    checkType: BillingCheckType,
+  ): Promise<{
+    status: 'none' | 'active' | 'invalid';
+    quote: PriceSnapshotDto | null;
+    reasonCode?: string;
+    reasonMessage?: string;
+  }> {
+    const type = checkType === 'PING' ? 'PING' : 'HLR';
+    const row = await this.prisma.tenantTariff.findUnique({
+      where: { tenantId_checkType: { tenantId, checkType: type } },
+      select: { id: true },
+    });
+    if (!row) {
+      return { status: 'none', quote: null };
+    }
+    try {
+      const resolved = await this.tariffs.resolveForTenant(tenantId, type);
+      return { status: 'active', quote: priceSnapshotFromResolved(resolved) };
+    } catch (error) {
+      if (isBillingError(error)) {
+        return {
+          status: 'invalid',
+          quote: null,
+          reasonCode: error.code,
+          reasonMessage: error.message,
+        };
+      }
+      throw error;
+    }
+  }
+
+  async inspectProductTariffs(tenantId: string): Promise<{
+    hlr: Awaited<ReturnType<BillingService['inspectProductTariff']>>;
+    ping: Awaited<ReturnType<BillingService['inspectProductTariff']>>;
+  }> {
+    const [hlr, ping] = await Promise.all([
+      this.inspectProductTariff(tenantId, 'HLR'),
+      this.inspectProductTariff(tenantId, 'PING'),
+    ]);
+    return { hlr, ping };
   }
 
   estimate(input: {
@@ -260,6 +367,7 @@ export class BillingService {
 
   /**
    * Fail-fast pre-check before job creation (best-effort; reserve is authoritative).
+   * Uses **live** tariff (correct at accept time, when snapshot is stamped).
    */
   async assertCanAfford(input: {
     tenantId: string;
@@ -267,22 +375,66 @@ export class BillingService {
     unitCount: number;
   }): Promise<CostEstimate> {
     const estimate = await this.estimate(input);
-    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId: input.tenantId } });
-    if (!wallet) {
-      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${input.tenantId} not found`, {
-        details: { tenantId: input.tenantId },
+    await this.assertWalletCovers(input.tenantId, estimate.estimatedSellTotal);
+    return estimate;
+  }
+
+  /**
+   * Full-batch affordability using a **frozen** unit sell price (CSV after parse).
+   * Still gates that the product assignment is live; does not re-price from catalog.
+   */
+  async assertCanAffordFrozen(input: {
+    tenantId: string;
+    checkType: BillingCheckType;
+    unitCount: number;
+    unitSellPrice: string;
+  }): Promise<{ required: string; available: string }> {
+    if (!Number.isInteger(input.unitCount) || input.unitCount < 1) {
+      throw new BillingError('VALIDATION_FAILED', 'unitCount must be a positive integer', {
+        details: { unitCount: input.unitCount },
       });
     }
-    if (money(wallet.availableBalance).lt(money(estimate.estimatedSellTotal))) {
+    // Gate only — must still be allowed to run this product.
+    await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
+
+    let unit: ReturnType<typeof money>;
+    try {
+      unit = money(input.unitSellPrice);
+    } catch (error) {
+      throw new BillingError('INVALID_AMOUNT', 'unitSellPrice snapshot is not valid money', {
+        details: { unitSellPrice: input.unitSellPrice },
+        cause: error,
+      });
+    }
+    if (unit.lte(0)) {
+      throw new BillingError('INVALID_AMOUNT', 'unitSellPrice snapshot must be > 0', {
+        details: { unitSellPrice: input.unitSellPrice },
+      });
+    }
+
+    const required = moneyToString(unit.mul(moneyFromSafeInteger(input.unitCount, 'unitCount')));
+    const available = await this.assertWalletCovers(input.tenantId, required);
+    return { required, available };
+  }
+
+  private async assertWalletCovers(tenantId: string, requiredTotal: string): Promise<string> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+    const available = moneyToString(wallet.availableBalance);
+    if (money(wallet.availableBalance).lt(money(requiredTotal))) {
       throw new BillingError('INSUFFICIENT_FUNDS', 'Insufficient funds for estimated job cost', {
         details: {
-          tenantId: input.tenantId,
-          required: estimate.estimatedSellTotal,
-          available: moneyToString(wallet.availableBalance),
+          tenantId,
+          required: requiredTotal,
+          available,
         },
       });
     }
-    return estimate;
+    return available;
   }
 
   async reserveForJobItem(input: {
@@ -293,22 +445,98 @@ export class BillingService {
   }): Promise<ReserveResult> {
     const idemKey = input.idempotencyKey ?? holdIdempotencyKey(input.jobItemId);
     await this.ledger.ensureWallet(input.tenantId);
+    const jobContext = await this.resolveJobItemContext(input.jobItemId);
+
+    if (jobContext.checkType !== input.checkType) {
+      throw new BillingError(
+        'CHECK_TYPE_MISMATCH',
+        `Reserve checkType ${input.checkType} does not match job item ${jobContext.checkType}`,
+        {
+          details: {
+            jobItemId: input.jobItemId,
+            itemCheckType: jobContext.checkType,
+            requestedCheckType: input.checkType,
+          },
+        },
+      );
+    }
 
     const existing = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
     if (existing) {
+      // HOLD already placed — do not re-price or re-require live tariff.
       const wallet = await this.getWallet(input.tenantId);
-      const tariff = await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
       return {
         hold: this.ledger.toEntryView(existing),
         wallet,
-        tariff: TariffResolver.toTariffView(tariff),
+        tariff: tariffViewFromHoldOrSnapshot(existing.metadata, jobContext, input.checkType),
         created: false,
       };
     }
 
-    const tariff = await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
-    const amount = tariff.sellPrice;
-    const jobContext = await this.resolveJobItemContext(input.jobItemId);
+    if (jobContext.unitSellPrice === null) {
+      throw new BillingError(
+        'PRICE_SNAPSHOT_MISSING',
+        `Job item ${input.jobItemId} has no unitSellPrice snapshot; refuse live re-price`,
+        { details: { jobItemId: input.jobItemId, checkType: input.checkType } },
+      );
+    }
+
+    // Gate: product must still be assigned. Charge uses job-accept snapshot only.
+    const live = await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
+
+    let amount: ReturnType<typeof money>;
+    let providerCost: ReturnType<typeof money>;
+    try {
+      amount = money(jobContext.unitSellPrice);
+      if (jobContext.unitProviderCost === null) {
+        throw new BillingError(
+          'PRICE_SNAPSHOT_MISSING',
+          `Job item ${input.jobItemId} has no unitProviderCost snapshot`,
+          { details: { jobItemId: input.jobItemId, checkType: input.checkType } },
+        );
+      }
+      providerCost = money(jobContext.unitProviderCost);
+    } catch (error) {
+      if (error instanceof BillingError) {
+        throw error;
+      }
+      throw new BillingError('INVALID_AMOUNT', 'Job item price snapshot is not valid money', {
+        details: {
+          jobItemId: input.jobItemId,
+          unitSellPrice: String(jobContext.unitSellPrice),
+          unitProviderCost: String(jobContext.unitProviderCost),
+        },
+        cause: error,
+      });
+    }
+    if (amount.lte(0)) {
+      throw new BillingError('INVALID_AMOUNT', 'unitSellPrice snapshot must be > 0', {
+        details: { jobItemId: input.jobItemId, unitSellPrice: moneyToString(amount) },
+      });
+    }
+
+    const currency = jobContext.currency || live.currency;
+    const sellPrice = amount;
+    // Audit ids from snapshot only — never mix with a newer live plan of the same type.
+    if (!jobContext.tariffPlanId || !jobContext.tariffPlanCode) {
+      throw new BillingError(
+        'PRICE_SNAPSHOT_MISSING',
+        `Job item ${input.jobItemId} missing tariffPlan snapshot fields`,
+        { details: { jobItemId: input.jobItemId, checkType: input.checkType } },
+      );
+    }
+    const tariffPlanId = jobContext.tariffPlanId;
+    const tariffPlanCode = jobContext.tariffPlanCode;
+    const tariffView: CostEstimate['tariff'] = {
+      tariffPlanId,
+      tariffPlanCode,
+      tenantTariffId: live.tenantTariffId,
+      currency,
+      checkType: live.checkType === 'PING' ? 'PING' : 'HLR',
+      sellPrice: moneyToString(sellPrice),
+      providerCost: moneyToString(providerCost),
+      source: live.source,
+    };
 
     try {
       return await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
@@ -317,7 +545,7 @@ export class BillingService {
           return {
             hold: this.ledger.toEntryView(raced),
             wallet: this.ledger.toBalances(locked),
-            tariff: TariffResolver.toTariffView(tariff),
+            tariff: tariffViewFromHoldOrSnapshot(raced.metadata, jobContext, input.checkType),
             created: false,
           };
         }
@@ -330,23 +558,24 @@ export class BillingService {
           tenantId: input.tenantId,
           type: 'HOLD',
           amount,
-          currency: tariff.currency,
+          currency,
           balanceAfterAvailable: wallet.availableBalance,
           balanceAfterHeld: wallet.heldBalance,
           jobItemId: input.jobItemId,
           idempotencyKey: idemKey,
-          description: `Reserve for ${tariff.checkType} check`,
+          description: `Reserve for ${live.checkType} check`,
           metadata: {
             jobId: jobContext.jobId,
             jobItemId: input.jobItemId,
             phoneE164: jobContext.phoneE164,
-            checkType: tariff.checkType,
-            sellPrice: moneyToString(tariff.sellPrice),
-            providerCost: moneyToString(tariff.providerCost),
-            tariffPlanId: tariff.tariffPlanId,
-            tariffPlanCode: tariff.tariffPlanCode,
-            tenantTariffId: tariff.tenantTariffId,
-            source: tariff.source,
+            checkType: live.checkType,
+            sellPrice: moneyToString(sellPrice),
+            providerCost: moneyToString(providerCost),
+            tariffPlanId,
+            tariffPlanCode,
+            tenantTariffId: live.tenantTariffId,
+            source: live.source,
+            priceSource: 'job_snapshot',
           },
         });
 
@@ -354,7 +583,7 @@ export class BillingService {
           where: { id: input.jobItemId },
           data: {
             estimatedCost: amount,
-            currency: tariff.currency,
+            currency,
           },
         });
 
@@ -363,12 +592,13 @@ export class BillingService {
           jobItemId: input.jobItemId,
           amount: moneyToString(amount),
           holdId: hold.id,
+          priceSource: 'job_snapshot',
         });
 
         return {
           hold: this.ledger.toEntryView(hold),
           wallet: this.ledger.toBalances(wallet),
-          tariff: TariffResolver.toTariffView(tariff),
+          tariff: tariffView,
           created: true,
         };
       });
@@ -380,7 +610,7 @@ export class BillingService {
           return {
             hold: this.ledger.toEntryView(again),
             wallet,
-            tariff: TariffResolver.toTariffView(tariff),
+            tariff: tariffViewFromHoldOrSnapshot(again.metadata, jobContext, input.checkType),
             created: false,
           };
         }
@@ -972,6 +1202,55 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code?: string }).code === 'P2002'
   );
+}
+
+function tariffViewFromHoldOrSnapshot(
+  metadata: unknown,
+  snapshot: {
+    unitSellPrice: Prisma.Decimal | null;
+    unitProviderCost: Prisma.Decimal | null;
+    tariffPlanId: string | null;
+    tariffPlanCode: string | null;
+    currency: string;
+  },
+  checkType: BillingCheckType,
+): CostEstimate['tariff'] {
+  const meta =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const sell =
+    typeof meta.sellPrice === 'string'
+      ? meta.sellPrice
+      : snapshot.unitSellPrice !== null
+        ? moneyToString(snapshot.unitSellPrice)
+        : '0';
+  const provider =
+    typeof meta.providerCost === 'string'
+      ? meta.providerCost
+      : snapshot.unitProviderCost !== null
+        ? moneyToString(snapshot.unitProviderCost)
+        : '0';
+  return {
+    tariffPlanId:
+      typeof meta.tariffPlanId === 'string'
+        ? meta.tariffPlanId
+        : (snapshot.tariffPlanId ?? ''),
+    tariffPlanCode:
+      typeof meta.tariffPlanCode === 'string'
+        ? meta.tariffPlanCode
+        : (snapshot.tariffPlanCode ?? ''),
+    tenantTariffId: typeof meta.tenantTariffId === 'string' ? meta.tenantTariffId : null,
+    currency:
+      typeof meta.currency === 'string'
+        ? meta.currency
+        : snapshot.currency || 'RUB',
+    checkType:
+      meta.checkType === 'HLR' || meta.checkType === 'PING' ? meta.checkType : checkType,
+    sellPrice: sell,
+    providerCost: provider,
+    source: meta.source === 'tenant_override' ? 'tenant_override' : 'tenant_plan',
+  };
 }
 
 /** Copy job linkage fields from HOLD metadata onto DEBIT/RELEASE rows. */

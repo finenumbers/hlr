@@ -104,6 +104,16 @@ export class CreateJobService {
         count: normalized.phones.length,
       });
     }
+    if (
+      !input.priceSnapshot?.unitSellPrice ||
+      !input.priceSnapshot.unitProviderCost ||
+      !input.priceSnapshot.tariffPlanId ||
+      !input.priceSnapshot.tariffPlanCode
+    ) {
+      throw new JobsValidationError(
+        'priceSnapshot is required (unitSellPrice, unitProviderCost, tariffPlanId, tariffPlanCode)',
+      );
+    }
 
     let job;
     let items;
@@ -117,7 +127,8 @@ export class CreateJobService {
         createdByUserId: input.createdByUserId ?? null,
         apiKeyId: input.apiKeyId ?? null,
         originalFilename: input.originalFilename ?? null,
-        currency: input.currency ?? 'RUB',
+        currency: input.priceSnapshot?.currency ?? input.currency ?? 'RUB',
+        priceSnapshot: input.priceSnapshot ?? null,
         metadata: input.metadata ?? null,
       }));
     } catch (error) {

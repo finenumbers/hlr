@@ -70,6 +70,10 @@ type JobItemRow = {
   estimatedCost: Prisma.Decimal | null;
   actualCost: Prisma.Decimal | null;
   currency: string;
+  unitSellPrice: Prisma.Decimal | null;
+  unitProviderCost: Prisma.Decimal | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
 };
 
 type JobRow = {
@@ -77,6 +81,10 @@ type JobRow = {
   tenantId: string;
   estimatedCost: Prisma.Decimal | null;
   actualCost: Prisma.Decimal | null;
+  unitSellPrice: Prisma.Decimal | null;
+  unitProviderCost: Prisma.Decimal | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
 };
 
 function dec(value: unknown): Prisma.Decimal {
@@ -325,13 +333,12 @@ export class FakeBillingPrisma {
       include?: { tariffPlan: boolean };
     }) => {
       let row: TenantTariffRow | undefined;
+      // Mirror Prisma @@unique([tenantId, checkType]) — never "first tariff for tenant".
       if (where.tenantId_checkType) {
         const { tenantId, checkType } = where.tenantId_checkType;
         row = [...this.tenantTariffs.values()].find(
           (t) => t.tenantId === tenantId && t.checkType === checkType,
         );
-      } else if (where.tenantId) {
-        row = [...this.tenantTariffs.values()].find((t) => t.tenantId === where.tenantId);
       }
       if (!row) {
         return null;
@@ -436,6 +443,21 @@ export class FakeBillingPrisma {
       }
       if (data.currency !== undefined) {
         row.currency = String(data.currency);
+      }
+      if (data.unitSellPrice !== undefined) {
+        row.unitSellPrice = data.unitSellPrice === null ? null : dec(data.unitSellPrice);
+      }
+      if (data.unitProviderCost !== undefined) {
+        row.unitProviderCost =
+          data.unitProviderCost === null ? null : dec(data.unitProviderCost);
+      }
+      if (data.tariffPlanId !== undefined) {
+        row.tariffPlanId =
+          data.tariffPlanId === null ? null : String(data.tariffPlanId);
+      }
+      if (data.tariffPlanCode !== undefined) {
+        row.tariffPlanCode =
+          data.tariffPlanCode === null ? null : String(data.tariffPlanCode);
       }
       return { ...row };
     },
@@ -567,16 +589,53 @@ export class FakeBillingPrisma {
     return row;
   }
 
-  seedJobItem(tenantId: string, jobId = randomUUID()): JobItemRow {
+  seedJobItem(
+    tenantId: string,
+    jobId = randomUUID(),
+    snapshot?: {
+      unitSellPrice: string;
+      unitProviderCost?: string;
+      tariffPlanId?: string;
+      tariffPlanCode?: string;
+      checkType?: 'HLR' | 'PING';
+    },
+  ): JobItemRow {
+    const checkType = snapshot?.checkType ?? 'HLR';
+    // Default: freeze current assignment for checkType (mirrors job-accept snapshot).
+    let unitSell = snapshot?.unitSellPrice ? dec(snapshot.unitSellPrice) : null;
+    let unitProvider = snapshot?.unitProviderCost
+      ? dec(snapshot.unitProviderCost)
+      : null;
+    let tariffPlanId = snapshot?.tariffPlanId ?? null;
+    let tariffPlanCode = snapshot?.tariffPlanCode ?? null;
+    if (unitSell === null) {
+      const assignment = [...this.tenantTariffs.values()].find(
+        (t) => t.tenantId === tenantId && t.checkType === checkType,
+      );
+      const plan = assignment
+        ? this.tariffPlans.get(assignment.tariffPlanId)
+        : undefined;
+      if (plan) {
+        unitSell = assignment?.priceOverride ?? plan.sellPrice;
+        unitProvider = plan.providerCost;
+        tariffPlanId = plan.id;
+        tariffPlanCode = plan.code;
+      }
+    }
+
     const row: JobItemRow = {
       id: randomUUID(),
       jobId,
       tenantId,
-      checkType: 'HLR',
+      checkType,
       phoneE164: '+79001234567',
-      estimatedCost: null,
+      estimatedCost: unitSell,
       actualCost: null,
       currency: 'RUB',
+      unitSellPrice: unitSell,
+      unitProviderCost: unitProvider,
+      tariffPlanId,
+      tariffPlanCode,
     };
     this.jobItems.set(row.id, row);
     if (!this.jobs.has(jobId)) {
@@ -585,6 +644,68 @@ export class FakeBillingPrisma {
         tenantId,
         estimatedCost: null,
         actualCost: null,
+        unitSellPrice: unitSell,
+        unitProviderCost: unitProvider,
+        tariffPlanId,
+        tariffPlanCode,
+      });
+    }
+    return row;
+  }
+
+  /** Remove all tenant tariff assignments (simulate admin unassign mid-flight). */
+  clearTenantTariffs(tenantId: string): void {
+    for (const [id, row] of this.tenantTariffs) {
+      if (row.tenantId === tenantId) {
+        this.tenantTariffs.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Mirror a jobs-store item into the billing fake so reserveForJobItem can resolve
+   * snapshot fields after CreateJobService wrote to InMemoryJobsStore.
+   */
+  importJobItem(item: {
+    id: string;
+    jobId: string;
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    phoneE164: string;
+    estimatedCost?: string | null;
+    actualCost?: string | null;
+    currency?: string;
+    unitSellPrice?: string | null;
+    unitProviderCost?: string | null;
+    tariffPlanId?: string | null;
+    tariffPlanCode?: string | null;
+  }): JobItemRow {
+    const row: JobItemRow = {
+      id: item.id,
+      jobId: item.jobId,
+      tenantId: item.tenantId,
+      checkType: item.checkType,
+      phoneE164: item.phoneE164,
+      estimatedCost: item.estimatedCost == null ? null : dec(item.estimatedCost),
+      actualCost: item.actualCost == null ? null : dec(item.actualCost),
+      currency: item.currency ?? 'RUB',
+      unitSellPrice: item.unitSellPrice == null ? null : dec(item.unitSellPrice),
+      unitProviderCost:
+        item.unitProviderCost == null ? null : dec(item.unitProviderCost),
+      tariffPlanId: item.tariffPlanId ?? null,
+      tariffPlanCode: item.tariffPlanCode ?? null,
+    };
+    this.jobItems.set(row.id, row);
+    if (!this.jobs.has(item.jobId)) {
+      this.jobs.set(item.jobId, {
+        id: item.jobId,
+        tenantId: item.tenantId,
+        estimatedCost: null,
+        actualCost: null,
+        unitSellPrice: row.unitSellPrice,
+        unitProviderCost: row.unitProviderCost,
+        tariffPlanId: row.tariffPlanId,
+        tariffPlanCode: row.tariffPlanCode,
       });
     }
     return row;

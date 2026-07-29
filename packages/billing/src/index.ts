@@ -17,6 +17,15 @@ export type {
 
 export { TariffResolver } from './tariff-resolver.js';
 
+export {
+  priceSnapshotFromResolved,
+  toJobPriceSnapshot,
+  jobPriceSnapshotFromEstimate,
+  costEstimateFromResolved,
+  asHlrOrPing,
+} from './price-quote.js';
+export type { PriceSnapshotDto } from './price-quote.js';
+
 export { BillingError, isBillingError } from './errors.js';
 export type { BillingErrorCode } from './errors.js';
 

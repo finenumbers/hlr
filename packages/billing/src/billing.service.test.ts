@@ -275,6 +275,242 @@ describe('BillingService ledger flows', () => {
     ).rejects.toMatchObject({ code: 'TARIFF_NOT_CONFIGURED' });
   });
 
+  it('uses distinct HLR vs Ping prices and never falls back across checkType', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-1';
+    db.seedWallet(tenantId, '0');
+    const hlrPlan = db.seedAssignedPlan(tenantId, {
+      code: 'hlr-2',
+      sellPrice: '2.000000',
+      providerCost: '0.500000',
+      checkType: 'HLR',
+    });
+    const pingPlan = db.seedAssignedPlan(tenantId, {
+      code: 'ping-5',
+      sellPrice: '5.000000',
+      providerCost: '1.000000',
+      checkType: 'PING',
+    });
+    const billing = createBilling(db);
+    await billing.topup({
+      tenantId,
+      amount: '100',
+      createdById: 'admin-1',
+      idempotencyKey: 'dual-tariff-topup',
+    });
+
+    const hlrEst = await billing.estimate({ tenantId, checkType: 'HLR', unitCount: 3 });
+    const pingEst = await billing.estimate({ tenantId, checkType: 'PING', unitCount: 3 });
+    expect(hlrEst.unitSellPrice).toBe('2');
+    expect(hlrEst.estimatedSellTotal).toBe('6');
+    expect(hlrEst.tariff.tariffPlanId).toBe(hlrPlan.id);
+    expect(pingEst.unitSellPrice).toBe('5');
+    expect(pingEst.estimatedSellTotal).toBe('15');
+    expect(pingEst.tariff.tariffPlanId).toBe(pingPlan.id);
+
+    const hlrItem = db.seedJobItem(tenantId, undefined, { checkType: 'HLR' });
+    const pingItem = db.seedJobItem(tenantId, undefined, { checkType: 'PING' });
+
+    const hlrHold = await billing.reserveForJobItem({
+      tenantId,
+      jobItemId: hlrItem.id,
+      checkType: 'HLR',
+    });
+    const pingHold = await billing.reserveForJobItem({
+      tenantId,
+      jobItemId: pingItem.id,
+      checkType: 'PING',
+    });
+    expect(hlrHold.hold.amount).toBe('2');
+    expect(pingHold.hold.amount).toBe('5');
+
+    // Unassign HLR only — Ping must keep working; HLR must not use Ping price.
+    for (const [id, row] of db.tenantTariffs) {
+      if (row.tenantId === tenantId && row.checkType === 'HLR') {
+        db.tenantTariffs.delete(id);
+      }
+    }
+
+    await expect(
+      billing.estimate({ tenantId, checkType: 'HLR', unitCount: 1 }),
+    ).rejects.toMatchObject({ code: 'TARIFF_NOT_CONFIGURED' });
+
+    const stillPing = await billing.estimate({ tenantId, checkType: 'PING', unitCount: 1 });
+    expect(stillPing.unitSellPrice).toBe('5');
+
+    const orphanHlr = db.seedJobItem(tenantId, undefined, {
+      checkType: 'HLR',
+      unitSellPrice: '2.000000',
+      unitProviderCost: '0.500000',
+      tariffPlanId: hlrPlan.id,
+      tariffPlanCode: hlrPlan.code,
+    });
+    await expect(
+      billing.reserveForJobItem({
+        tenantId,
+        jobItemId: orphanHlr.id,
+        checkType: 'HLR',
+      }),
+    ).rejects.toMatchObject({ code: 'TARIFF_NOT_CONFIGURED' });
+
+    // Capture without HOLD cannot invent a charge from the other product's tariff.
+    const noHoldCharge = await billing.captureForJobItem({
+      tenantId,
+      jobItemId: orphanHlr.id,
+    });
+    expect(noHoldCharge.chargedAmount).toBe('0');
+    expect(noHoldCharge.debit).toBeNull();
+
+    // Dual assignment + ledger reconcile still matches (wallet ops are tariff-agnostic).
+    const wallet = await billing.getWallet(tenantId);
+    const recon = await billing.reconcileWallet(tenantId);
+    expect(recon.matched).toBe(true);
+    expect(recon.cache.availableBalance).toBe(wallet.availableBalance);
+  });
+
+  it('rejects reserve without price snapshot and on checkType mismatch', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-1';
+    db.seedWallet(tenantId, '20');
+    db.seedAssignedPlan(tenantId, {
+      code: 'hlr-a',
+      sellPrice: '1.000000',
+      checkType: 'HLR',
+    });
+    db.seedAssignedPlan(tenantId, {
+      code: 'ping-a',
+      sellPrice: '3.000000',
+      checkType: 'PING',
+    });
+    const billing = createBilling(db);
+
+    const noSnap = db.seedJobItem(tenantId);
+    noSnap.unitSellPrice = null;
+    noSnap.unitProviderCost = null;
+    await expect(
+      billing.reserveForJobItem({
+        tenantId,
+        jobItemId: noSnap.id,
+        checkType: 'HLR',
+      }),
+    ).rejects.toMatchObject({ code: 'PRICE_SNAPSHOT_MISSING' });
+
+    const hlrItem = db.seedJobItem(tenantId, undefined, { checkType: 'HLR' });
+    await expect(
+      billing.reserveForJobItem({
+        tenantId,
+        jobItemId: hlrItem.id,
+        checkType: 'PING',
+      }),
+    ).rejects.toMatchObject({ code: 'CHECK_TYPE_MISMATCH' });
+  });
+
+  it('assertCanAffordFrozen uses snapshot price and still gates assignment', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-1';
+    db.seedWallet(tenantId, '0');
+    db.seedAssignedPlan(tenantId, {
+      code: 'hlr-live',
+      sellPrice: '9.000000', // live catalog — must NOT be used for total
+      checkType: 'HLR',
+    });
+    const billing = createBilling(db);
+    await billing.topup({
+      tenantId,
+      amount: '10',
+      createdById: 'admin-1',
+      idempotencyKey: 'f1',
+    });
+
+    // 2 × frozen 1.5 = 3 ≤ 10 → ok even though live is 9
+    await expect(
+      billing.assertCanAffordFrozen({
+        tenantId,
+        checkType: 'HLR',
+        unitCount: 2,
+        unitSellPrice: '1.500000',
+      }),
+    ).resolves.toMatchObject({ required: '3' });
+
+    // 2 × 6 = 12 > 10 → insufficient at frozen price
+    await expect(
+      billing.assertCanAffordFrozen({
+        tenantId,
+        checkType: 'HLR',
+        unitCount: 2,
+        unitSellPrice: '6.000000',
+      }),
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_FUNDS' });
+
+    db.clearTenantTariffs(tenantId);
+    await expect(
+      billing.assertCanAffordFrozen({
+        tenantId,
+        checkType: 'HLR',
+        unitCount: 1,
+        unitSellPrice: '1.500000',
+      }),
+    ).rejects.toMatchObject({ code: 'TARIFF_NOT_CONFIGURED' });
+  });
+
+  it('reserves at job-accept snapshot even if live sell price changed', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-1';
+    db.seedWallet(tenantId, '20');
+    const plan = db.seedAssignedPlan(tenantId, {
+      code: 'hlr-a',
+      sellPrice: '1.000000',
+      providerCost: '0.200000',
+      checkType: 'HLR',
+    });
+    const item = db.seedJobItem(tenantId, undefined, {
+      unitSellPrice: '1.000000',
+      unitProviderCost: '0.200000',
+      tariffPlanId: plan.id,
+      tariffPlanCode: plan.code,
+    });
+    // Admin raises catalog price after job was accepted.
+    plan.sellPrice = new Prisma.Decimal('9.000000');
+    const billing = createBilling(db);
+
+    const reserved = await billing.reserveForJobItem({
+      tenantId,
+      jobItemId: item.id,
+      checkType: 'HLR',
+    });
+
+    expect(reserved.hold.amount).toBe('1');
+    expect(reserved.tariff.sellPrice).toBe('1');
+    expect(db.jobItems.get(item.id)?.estimatedCost?.toString()).toBe('1');
+  });
+
+  it('rejects reserve when product tariff was unassigned after job create', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-1';
+    db.seedWallet(tenantId, '20');
+    const plan = db.seedAssignedPlan(tenantId, {
+      code: 'hlr-a',
+      sellPrice: '1.000000',
+      checkType: 'HLR',
+    });
+    const item = db.seedJobItem(tenantId, undefined, {
+      unitSellPrice: '1.000000',
+      tariffPlanId: plan.id,
+      tariffPlanCode: plan.code,
+    });
+    db.clearTenantTariffs(tenantId);
+    const billing = createBilling(db);
+
+    await expect(
+      billing.reserveForJobItem({
+        tenantId,
+        jobItemId: item.id,
+        checkType: 'HLR',
+      }),
+    ).rejects.toMatchObject({ code: 'TARIFF_NOT_CONFIGURED' });
+    expect(db.transactions).toHaveLength(0);
+  });
+
   it('jobs hooks: reserve → capture / release', async () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';

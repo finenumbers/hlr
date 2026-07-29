@@ -343,6 +343,12 @@ model Job {
   estimatedCost    Decimal?   @db.Decimal(18, 6)
   actualCost       Decimal?   @db.Decimal(18, 6)
   currency         String     @default("RUB") @db.Char(3)
+  /// Sell price per item frozen at job accept (authoritative for HOLD/capture).
+  unitSellPrice    Decimal?   @db.Decimal(18, 6)
+  /// Provider cost snapshot at accept (margin accounting only).
+  unitProviderCost Decimal?   @db.Decimal(18, 6)
+  tariffPlanId     String?
+  tariffPlanCode   String?
   originalFilename String?
   idempotencyKey   String?
   createdByUserId  String?
@@ -381,6 +387,11 @@ model JobItem {
   estimatedCost     Decimal?      @db.Decimal(18, 6)
   actualCost        Decimal?      @db.Decimal(18, 6)
   currency          String        @default("RUB") @db.Char(3)
+  /// Sell price frozen at job accept (copied from Job; used for HOLD).
+  unitSellPrice     Decimal?      @db.Decimal(18, 6)
+  unitProviderCost  Decimal?      @db.Decimal(18, 6)
+  tariffPlanId      String?
+  tariffPlanCode    String?
   /// Normalized (provider-agnostic) outcome summary, e.g. "reachable".
   resultStatus      String?
   isReachable       Boolean?

@@ -12,12 +12,12 @@ import {
   JobLifecycleService,
   JobsNotFoundError,
   JobsValidationError,
-  PrismaJobsStore,
   type ApplyProviderUpdateInput,
   type ApplyProviderUpdateResult,
   type CreateJobResult,
   type JobProgress,
   type JobRecord,
+  type JobsStore,
 } from '@finenumbers/jobs';
 import { createJobsWebhookHooks } from '@finenumbers/webhooks';
 import type { NormalizedResult } from '@finenumbers/provider-core';
@@ -30,6 +30,8 @@ import type { PaginatedResult } from '../../common/dto/pagination-query.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { jobPriceSnapshotFromEstimate } from '@finenumbers/billing';
+
 import { NestBillingService } from '../billing/billing.service';
 import { resolveLimits } from '../settings/resolve-limits';
 import { PROVIDER_SMSC } from '../provider-smsc/provider-adapter.port';
@@ -38,10 +40,11 @@ import { NestWebhookDeliveryService } from '../webhooks/nest-webhook-delivery.se
 import type { CreateJobDto } from './dto/create-job.dto';
 import type { JobResponseDto } from './dto/job-response.dto';
 import { JOBS_PROCESSOR, JobsProcessorPort } from './jobs-processor.port';
+import { JOBS_STORE } from './jobs-store.port';
 
 @Injectable()
 export class JobsService {
-  private readonly store: PrismaJobsStore;
+  private readonly store: JobsStore;
   private readonly createJobService: CreateJobService;
   private readonly lifecycleService: JobLifecycleService;
 
@@ -53,8 +56,9 @@ export class JobsService {
     private readonly webhookDelivery: NestWebhookDeliveryService,
     @Inject(JOBS_PROCESSOR) private readonly processor: JobsProcessorPort,
     @Inject(PROVIDER_SMSC) provider: ProviderSmscService,
+    @Inject(JOBS_STORE) store: JobsStore,
   ) {
-    this.store = new PrismaJobsStore(prisma);
+    this.store = store;
     const jobsLogger = {
       debug: (message: string, fields?: Record<string, unknown>) =>
         this.logger.debug({ message, ...fields }, 'Jobs'),
@@ -353,8 +357,8 @@ export class JobsService {
   async create(dto: CreateJobDto): Promise<CreateJobResult & { progress: JobProgress }> {
     try {
       // Fail fast: tariff must exist and available balance must cover estimate.
-      // Authoritative reserve still happens per item in the worker/lifecycle hooks.
-      await this.billing.assertCanAfford({
+      // Unit price is frozen onto the job; reserve re-checks assignment but not re-prices.
+      const estimate = await this.billing.assertCanAfford({
         tenantId: dto.tenantId,
         checkType: dto.checkType,
         unitCount: dto.phones.length,
@@ -370,6 +374,8 @@ export class JobsService {
         apiKeyId: dto.apiKeyId,
         originalFilename: dto.originalFilename,
         requestId: dto.requestId,
+        currency: estimate.currency,
+        priceSnapshot: jobPriceSnapshotFromEstimate(estimate),
       });
       return {
         ...result,
@@ -416,8 +422,8 @@ export class JobsService {
     }
 
     // Fail fast: product must have an assigned tariff (and at least 1 unit of funds).
-    // Full-file affordability is enforced per item at reserve time after parse.
-    await this.billing.assertCanAfford({
+    // Freeze unit price on the shell; items inherit it at CSV attach.
+    const estimate = await this.billing.assertCanAfford({
       tenantId: input.tenantId,
       checkType: input.checkType,
       unitCount: 1,
@@ -447,7 +453,8 @@ export class JobsService {
       createdByUserId: input.createdByUserId ?? null,
       apiKeyId: input.apiKeyId ?? null,
       originalFilename: input.file.originalname,
-      currency: 'RUB',
+      currency: estimate.currency,
+      priceSnapshot: jobPriceSnapshotFromEstimate(estimate),
       metadata: {
         csvPending: true,
         csvFilePath: destPath,

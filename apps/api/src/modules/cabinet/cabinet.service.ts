@@ -10,6 +10,11 @@ import { WalletsService } from '../wallets/wallets.service';
 import type { CreateWebhookDto } from '../webhooks/dto/create-webhook.dto';
 import type { UpdateWebhookDto } from '../webhooks/dto/update-webhook.dto';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import {
+  toCabinetJobView,
+  toCabinetLedgerEntry,
+  toCabinetSellEstimate,
+} from './cabinet-client-view';
 
 @Injectable()
 export class CabinetService {
@@ -25,41 +30,56 @@ export class CabinetService {
 
   async dashboard(tenantId: string) {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [wallet, recentJobs, jobAgg, itemAgg] = await Promise.all([
+    const [wallet, recentJobs, jobByType, products] = await Promise.all([
       this.wallets.getByTenantId(tenantId),
       this.jobs.listByTenant(tenantId, 1, 5),
-      this.prisma.job.aggregate({
+      this.prisma.job.groupBy({
+        by: ['checkType'],
         where: { tenantId, createdAt: { gte: since } },
         _count: { _all: true },
         _sum: { itemCount: true, successCount: true, failureCount: true },
       }),
-      this.prisma.jobItem.groupBy({
-        by: ['checkType'],
-        where: { tenantId, createdAt: { gte: since } },
-        _count: { _all: true },
-      }),
+      this.getTariff(tenantId),
     ]);
+
+    const usageFor = (checkType: 'HLR' | 'PING') => {
+      const row = jobByType.find((r) => r.checkType === checkType);
+      return {
+        jobs: row?._count._all ?? 0,
+        itemCount: row?._sum.itemCount ?? 0,
+        successCount: row?._sum.successCount ?? 0,
+        failureCount: row?._sum.failureCount ?? 0,
+      };
+    };
+
+    const hlr = usageFor('HLR');
+    const ping = usageFor('PING');
 
     return {
       balance: wallet,
       recentJobs: recentJobs.items,
+      products,
       usage: {
         period: { from: since.toISOString(), to: new Date().toISOString() },
-        jobs: jobAgg._count._all,
-        itemCount: jobAgg._sum.itemCount ?? 0,
-        successCount: jobAgg._sum.successCount ?? 0,
-        failureCount: jobAgg._sum.failureCount ?? 0,
-        hlrCount: itemAgg.find((r) => r.checkType === 'HLR')?._count._all ?? 0,
-        pingCount: itemAgg.find((r) => r.checkType === 'PING')?._count._all ?? 0,
+        hlr,
+        ping,
+        // Legacy totals (sum of products) — prefer hlr/ping in UI.
+        jobs: hlr.jobs + ping.jobs,
+        itemCount: hlr.itemCount + ping.itemCount,
+        successCount: hlr.successCount + ping.successCount,
+        failureCount: hlr.failureCount + ping.failureCount,
+        hlrCount: hlr.itemCount,
+        pingCount: ping.itemCount,
       },
     };
   }
 
-  estimate(tenantId: string, checkType: 'HLR' | 'PING', unitCount: number) {
-    return this.billing.estimate({ tenantId, checkType, unitCount });
+  async estimate(tenantId: string, checkType: 'HLR' | 'PING', unitCount: number) {
+    const estimate = await this.billing.estimate({ tenantId, checkType, unitCount });
+    return toCabinetSellEstimate(estimate);
   }
 
-  createJob(input: {
+  async createJob(input: {
     tenantId: string;
     checkType: 'HLR' | 'PING';
     phones: string[];
@@ -67,7 +87,7 @@ export class CabinetService {
     createdByUserId: string;
     idempotencyKey?: string;
   }) {
-    return this.jobs.create({
+    const result = await this.jobs.create({
       tenantId: input.tenantId,
       checkType: input.checkType,
       source: input.source,
@@ -76,16 +96,20 @@ export class CabinetService {
       idempotencyKey: input.idempotencyKey,
       requestId: this.requestContext.requestId,
     });
+    return {
+      ...result,
+      job: toCabinetJobView(result.job),
+    };
   }
 
-  createJobFromCsv(input: {
+  async createJobFromCsv(input: {
     tenantId: string;
     checkType: 'HLR' | 'PING';
     file: { path: string; originalname: string; size: number };
     createdByUserId: string;
     idempotencyKey?: string;
   }) {
-    return this.jobs.createFromCsvUpload({
+    const result = await this.jobs.createFromCsvUpload({
       tenantId: input.tenantId,
       checkType: input.checkType,
       file: input.file,
@@ -93,6 +117,10 @@ export class CabinetService {
       idempotencyKey: input.idempotencyKey,
       requestId: this.requestContext.requestId,
     });
+    return {
+      ...result,
+      job: toCabinetJobView(result.job),
+    };
   }
 
   listJobs(
@@ -128,32 +156,33 @@ export class CabinetService {
     return this.wallets.getByTenantId(tenantId);
   }
 
-  listLedger(tenantId: string) {
-    return this.billing.listLedger(tenantId);
+  async listLedger(tenantId: string) {
+    const rows = await this.billing.listLedger(tenantId);
+    return rows.map(toCabinetLedgerEntry);
   }
 
+  /**
+   * Billable product prices for the cabinet — same resolver as estimate/submit
+   * (effective window + active plan). Missing/invalid assignment → null.
+   */
   async getTariff(tenantId: string) {
-    const rows = await this.prisma.tenantTariff.findMany({
-      where: { tenantId },
-      include: { tariffPlan: true },
-    });
-    const mapOne = (checkType: 'HLR' | 'PING') => {
-      const row = rows.find((r) => r.checkType === checkType);
-      if (!row) {
+    const quotes = await this.billing.quoteProducts(tenantId);
+    const mapOne = (quote: Awaited<ReturnType<NestBillingService['quoteProduct']>>) => {
+      if (!quote) {
         return null;
       }
       return {
-        checkType,
-        tariffPlanId: row.tariffPlanId,
-        code: row.tariffPlan.code,
-        name: row.tariffPlan.name,
-        currency: row.tariffPlan.currency,
-        sellPrice: (row.priceOverride ?? row.tariffPlan.sellPrice).toString(),
+        checkType: quote.checkType,
+        tariffPlanId: quote.tariffPlanId,
+        code: quote.tariffPlanCode,
+        name: quote.tariffPlanName,
+        currency: quote.currency,
+        sellPrice: quote.unitSellPrice,
       };
     };
     return {
-      hlr: mapOne('HLR'),
-      ping: mapOne('PING'),
+      hlr: mapOne(quotes.hlr),
+      ping: mapOne(quotes.ping),
     };
   }
 

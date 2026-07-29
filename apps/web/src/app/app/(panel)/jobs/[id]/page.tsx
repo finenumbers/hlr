@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
+import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
@@ -35,13 +36,26 @@ export default function CabinetJobDetailPage() {
     enabled: Boolean(tenantId),
   });
 
+  const checkType = String(job.data?.checkType ?? '');
+  const service = serviceLabel(checkType, t);
+
   const exportCsv = () => {
     const rows = items.data?.items ?? [];
-    const header = ['phone', 'status', 'resultStatus', 'isReachable', 'errorMessage'];
+    const header = [
+      'checkType',
+      'service',
+      'phone',
+      'status',
+      'resultStatus',
+      'isReachable',
+      'errorMessage',
+    ];
     const lines = [
       header.join(','),
       ...rows.map((r) =>
         [
+          checkType,
+          JSON.stringify(service),
           r.phoneE164,
           r.status,
           r.resultStatus ?? '',
@@ -54,7 +68,8 @@ export default function CabinetJobDetailPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `job-${id}.csv`;
+    const slug = checkType === 'PING' ? 'ping-sms' : checkType === 'HLR' ? 'hlr' : 'job';
+    a.download = `${slug}-${id}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -62,10 +77,26 @@ export default function CabinetJobDetailPage() {
   return (
     <div>
       <PageHeader
-        title={t('cabinetJobs.detailTitle', { id: `${id.slice(0, 12)}…` })}
+        title={
+          job.data
+            ? t('cabinetJobs.detailTitle', {
+                service,
+                id: `${id.slice(0, 12)}…`,
+              })
+            : t('cabinetJobs.detailTitle', {
+                service: t('common.loading'),
+                id: `${id.slice(0, 12)}…`,
+              })
+        }
         description={t('cabinetJobs.detailDescription')}
         actions={
-          <Button type="button" variant="secondary" size="sm" onClick={exportCsv}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={exportCsv}
+            disabled={!job.data}
+          >
             {t('cabinetJobs.exportCsv')}
           </Button>
         }
@@ -77,8 +108,8 @@ export default function CabinetJobDetailPage() {
             <Badge className="mt-2">{String(job.data?.status)}</Badge>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.type')}</p>
-            <p className="mt-2 font-medium">{String(job.data?.checkType)}</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.service')}</p>
+            <p className="mt-2 font-medium">{service}</p>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.progress')}</p>

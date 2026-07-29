@@ -137,6 +137,8 @@ async function bootstrap(): Promise<void> {
     queue,
     metrics,
     onRetention: () => runRetentionSweep(prisma),
+    assertCanAffordFrozen: (input) =>
+      billingService.assertCanAffordFrozen(input).then(() => undefined),
   });
   const webhookWorker = createWebhookWorker({
     connection,

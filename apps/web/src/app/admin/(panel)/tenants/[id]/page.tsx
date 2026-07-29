@@ -188,14 +188,38 @@ export default function AdminTenantDetailPage() {
                 {
                   checkType: 'HLR' as const,
                   label: t('adminTenants.assignHlr'),
-                  current: (tenant?.tariffs as { hlr?: { code?: string; name?: string; sellPrice?: string } | null } | undefined)?.hlr,
+                  current: (
+                    tenant?.tariffs as
+                      | {
+                          hlr?: {
+                            status?: string;
+                            code?: string | null;
+                            name?: string | null;
+                            sellPrice?: string | null;
+                            reasonMessage?: string | null;
+                          } | null;
+                        }
+                      | undefined
+                  )?.hlr,
                   value: hlrPlanId,
                   setValue: setHlrPlanId,
                 },
                 {
                   checkType: 'PING' as const,
                   label: t('adminTenants.assignPing'),
-                  current: (tenant?.tariffs as { ping?: { code?: string; name?: string; sellPrice?: string } | null } | undefined)?.ping,
+                  current: (
+                    tenant?.tariffs as
+                      | {
+                          ping?: {
+                            status?: string;
+                            code?: string | null;
+                            name?: string | null;
+                            sellPrice?: string | null;
+                            reasonMessage?: string | null;
+                          } | null;
+                        }
+                      | undefined
+                  )?.ping,
                   value: pingPlanId,
                   setValue: setPingPlanId,
                 },
@@ -203,14 +227,25 @@ export default function AdminTenantDetailPage() {
             ).map((slot) => (
               <div key={slot.checkType} className="rounded-md border border-[var(--color-line)] p-3">
                 <p className="text-sm font-medium">{slot.label}</p>
-                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-                  {slot.current?.code
-                    ? `${slot.current.code} — ${slot.current.name ?? ''}${
-                        slot.current.sellPrice
-                          ? ` · ${formatMoney(slot.current.sellPrice, currency)}`
-                          : ''
-                      }`
-                    : t('adminTenants.notAssigned')}
+                <p
+                  className={`mt-1 text-sm ${
+                    slot.current?.status === 'invalid'
+                      ? 'text-[var(--color-danger)]'
+                      : 'text-[var(--color-ink-muted)]'
+                  }`}
+                >
+                  {!slot.current
+                    ? t('adminTenants.notAssigned')
+                    : slot.current.status === 'invalid'
+                      ? t('adminTenants.tariffInvalid', {
+                          code: slot.current.code ?? '—',
+                          reason: slot.current.reasonMessage ?? '',
+                        })
+                      : `${slot.current.code} — ${slot.current.name ?? ''}${
+                          slot.current.sellPrice
+                            ? ` · ${formatMoney(slot.current.sellPrice, currency)}`
+                            : ''
+                        }`}
                 </p>
                 <Can permission="admin.tenants.write">
                   <div className="mt-3 flex flex-wrap gap-2">

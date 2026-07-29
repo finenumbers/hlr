@@ -15,6 +15,11 @@ export type JobRecord = {
   estimatedCost: string | null;
   actualCost: string | null;
   currency: string;
+  /** Unit sell price frozen at job accept (null on legacy rows). */
+  unitSellPrice: string | null;
+  unitProviderCost: string | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
   originalFilename: string | null;
   idempotencyKey: string | null;
   createdByUserId: string | null;
@@ -40,6 +45,10 @@ export type JobItemRecord = {
   estimatedCost: string | null;
   actualCost: string | null;
   currency: string;
+  unitSellPrice: string | null;
+  unitProviderCost: string | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
   resultStatus: string | null;
   isReachable: boolean | null;
   imsi: string | null;
@@ -83,6 +92,15 @@ export type CsvParsePayload = {
   requestId?: string;
 };
 
+/** Sell/provider unit prices frozen when the job is accepted. */
+export type JobPriceSnapshot = {
+  unitSellPrice: string;
+  unitProviderCost: string;
+  tariffPlanId: string;
+  tariffPlanCode: string;
+  currency: string;
+};
+
 export type CreateJobInput = {
   tenantId: string;
   checkType: CheckType;
@@ -94,6 +112,8 @@ export type CreateJobInput = {
   apiKeyId?: string | null;
   originalFilename?: string | null;
   currency?: string;
+  /** Required for billed creates — stamped onto Job + JobItems. */
+  priceSnapshot?: JobPriceSnapshot | null;
   metadata?: Record<string, unknown> | null;
   /** Optional override; otherwise loaded from platform/tenant settings. */
   runtimeSettings?: Partial<JobRuntimeSettings>;

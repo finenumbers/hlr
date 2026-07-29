@@ -128,7 +128,14 @@ All error responses use one envelope (never Nest/default shapes):
 | `error.requestId` | yes | Correlate with logs / support (`X-Request-Id` header mirrors it) |
 | `error.details` | no | Structured extras (e.g. validation field list) |
 
-Common codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `IDEMPOTENCY_KEY_REUSE`, `INSUFFICIENT_FUNDS` (402), `RATE_LIMITED` (429), `API_KEY_REVOKED`, `API_KEY_EXPIRED`, `TARIFF_NOT_CONFIGURED`.
+Common codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `IDEMPOTENCY_KEY_REUSE`, `INSUFFICIENT_FUNDS` (402), `RATE_LIMITED` (429), `API_KEY_REVOKED`, `API_KEY_EXPIRED`, `TARIFF_NOT_CONFIGURED`, `INVALID_TARIFF`, `PRICE_SNAPSHOT_MISSING`, `CHECK_TYPE_MISMATCH`.
+
+### Pricing policy
+
+- Sell price is resolved per `type` / `checkType` (`hlr`→`HLR`, `ping`→`PING`) from that tenant’s assignment only — never from the other product.
+- On accept, unit sell price is **frozen** onto the job/items. Later catalog/assignment price changes do not reprice an in-flight job.
+- If the product assignment is removed after accept, processing fails the item with `TARIFF_NOT_CONFIGURED` (provider is not called); funds are not taken without a HOLD.
+- CSV bulk: after parse, the worker checks affordability as `frozen unitSellPrice × phoneCount` (and that the product is still assigned), then enqueues submit. Catalog price changes after accept do not change that total.
 
 ---
 

@@ -4,6 +4,7 @@ import { Prisma } from '@finenumbers/db';
 import { DEFAULT_JOB_RUNTIME_SETTINGS } from './queue-names.js';
 import type { JobsStore } from './ports.js';
 import type {
+  CreateJobInput,
   JobItemRecord,
   JobRecord,
   JobRuntimeSettings,
@@ -42,6 +43,10 @@ function mapJob(row: {
   estimatedCost: Prisma.Decimal | null;
   actualCost: Prisma.Decimal | null;
   currency: string;
+  unitSellPrice: Prisma.Decimal | null;
+  unitProviderCost: Prisma.Decimal | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
   originalFilename: string | null;
   idempotencyKey: string | null;
   createdByUserId: string | null;
@@ -66,6 +71,10 @@ function mapJob(row: {
     estimatedCost: decimalToString(row.estimatedCost),
     actualCost: decimalToString(row.actualCost),
     currency: row.currency,
+    unitSellPrice: decimalToString(row.unitSellPrice),
+    unitProviderCost: decimalToString(row.unitProviderCost),
+    tariffPlanId: row.tariffPlanId,
+    tariffPlanCode: row.tariffPlanCode,
     originalFilename: row.originalFilename,
     idempotencyKey: row.idempotencyKey,
     createdByUserId: row.createdByUserId,
@@ -92,6 +101,10 @@ function mapItem(row: {
   estimatedCost: Prisma.Decimal | null;
   actualCost: Prisma.Decimal | null;
   currency: string;
+  unitSellPrice: Prisma.Decimal | null;
+  unitProviderCost: Prisma.Decimal | null;
+  tariffPlanId: string | null;
+  tariffPlanCode: string | null;
   resultStatus: string | null;
   isReachable: boolean | null;
   imsi: string | null;
@@ -121,6 +134,10 @@ function mapItem(row: {
     estimatedCost: decimalToString(row.estimatedCost),
     actualCost: decimalToString(row.actualCost),
     currency: row.currency,
+    unitSellPrice: decimalToString(row.unitSellPrice),
+    unitProviderCost: decimalToString(row.unitProviderCost),
+    tariffPlanId: row.tariffPlanId,
+    tariffPlanCode: row.tariffPlanCode,
     resultStatus: row.resultStatus,
     isReachable: row.isReachable,
     imsi: row.imsi,
@@ -218,8 +235,12 @@ export class PrismaJobsStore implements JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
+    const snap = input.priceSnapshot ?? null;
+    const unitSell = snap?.unitSellPrice ?? null;
+    const unitProvider = snap?.unitProviderCost ?? null;
     const created = await this.prisma.job.create({
       data: {
         tenantId: input.tenantId,
@@ -228,6 +249,14 @@ export class PrismaJobsStore implements JobsStore {
         status: 'QUEUED',
         itemCount: input.phones.length,
         currency: input.currency,
+        unitSellPrice: unitSell,
+        unitProviderCost: unitProvider,
+        tariffPlanId: snap?.tariffPlanId ?? null,
+        tariffPlanCode: snap?.tariffPlanCode ?? null,
+        estimatedCost:
+          unitSell !== null
+            ? new Prisma.Decimal(unitSell).mul(input.phones.length)
+            : null,
         originalFilename: input.originalFilename,
         idempotencyKey: input.idempotencyKey,
         createdByUserId: input.createdByUserId,
@@ -240,6 +269,11 @@ export class PrismaJobsStore implements JobsStore {
             status: 'QUEUED',
             phoneE164,
             currency: input.currency,
+            unitSellPrice: unitSell,
+            unitProviderCost: unitProvider,
+            tariffPlanId: snap?.tariffPlanId ?? null,
+            tariffPlanCode: snap?.tariffPlanCode ?? null,
+            estimatedCost: unitSell,
           })),
         },
       },
@@ -261,8 +295,15 @@ export class PrismaJobsStore implements JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<JobRecord> {
+    const snap = input.priceSnapshot ?? null;
+    if (!snap?.unitSellPrice || !snap.unitProviderCost || !snap.tariffPlanId || !snap.tariffPlanCode) {
+      throw new Error(
+        'createJobShell requires a full priceSnapshot (unitSellPrice, unitProviderCost, tariffPlanId, tariffPlanCode)',
+      );
+    }
     const created = await this.prisma.job.create({
       data: {
         tenantId: input.tenantId,
@@ -271,6 +312,10 @@ export class PrismaJobsStore implements JobsStore {
         status: 'QUEUED',
         itemCount: 0,
         currency: input.currency,
+        unitSellPrice: snap?.unitSellPrice ?? null,
+        unitProviderCost: snap?.unitProviderCost ?? null,
+        tariffPlanId: snap?.tariffPlanId ?? null,
+        tariffPlanCode: snap?.tariffPlanCode ?? null,
         originalFilename: input.originalFilename,
         idempotencyKey: input.idempotencyKey,
         createdByUserId: input.createdByUserId,
@@ -290,6 +335,10 @@ export class PrismaJobsStore implements JobsStore {
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
     const CHUNK = 1_000;
     const allItems: JobItemRecord[] = [];
+    const jobRow = await this.prisma.job.findUnique({ where: { id: input.jobId } });
+    if (!jobRow) {
+      throw new Error(`Job ${input.jobId} not found`);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       for (let i = 0; i < input.phones.length; i += CHUNK) {
@@ -302,6 +351,11 @@ export class PrismaJobsStore implements JobsStore {
             status: 'QUEUED' as const,
             phoneE164,
             currency: input.currency,
+            unitSellPrice: jobRow.unitSellPrice,
+            unitProviderCost: jobRow.unitProviderCost,
+            tariffPlanId: jobRow.tariffPlanId,
+            tariffPlanCode: jobRow.tariffPlanCode,
+            estimatedCost: jobRow.unitSellPrice,
           })),
         });
       }
@@ -310,6 +364,10 @@ export class PrismaJobsStore implements JobsStore {
         data: {
           itemCount: input.phones.length,
           status: 'QUEUED',
+          estimatedCost:
+            jobRow.unitSellPrice !== null
+              ? jobRow.unitSellPrice.mul(input.phones.length)
+              : null,
         },
       });
     });

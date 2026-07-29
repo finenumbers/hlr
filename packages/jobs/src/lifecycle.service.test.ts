@@ -126,6 +126,166 @@ describe('JobLifecycleService', () => {
     expect(refreshed?.failureCount).toBe(1);
   });
 
+  it('marks item FAILED with billing error code when reserve rejects', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await seedJob(store, ['+79991234567']);
+
+    const billingError = Object.assign(new Error('No HLR tariff assigned'), {
+      name: 'BillingError',
+      code: 'TARIFF_NOT_CONFIGURED',
+    });
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      billing: {
+        onItemReserved: async () => {
+          throw billingError;
+        },
+        onItemTerminal: async () => {},
+        onJobFinalized: async () => {},
+      },
+    });
+
+    await lifecycle.processSubmitBatch({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      itemIds: [items[0]!.id],
+    });
+
+    const item = await store.findItemById(items[0]!.id);
+    expect(item?.status).toBe('FAILED');
+    expect(item?.errorCode).toBe('TARIFF_NOT_CONFIGURED');
+    expect(provider.submitHlr).not.toHaveBeenCalled();
+  });
+
+  it('PING job calls submitPing and never submitHlr (regression)', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await store.createJobWithItems({
+      tenantId: 'tenant-1',
+      checkType: 'PING',
+      source: 'SINGLE',
+      phones: ['+79991234567'],
+      idempotencyKey: null,
+      createdByUserId: null,
+      apiKeyId: null,
+      originalFilename: null,
+      currency: 'RUB',
+      priceSnapshot: {
+        unitSellPrice: '2.5',
+        unitProviderCost: '0.8',
+        tariffPlanId: 'plan-ping',
+        tariffPlanCode: 'ping-std',
+      },
+      metadata: null,
+    });
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(async (input) =>
+        submitResult({
+          checkType: 'PING',
+          providerMessageId: `ping-${input.jobItemId}`,
+          normalized: baseNormalized({
+            checkType: 'PING',
+            phoneE164: input.phoneE164,
+            providerMessageId: `ping-${input.jobItemId}`,
+            lifecycleStatus: 'accepted',
+          }),
+        }),
+      ),
+      fetchStatus: vi.fn(),
+    };
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      billing: {
+        onItemReserved: async () => {},
+        onItemTerminal: async () => {},
+        onJobFinalized: async () => {},
+      },
+    });
+
+    await lifecycle.processSubmitBatch({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      itemIds: [items[0]!.id],
+    });
+
+    expect(provider.submitPing).toHaveBeenCalledTimes(1);
+    expect(provider.submitHlr).not.toHaveBeenCalled();
+    const item = await store.findItemById(items[0]!.id);
+    expect(['SENT', 'PENDING']).toContain(item?.status);
+    expect(item?.checkType).toBe('PING');
+    expect(item?.errorCode).toBeNull();
+  });
+
+  it('PING reserve TARIFF_NOT_CONFIGURED does not call provider (regression)', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await store.createJobWithItems({
+      tenantId: 'tenant-1',
+      checkType: 'PING',
+      source: 'SINGLE',
+      phones: ['+79991234567'],
+      idempotencyKey: null,
+      createdByUserId: null,
+      apiKeyId: null,
+      originalFilename: null,
+      currency: 'RUB',
+      priceSnapshot: {
+        unitSellPrice: '2.5',
+        unitProviderCost: '0.8',
+        tariffPlanId: 'plan-ping',
+        tariffPlanCode: 'ping-std',
+      },
+      metadata: null,
+    });
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      billing: {
+        onItemReserved: async () => {
+          throw Object.assign(new Error('No Ping tariff'), {
+            name: 'BillingError',
+            code: 'TARIFF_NOT_CONFIGURED',
+          });
+        },
+        onItemTerminal: async () => {},
+        onJobFinalized: async () => {},
+      },
+    });
+
+    await lifecycle.processSubmitBatch({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      itemIds: [items[0]!.id],
+    });
+
+    expect(provider.submitPing).not.toHaveBeenCalled();
+    expect(provider.submitHlr).not.toHaveBeenCalled();
+    expect((await store.findItemById(items[0]!.id))?.errorCode).toBe('TARIFF_NOT_CONFIGURED');
+  });
+
   it('retries retryable submit errors via BullMQ (keeps RESERVED)', async () => {
     const store = new InMemoryJobsStore();
     const queue = new InMemoryJobsQueue();

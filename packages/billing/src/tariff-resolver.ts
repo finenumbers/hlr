@@ -1,13 +1,12 @@
 import type { CheckType, Prisma, PrismaClient } from '@finenumbers/db';
 
-import { BillingError } from './errors.js';
+import { BillingError, isBillingError } from './errors.js';
 import {
   assertNonNegativeMoney,
   money,
-  moneyFromSafeInteger,
-  moneyMul,
   moneyToString,
 } from './money.js';
+import { costEstimateFromResolved } from './price-quote.js';
 import type { BillingCheckType, BillingLogger, CostEstimate, ResolvedTariff } from './types.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -119,6 +118,7 @@ export class TariffResolver {
     return {
       tariffPlanId: plan.id,
       tariffPlanCode: plan.code,
+      tariffPlanName: plan.name,
       tenantTariffId: assignment.id,
       currency: plan.currency,
       checkType: type,
@@ -126,6 +126,28 @@ export class TariffResolver {
       providerCost,
       source: assignment.priceOverride !== null ? 'tenant_override' : 'tenant_plan',
     };
+  }
+
+  /**
+   * Soft resolve for display: null when product is not billable
+   * (missing / expired / inactive / invalid assignment).
+   */
+  async tryResolveForTenant(
+    tenantId: string,
+    checkType: BillingCheckType,
+    db: Db = this.prisma,
+  ): Promise<ResolvedTariff | null> {
+    try {
+      return await this.resolveForTenant(tenantId, checkType, db);
+    } catch (error) {
+      if (
+        isBillingError(error) &&
+        (error.code === 'TARIFF_NOT_CONFIGURED' || error.code === 'INVALID_TARIFF')
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async estimate(input: {
@@ -140,21 +162,7 @@ export class TariffResolver {
     }
 
     const resolved = await this.resolveForTenant(input.tenantId, input.checkType);
-    const units = moneyFromSafeInteger(input.unitCount, 'unitCount');
-    const estimatedSellTotal = moneyMul(resolved.sellPrice, units);
-    const estimatedProviderTotal = moneyMul(resolved.providerCost, units);
-
-    return {
-      tenantId: input.tenantId,
-      checkType: resolved.checkType,
-      unitCount: input.unitCount,
-      unitSellPrice: moneyToString(resolved.sellPrice),
-      unitProviderCost: moneyToString(resolved.providerCost),
-      estimatedSellTotal: moneyToString(estimatedSellTotal),
-      estimatedProviderTotal: moneyToString(estimatedProviderTotal),
-      currency: resolved.currency,
-      tariff: TariffResolver.toTariffView(resolved),
-    };
+    return costEstimateFromResolved(input.tenantId, resolved, input.unitCount);
   }
 
   /** Validate plan prices before persist (admin CRUD). */
@@ -188,7 +196,7 @@ export class TariffResolver {
       tariffPlanCode: resolved.tariffPlanCode,
       tenantTariffId: resolved.tenantTariffId,
       currency: resolved.currency,
-      checkType: resolved.checkType,
+      checkType: resolved.checkType === 'PING' ? 'PING' : 'HLR',
       sellPrice: moneyToString(resolved.sellPrice),
       providerCost: moneyToString(resolved.providerCost),
       source: resolved.source,

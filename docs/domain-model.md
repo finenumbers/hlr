@@ -55,6 +55,8 @@ Ledger types:
 
 `Wallet.availableBalance` / `heldBalance` — кэш; истина — сумма проводок. Тарифы только из Админки. У клиента до двух назначений (`TenantTariff` unique по `(tenantId, checkType)`). План каталога (`TariffPlan`) относится ровно к одному `checkType` (`sellPrice` / `providerCost`). Без назначения на запрошенный тип — нельзя estimate/create/reserve (`TARIFF_NOT_CONFIGURED`); silent default fallback нет.
 
+**Цена на job:** при accept обязателен полный snapshot на `Job`/`JobItem`. HOLD/capture — только snapshot. CSV после parse: affordability = `unitSellPrice_snapshot × N` + gate assignment (`assertCanAffordFrozen`), не live catalog × N. Admin тарифы: `none` / `active` / `invalid`. Миграция `20260730123000_*_backfill` best-effort проставляет snapshot открытым items из *текущего* assignment.
+
 ---
 
 ## Лимиты

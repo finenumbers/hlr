@@ -195,6 +195,31 @@ export class NestBillingService extends BillingWorkflowPort {
     }
   }
 
+  quoteProducts(tenantId: string) {
+    return this.core.quoteProducts(tenantId);
+  }
+
+  quoteProduct(tenantId: string, checkType: 'HLR' | 'PING') {
+    return this.core.quoteProduct(tenantId, checkType);
+  }
+
+  assertCanAffordFrozen(input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    unitCount: number;
+    unitSellPrice: string;
+  }) {
+    try {
+      return this.core.assertCanAffordFrozen(input);
+    } catch (error) {
+      throw this.toHttp(error);
+    }
+  }
+
+  inspectProductTariffs(tenantId: string) {
+    return this.core.inspectProductTariffs(tenantId);
+  }
+
   async ensureWallet(tenantId: string, currency = 'RUB') {
     return this.core.ensureWallet(tenantId, currency);
   }
@@ -276,6 +301,8 @@ export class NestBillingService extends BillingWorkflowPort {
         throw new NotFoundException(body);
       case 'TARIFF_NOT_CONFIGURED':
       case 'INVALID_TARIFF':
+      case 'PRICE_SNAPSHOT_MISSING':
+      case 'CHECK_TYPE_MISMATCH':
       case 'INVALID_AMOUNT':
       case 'NEGATIVE_BALANCE_FORBIDDEN':
       case 'VALIDATION_FAILED':
@@ -296,6 +323,10 @@ function mapBillingErrorCode(code: BillingError['code']): string {
       return ErrorCodes.TARIFF_NOT_CONFIGURED;
     case 'INVALID_TARIFF':
       return ErrorCodes.INVALID_TARIFF;
+    case 'PRICE_SNAPSHOT_MISSING':
+      return ErrorCodes.PRICE_SNAPSHOT_MISSING;
+    case 'CHECK_TYPE_MISMATCH':
+      return ErrorCodes.CHECK_TYPE_MISMATCH;
     default:
       return ErrorCodes.VALIDATION_FAILED;
   }

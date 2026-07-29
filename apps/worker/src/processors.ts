@@ -36,12 +36,32 @@ export function createJobsWorkers(input: {
   queue: JobsQueuePublisher;
   metrics?: WorkerMetrics;
   onRetention?: () => Promise<unknown>;
+  /**
+   * Required: full CSV affordability using frozen job.unitSellPrice × count
+   * (plus live product-assignment gate).
+   */
+  assertCanAffordFrozen: (input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    unitCount: number;
+    unitSellPrice: string;
+  }) => Promise<void>;
 }): JobsWorkers {
-  const { connection, concurrency, lifecycle, store, queue, metrics, onRetention } = input;
+  const {
+    connection,
+    concurrency,
+    lifecycle,
+    store,
+    queue,
+    metrics,
+    onRetention,
+    assertCanAffordFrozen,
+  } = input;
   const csvParseService = new CsvParseService({
     store,
     queue,
     logger: workerLogger,
+    assertCanAffordFrozen,
   });
 
   const submit = new BullWorker(

@@ -46,6 +46,7 @@ export interface JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }>;
 
@@ -59,6 +60,7 @@ export interface JobsStore {
     apiKeyId: string | null;
     originalFilename: string | null;
     currency: string;
+    priceSnapshot?: CreateJobInput['priceSnapshot'];
     metadata: Record<string, unknown> | null;
   }): Promise<JobRecord>;
 
@@ -228,6 +230,16 @@ export type CreateJobServiceDeps = {
   store: JobsStore;
   queue: JobsQueuePublisher;
   logger?: JobsLogger;
+  /**
+   * Full-batch affordability using the job's frozen unitSellPrice (CSV after parse).
+   * Must gate product still assigned; must NOT re-price from live catalog.
+   */
+  assertCanAffordFrozen?: (input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    unitCount: number;
+    unitSellPrice: string;
+  }) => Promise<void>;
 };
 
 export type JobLifecycleServiceDeps = {
