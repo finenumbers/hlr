@@ -53,7 +53,7 @@ export function AppShell({
           <BrandLogo variant="dark" priority />
         </div>
         <div className="px-5 pb-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] !text-white/80">
             {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
           </p>
         </div>
@@ -67,8 +67,8 @@ export function AppShell({
                 className={cn(
                   'rounded-md px-3 py-2 text-sm whitespace-nowrap',
                   active
-                    ? 'bg-[color-mix(in_oklab,var(--color-accent)_22%,transparent)] font-medium text-[var(--color-accent)]'
-                    : 'text-white hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] hover:text-white',
+                    ? 'bg-[color-mix(in_oklab,var(--color-accent)_22%,transparent)] font-medium !text-[var(--color-accent)]'
+                    : '!text-white hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] hover:!text-white',
                 )}
               >
                 {t(item.labelKey)}

@@ -100,7 +100,7 @@ export default function CabinetDashboardPage() {
             <p
               className={`mt-2 text-sm font-medium ${
                 hlrStatus.tone === 'ok'
-                  ? 'text-[var(--color-ok)]'
+                  ? 'text-[var(--color-accent)]'
                   : 'text-[var(--color-warn)]'
               }`}
             >
@@ -127,7 +127,7 @@ export default function CabinetDashboardPage() {
             <p
               className={`mt-2 text-sm font-medium ${
                 pingStatus.tone === 'ok'
-                  ? 'text-[var(--color-ok)]'
+                  ? 'text-[var(--color-accent)]'
                   : 'text-[var(--color-warn)]'
               }`}
             >
