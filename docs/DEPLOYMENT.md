@@ -23,38 +23,39 @@ No Kubernetes required. App containers publish only to `127.0.0.1` (or stay on D
 
 ## Container images (GHCR)
 
-CI publishes on push to `main` / tags `v*`:
+Установка из GitHub / Portainer **всегда** использует только тег **`latest`** (ветка `main` + образы `:latest`). Другие теги (`sha-…`, semver) для этого пути не используются.
 
-| Image | Tags |
-|-------|------|
-| `ghcr.io/finenumbers/hlr-api` | `latest`, `sha-<short>`, semver |
-| `ghcr.io/finenumbers/hlr-worker` | same |
-| `ghcr.io/finenumbers/hlr-web` | same |
+| Image |
+|-------|
+| `ghcr.io/finenumbers/hlr-api:latest` |
+| `ghcr.io/finenumbers/hlr-worker:latest` |
+| `ghcr.io/finenumbers/hlr-web:latest` |
 
-Packages are **public** so Portainer/VPS can pull without a registry login. Pin production with `IMAGE_TAG=sha-…` or a semver tag.
+Пакеты **public** — Portainer тянет без логина в registry. У сервисов `pull_policy: always`.
 
 ## Prerequisites
 
-1. Docker + Compose v2 (or Portainer with Compose stacks).
-2. External **Nginx Proxy Manager** already running (TLS certificates, DNS).
-3. Env secrets: strong `API_KEY_PEPPER`, `POSTGRES_PASSWORD`, public HTTPS URLs, SMSC credentials.
-4. Public hostnames for web + API; SMSC callback URL reachable from the internet.
+1. Portainer (или Docker Compose v2).
+2. Внешний **Nginx Proxy Manager** (TLS, DNS).
+3. Минимальный набор env — см. ниже.
+4. Публичные hostname для web + API; callback SMSC доступен из интернета.
 
-## Env hardening (production)
+## Env для Portainer (минимум)
 
-Required:
+Шаблон с пояснениями: [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example).
 
-- `NODE_ENV=production`
-- `API_KEY_PEPPER` ≠ default
-- `PUBLIC_API_URL` / `PUBLIC_WEB_URL` = public HTTPS URLs
-- `TRUST_PROXY=true` (behind NPM)
-- `CORS_ORIGINS` = cabinet origin(s), comma-separated
-- SMSC credentials (`SMSC_LOGIN`/`SMSC_PASSWORD` or `SMSC_API_KEY`)
-- `IMAGE_TAG` — prefer immutable `sha-…` in production
+| Переменная | Зачем |
+|------------|--------|
+| `POSTGRES_PASSWORD` | Пароль базы данных |
+| `API_KEY_PEPPER` | Секрет для защиты API-ключей клиентов |
+| `PUBLIC_API_URL` | Публичный HTTPS-адрес API |
+| `PUBLIC_WEB_URL` | Публичный HTTPS-адрес кабинета |
+| `SMSC_LOGIN` + `SMSC_PASSWORD` | Доступ к SMSC.ru (или вместо них `SMSC_API_KEY`) |
+| `SMSC_CALLBACK_SECRET` | Секрет подписи callback от SMSC |
 
-Never commit secrets. Prefer Portainer stack env / host `.env`; compose reads `${VAR}`.
+Остальное (CORS = адрес кабинета, `TRUST_PROXY`, порты, пользователь БД) задано в compose и менять не нужно.
 
-Template: [`infra/docker/.env.example`](../infra/docker/.env.example).
+Секреты не коммитьте — только в Environment variables стека Portainer.
 
 ---
 
@@ -62,38 +63,18 @@ Template: [`infra/docker/.env.example`](../infra/docker/.env.example).
 
 ### 1. Create the stack
 
-Portainer → **Stacks** → **Add stack**:
-
-**Option A — from Git (preferred)**
+Portainer → **Stacks** → **Add stack** → **Repository**:
 
 - Repository URL: `https://github.com/finenumbers/hlr`
 - Compose path: `docker-compose.portainer.yml`
-- Branch: `main`
-- Enable auto-update if you want Portainer to redeploy when the compose file changes (images still controlled by `IMAGE_TAG`)
-
-**Option B — web editor**
-
-- Paste contents of [`docker-compose.portainer.yml`](../docker-compose.portainer.yml)
+- Branch: **`main`** (только latest-код)
+- При желании включите автообновление стека при изменении compose в `main`
 
 ### 2. Stack environment
 
-Set at least:
+Скопируйте значения из [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example) и подставьте свои секреты/домены.
 
-```env
-IMAGE_TAG=latest
-POSTGRES_PASSWORD=<strong>
-API_KEY_PEPPER=<long-random>
-PUBLIC_API_URL=https://api.example.com
-PUBLIC_WEB_URL=https://app.example.com
-CORS_ORIGINS=https://app.example.com
-TRUST_PROXY=true
-SMSC_LOGIN=
-SMSC_PASSWORD=
-SMSC_API_KEY=
-SMSC_CALLBACK_SECRET=
-```
-
-Deploy the stack. Network `hlr_net` is created automatically.
+Deploy. Сеть `hlr_net` создаётся автоматически.
 
 ### 3. Migrations (first boot / after schema changes)
 
@@ -108,12 +89,11 @@ pnpm --filter @finenumbers/db prisma db seed   # first boot only
 
 Alternatively run migrate from a one-off container that has the image and `DATABASE_URL` pointing at `postgres` on `hlr_net`.
 
-### 4. Update / rollback
+### 4. Update
 
-1. Set `IMAGE_TAG` to the new `sha-…` or semver (or `latest`).
-2. Portainer → stack → **Pull and redeploy** (or Update the stack).
-3. Order of healthy restart: `worker` → `api` → `web`.
-4. Verify `/health/live`, `/health/ready`, smoke login + check.
+Всегда latest: Portainer → stack → **Pull and redeploy** (подтянет `:latest` и актуальный compose с `main`).
+
+Проверка: `/health/live`, `/health/ready`, smoke login + check.
 
 ---
 
@@ -168,15 +148,17 @@ Accepts POST (body/query) and GET (query). Signature: md5/sha1 of `id:phone:stat
 
 ## Deploy with Compose CLI (alternative)
 
-```bash
-cp infra/docker/.env.example .env
-# edit secrets + IMAGE_TAG
+Предпочтительно тот же Portainer-файл (всегда `:latest`):
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```bash
+cp infra/docker/.env.portainer.example .env
+# заполните значения
+
+docker compose -f docker-compose.portainer.yml pull
+docker compose -f docker-compose.portainer.yml up -d
 ```
 
-Local build fallback (no GHCR):
+Local build fallback (dev, без GHCR):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
@@ -190,7 +172,7 @@ pnpm --filter @finenumbers/db prisma migrate deploy
 pnpm --filter @finenumbers/db prisma db seed   # first boot only
 ```
 
-Observability overlay:
+Observability overlay (отдельный compose, не Portainer-стек):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.obs.yml up -d
@@ -201,7 +183,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 ## Safe deploy sequence
 
 1. Take Postgres **logical** dump (+ confirm WAL archive is advancing); see [BACKUP_RESTORE.md](./BACKUP_RESTORE.md).
-2. Pull new images (`IMAGE_TAG`) via Portainer or `docker compose pull`.
+2. Portainer → **Pull and redeploy** (`:latest` + compose с `main`).
 3. `prisma migrate deploy` (never `migrate dev` in prod).
 4. Rolling restart: `worker` → `api` → `web` (workers drain BullMQ jobs on SIGTERM).
 5. Verify `GET /health/live`, `GET /health/ready`, Grafana “Finenumbers Overview” if obs is enabled.

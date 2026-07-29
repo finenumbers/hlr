@@ -89,9 +89,10 @@ Canonical guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 Recommended path:
 
-1. CI publishes images to GHCR: `ghcr.io/finenumbers/hlr-{api,worker,web}`
-2. Deploy stack in **Portainer** from [`docker-compose.portainer.yml`](docker-compose.portainer.yml)
-3. Terminate TLS with **external Nginx Proxy Manager** (join Docker network `hlr_net`, proxy to `web:3000` / `api:3001`)
+1. CI publishes `:latest` images to GHCR: `ghcr.io/finenumbers/hlr-{api,worker,web}`
+2. Deploy **Portainer** stack from GitHub (`main` + [`docker-compose.portainer.yml`](docker-compose.portainer.yml)) — always `latest`
+3. Env: minimal set in [`infra/docker/.env.portainer.example`](infra/docker/.env.portainer.example)
+4. TLS via **external Nginx Proxy Manager** (network `hlr_net` → `web:3000` / `api:3001`)
 
 Also: [MONITORING.md](docs/MONITORING.md) · [BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) · [RUNBOOK.md](docs/RUNBOOK.md)
 
@@ -99,10 +100,9 @@ Also: [MONITORING.md](docs/MONITORING.md) · [BACKUP_RESTORE.md](docs/BACKUP_RES
 # local full stack (build)
 docker compose up -d --build
 
-# production-oriented CLI pull from GHCR
-export IMAGE_TAG=latest
-docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# same as Portainer path (always :latest)
+cp infra/docker/.env.portainer.example .env
+docker compose -f docker-compose.portainer.yml pull && docker compose -f docker-compose.portainer.yml up -d
 ```
 
 - Admin UI: `http://localhost:3000/admin`
@@ -115,8 +115,9 @@ Default API port: `3001`.
 Templates:
 
 - root `.env.example` — local/dev
-- `infra/docker/.env.example` — compose / Portainer env
-- `docker-compose.portainer.yml` — **Portainer + GHCR** (no build)
+- `infra/docker/.env.portainer.example` — **минимальный env для Portainer** (с пояснениями)
+- `infra/docker/.env.example` — расширенный compose/CLI env
+- `docker-compose.portainer.yml` — **Portainer + GHCR `:latest`** (no build)
 - `docker-compose.prod.yml` — localhost binds, uploads, backup profile
 - `docker-compose.obs.yml` — Prometheus / Grafana / Loki / Promtail
 

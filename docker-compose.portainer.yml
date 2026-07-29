@@ -1,20 +1,14 @@
-# Portainer production stack — pull-only images from GHCR.
-# No local build context required. Pair with external Nginx Proxy Manager.
+# Установка через Portainer из GitHub — ВСЕГДА latest.
+# Образы: ghcr.io/finenumbers/hlr-{api,worker,web}:latest (pull_policy: always)
+# Compose: ветка main репозитория https://github.com/finenumbers/hlr
 #
-# Portainer → Stacks → Add stack:
-#   - Repository: https://github.com/finenumbers/hlr
-#   - Compose path: docker-compose.portainer.yml
-#   - Or paste this file and set Environment variables (see infra/docker/.env.example)
+# Portainer → Stacks → Add stack → Repository:
+#   URL: https://github.com/finenumbers/hlr
+#   Compose path: docker-compose.portainer.yml
+#   Branch: main
+#   Environment: см. infra/docker/.env.portainer.example
 #
-# Required env: POSTGRES_PASSWORD, API_KEY_PEPPER, PUBLIC_API_URL, PUBLIC_WEB_URL
-# Optional: IMAGE_TAG (default latest), SMSC_*, CORS_ORIGINS
-#
-# External NPM (recommended):
-#   1. Connect NPM container to Docker network `hlr_net`
-#   2. Proxy app.example.com → http://web:3000
-#   3. Proxy api.example.com → http://api:3001
-# Host-port fallback (NPM on same host without shared network):
-#   Forward to 127.0.0.1:WEB_PORT / 127.0.0.1:API_PORT
+# Внешний NPM: подключить к сети hlr_net → web:3000 и api:3001
 
 name: hlr
 
@@ -23,9 +17,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-finenumbers}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-finenumbers}
+      POSTGRES_USER: finenumbers
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD}
+      POSTGRES_DB: finenumbers
     command:
       - postgres
       - -c
@@ -39,14 +33,14 @@ services:
       - -c
       - max_wal_senders=3
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - postgres_wal_archive:/wal_archive
     networks:
       - hlr_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finenumbers} -d ${POSTGRES_DB:-finenumbers}"]
+      test: ["CMD-SHELL", "pg_isready -U finenumbers -d finenumbers"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,7 +48,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # Inline config (no bind-mount) so Portainer stacks work without a git checkout of infra/.
     command:
       - redis-server
       - --appendonly
@@ -74,7 +67,7 @@ services:
       - --maxmemory-policy
       - noeviction
     ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -86,7 +79,7 @@ services:
       retries: 10
 
   api:
-    image: ghcr.io/finenumbers/hlr-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/hlr-api:latest
     pull_policy: always
     restart: unless-stopped
     depends_on:
@@ -97,24 +90,16 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 3001
-      DATABASE_URL: postgresql://${POSTGRES_USER:-finenumbers}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finenumbers}?schema=public
+      DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
       REDIS_URL: redis://redis:6379
       UPLOAD_DIR: /data/uploads
-      PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL}
-      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?Set PUBLIC_WEB_URL}
-      API_KEY_PEPPER: ${API_KEY_PEPPER:?Set API_KEY_PEPPER}
-      TRUST_PROXY: ${TRUST_PROXY:-true}
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
-      BODY_LIMIT: ${BODY_LIMIT:-256kb}
-      BODY_LIMIT_SUBMIT: ${BODY_LIMIT_SUBMIT:-1mb}
-      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-30000}
-      AUTH_LOGIN_RPM: ${AUTH_LOGIN_RPM:-20}
-      AUTH_LOGOUT_RPM: ${AUTH_LOGOUT_RPM:-60}
-      RATE_LIMIT_READ_MULTIPLIER: ${RATE_LIMIT_READ_MULTIPLIER:-5}
-      RATE_LIMIT_READ_RPM_MAX: ${RATE_LIMIT_READ_RPM_MAX:-600}
-      RATE_LIMIT_WEBHOOK_RPM: ${RATE_LIMIT_WEBHOOK_RPM:-60}
-      METRICS_ENABLED: ${METRICS_ENABLED:-true}
-      SMSC_BASE_URL: ${SMSC_BASE_URL:-https://smsc.ru}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:?Задайте PUBLIC_API_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?Задайте PUBLIC_WEB_URL}
+      CORS_ORIGINS: ${PUBLIC_WEB_URL}
+      API_KEY_PEPPER: ${API_KEY_PEPPER:?Задайте API_KEY_PEPPER}
+      TRUST_PROXY: "true"
+      METRICS_ENABLED: "true"
+      SMSC_BASE_URL: https://smsc.ru
       SMSC_LOGIN: ${SMSC_LOGIN:-}
       SMSC_PASSWORD: ${SMSC_PASSWORD:-}
       SMSC_API_KEY: ${SMSC_API_KEY:-}
@@ -122,7 +107,7 @@ services:
     volumes:
       - uploads_data:/data/uploads
     ports:
-      - "127.0.0.1:${API_PORT:-3001}:3001"
+      - "127.0.0.1:3001:3001"
     networks:
       - hlr_net
     healthcheck:
@@ -137,7 +122,7 @@ services:
       start_period: 20s
 
   worker:
-    image: ghcr.io/finenumbers/hlr-worker:${IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/hlr-worker:latest
     pull_policy: always
     restart: unless-stopped
     depends_on:
@@ -147,14 +132,14 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-finenumbers}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-finenumbers}?schema=public
+      DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
       REDIS_URL: redis://redis:6379
       UPLOAD_DIR: /data/uploads
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+      WORKER_CONCURRENCY: "5"
       WORKER_METRICS_PORT: 9091
-      METRICS_ENABLED: ${METRICS_ENABLED:-true}
-      API_KEY_PEPPER: ${API_KEY_PEPPER:-}
-      SMSC_BASE_URL: ${SMSC_BASE_URL:-https://smsc.ru}
+      METRICS_ENABLED: "true"
+      API_KEY_PEPPER: ${API_KEY_PEPPER}
+      SMSC_BASE_URL: https://smsc.ru
       SMSC_LOGIN: ${SMSC_LOGIN:-}
       SMSC_PASSWORD: ${SMSC_PASSWORD:-}
       SMSC_API_KEY: ${SMSC_API_KEY:-}
@@ -167,17 +152,17 @@ services:
       - hlr_net
 
   web:
-    image: ghcr.io/finenumbers/hlr-web:${IMAGE_TAG:-latest}
+    image: ghcr.io/finenumbers/hlr-web:latest
     pull_policy: always
     restart: unless-stopped
     depends_on:
       - api
     environment:
       NODE_ENV: production
-      PUBLIC_API_URL: ${PUBLIC_API_URL:?Set PUBLIC_API_URL}
-      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?Set PUBLIC_WEB_URL}
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
     ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+      - "127.0.0.1:3000:3000"
     networks:
       - hlr_net
 

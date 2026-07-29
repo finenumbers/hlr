@@ -34,21 +34,18 @@ SMSC credentials **никогда** не редактируются из UI.
 
 ## Docker
 
-Production: Portainer stack [`docker-compose.portainer.yml`](../docker-compose.portainer.yml) + external NPM on network `hlr_net` — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+Production: Portainer stack [`docker-compose.portainer.yml`](../docker-compose.portainer.yml) (всегда `:latest` + `main`) + external NPM on `hlr_net` — see [DEPLOYMENT.md](./DEPLOYMENT.md). Env: [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example).
 
 ```bash
 # App (local build)
 docker compose up -d --build
 
-# App (pull GHCR)
-IMAGE_TAG=latest docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-IMAGE_TAG=latest docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# App (как Portainer: всегда :latest)
+docker compose -f docker-compose.portainer.yml pull
+docker compose -f docker-compose.portainer.yml up -d
 
 # App + observability
 docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
-
-# Production-oriented binds + secrets
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Services: `postgres`, `redis` (AOF), `api`, `worker`, `web`.  
