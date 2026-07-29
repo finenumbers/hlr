@@ -71,8 +71,8 @@ pnpm --filter @finenumbers/web dev
 
 Seed login (after `pnpm --filter @finenumbers/db seed` — no demo clients):
 
-- Admin: `admin@finenumbers.local` / `ChangeMeNow!` → `/admin/login`  
-- Cabinet: `demo@finenumbers.local` / `ChangeMeNow!` → `/app/login`
+- Admin: `admin@finenumbers.local` / `ChangeMeNow!` → `/admin/login`
+- Cabinet users: create a tenant + membership in admin, then `/app/login`
 
 ## Scripts
 
