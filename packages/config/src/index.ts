@@ -10,6 +10,29 @@ export {
 
 const nonempty = z.string().min(1);
 
+/**
+ * Normalize public http(s) URLs from env.
+ * Accepts bare hosts (`api.example.com`) and adds https:// (http:// for localhost).
+ */
+export function normalizePublicUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, '');
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  const host = trimmed.replace(/^\/\//, '');
+  const isLocal =
+    host === 'localhost' ||
+    host.startsWith('localhost:') ||
+    host === '127.0.0.1' ||
+    host.startsWith('127.0.0.1:');
+  return `${isLocal ? 'http' : 'https'}://${host}`;
+}
+
+const publicUrl = nonempty.transform(normalizePublicUrl);
+
 export const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
@@ -67,8 +90,8 @@ export const apiEnvSchema = baseEnvSchema
   .merge(apiKeyEnvSchema)
   .extend({
     API_PORT: z.coerce.number().int().positive().default(3001),
-    PUBLIC_API_URL: nonempty.default('http://localhost:3001'),
-    PUBLIC_WEB_URL: nonempty.default('http://localhost:3000'),
+    PUBLIC_API_URL: publicUrl.default('http://localhost:3001'),
+    PUBLIC_WEB_URL: publicUrl.default('http://localhost:3000'),
     /** Opaque session token lifetime for cabinet/admin panels. */
     SESSION_TTL_HOURS: z.coerce.number().int().positive().default(72),
     /**
@@ -141,8 +164,8 @@ export const workerEnvSchema = baseEnvSchema
   });
 
 export const webEnvSchema = baseEnvSchema.extend({
-  PUBLIC_API_URL: nonempty.default('http://localhost:3001'),
-  PUBLIC_WEB_URL: nonempty.default('http://localhost:3000'),
+  PUBLIC_API_URL: publicUrl.default('http://localhost:3001'),
+  PUBLIC_WEB_URL: publicUrl.default('http://localhost:3000'),
 });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

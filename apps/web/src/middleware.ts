@@ -18,11 +18,23 @@ function buildContentSecurityPolicy(publicApiUrl: string): string {
   ].join('; ');
 }
 
+function normalizePublicUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, '');
+  if (!trimmed) return trimmed;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  const host = trimmed.replace(/^\/\//, '');
+  const isLocal =
+    host === 'localhost' ||
+    host.startsWith('localhost:') ||
+    host === '127.0.0.1' ||
+    host.startsWith('127.0.0.1:');
+  return `${isLocal ? 'http' : 'https'}://${host}`;
+}
+
 export function middleware(_request: NextRequest): NextResponse {
   const response = NextResponse.next();
-  const publicApiUrl = (process.env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(
-    /\/$/,
-    '',
+  const publicApiUrl = normalizePublicUrl(
+    process.env.PUBLIC_API_URL ?? 'http://localhost:3001',
   );
 
   response.headers.set('Content-Security-Policy', buildContentSecurityPolicy(publicApiUrl));
