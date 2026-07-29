@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { ApiError, api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useI18n, useT } from '@/lib/i18n';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatMoney } from '@/lib/utils';
 
 type SettingsForm = {
   currency: string;
@@ -75,6 +75,7 @@ export default function AdminSettingsPage() {
   const [form, setForm] = useState<SettingsForm>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [smscTestError, setSmscTestError] = useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ['admin', 'settings'],
@@ -84,6 +85,16 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     if (q.data) setForm(toForm(q.data));
   }, [q.data]);
+
+  const smscTest = useMutation({
+    mutationFn: () => api.admin.testSmscConnectivity(),
+    onMutate: () => setSmscTestError(null),
+    onError: (err) => {
+      setSmscTestError(
+        err instanceof ApiError ? err.message : t('adminSettings.smscTestFailed'),
+      );
+    },
+  });
 
   const save = useMutation({
     mutationFn: () => {
@@ -156,6 +167,94 @@ export default function AdminSettingsPage() {
                   when: formatDate(String(q.data.updatedAt), locale),
                 })}
               </p>
+            ) : null}
+          </Card>
+
+          <Card className="space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold">{t('adminSettings.smscTestTitle')}</h2>
+              <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                {t('adminSettings.smscTestHint')}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={smscTest.isPending}
+              onClick={() => smscTest.mutate()}
+            >
+              {smscTest.isPending
+                ? t('adminSettings.smscTestRunning')
+                : t('adminSettings.smscTestRun')}
+            </Button>
+            {smscTestError ? (
+              <p className="text-sm text-[var(--color-danger)]">{smscTestError}</p>
+            ) : null}
+            {smscTest.data ? (
+              <div className="space-y-2 text-sm">
+                <p
+                  className={
+                    smscTest.data.ok
+                      ? 'font-medium text-[var(--color-ok)]'
+                      : 'font-medium text-[var(--color-danger)]'
+                  }
+                >
+                  {smscTest.data.ok
+                    ? t('adminSettings.smscTestOk')
+                    : t('adminSettings.smscTestFail')}
+                </p>
+                <div className="rounded-md border border-[var(--color-line)] p-3 space-y-1">
+                  <p className="font-medium">{t('adminSettings.smscOutbound')}</p>
+                  {!smscTest.data.credentialsConfigured ? (
+                    <p className="text-[var(--color-danger)]">
+                      {t('adminSettings.smscCredsMissing')}
+                    </p>
+                  ) : null}
+                  {smscTest.data.outbound.ok ? (
+                    <>
+                      {smscTest.data.outbound.latencyMs != null ? (
+                        <p>
+                          {t('adminSettings.smscLatency', {
+                            ms: smscTest.data.outbound.latencyMs,
+                          })}
+                        </p>
+                      ) : null}
+                      {smscTest.data.outbound.balance != null ? (
+                        <p>
+                          {t('adminSettings.smscBalanceLine', {
+                            amount: formatMoney(
+                              smscTest.data.outbound.balance,
+                              smscTest.data.outbound.currency ?? 'RUB',
+                            ),
+                          })}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-[var(--color-danger)]">
+                      {smscTest.data.outbound.error ?? t('adminSettings.smscTestFail')}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-md border border-[var(--color-line)] p-3 space-y-1">
+                  <p className="font-medium">{t('adminSettings.smscInbound')}</p>
+                  {!smscTest.data.callbackSecretConfigured ? (
+                    <p className="text-[var(--color-danger)]">
+                      {t('adminSettings.smscSecretMissing')}
+                    </p>
+                  ) : smscTest.data.inbound.ok ? (
+                    <p className="text-[var(--color-ok)]">OK</p>
+                  ) : (
+                    <p className="text-[var(--color-danger)]">
+                      {smscTest.data.inbound.error ?? t('adminSettings.smscTestFail')}
+                    </p>
+                  )}
+                  <p className="text-xs text-[var(--color-ink-muted)] break-all">
+                    {t('adminSettings.smscCallbackUrl')}{' '}
+                    <code>{smscTest.data.publicCallbackUrl}</code>
+                  </p>
+                </div>
+              </div>
             ) : null}
           </Card>
 

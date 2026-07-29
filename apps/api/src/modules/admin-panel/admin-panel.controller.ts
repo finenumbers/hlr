@@ -461,6 +461,19 @@ export class AdminPanelController {
     );
   }
 
+  @Post('provider/smsc/connectivity-test')
+  @ApiOperation({
+    summary:
+      'No-charge SMSC connectivity test (outbound balance + inbound callback signature)',
+  })
+  testSmscConnectivity(@Req() req: Request) {
+    return this.admin.testSmscConnectivity(
+      typeof req.headers['x-request-id'] === 'string'
+        ? req.headers['x-request-id']
+        : undefined,
+    );
+  }
+
   @Get('audit')
   listAudit(@Query() query: AuditListQueryDto) {
     return this.audit.search(query);

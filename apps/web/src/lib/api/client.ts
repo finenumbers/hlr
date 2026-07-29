@@ -221,6 +221,27 @@ export const api = {
         balance: string;
         currency: string | null;
       }>('/admin/provider/smsc/balance'),
+    testSmscConnectivity: () =>
+      apiRequest<{
+        ok: boolean;
+        charged: false;
+        credentialsConfigured: boolean;
+        callbackSecretConfigured: boolean;
+        publicCallbackUrl: string;
+        outbound: {
+          ok: boolean;
+          latencyMs: number | null;
+          balance: string | null;
+          currency: string | null;
+          error: string | null;
+        };
+        inbound: {
+          ok: boolean;
+          signatureVerifyOk: boolean;
+          rejectInvalidOk: boolean;
+          error: string | null;
+        };
+      }>('/admin/provider/smsc/connectivity-test', { method: 'POST' }),
     audit: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/admin/audit?${q}`),
     tariffs: (q = 'pageSize=100') =>
       apiRequest<Paginated<Record<string, unknown>>>(`/admin/tariffs?${q}`),

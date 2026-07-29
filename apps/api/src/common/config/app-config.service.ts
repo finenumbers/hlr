@@ -141,6 +141,14 @@ export class AppConfigService {
     return Boolean(apiKey || (login && this.env.SMSC_PASSWORD));
   }
 
+  get smscCallbackSecretConfigured(): boolean {
+    return Boolean(this.env.SMSC_CALLBACK_SECRET?.trim());
+  }
+
+  get smscCallbackSecret(): string {
+    return this.env.SMSC_CALLBACK_SECRET?.trim() ?? '';
+  }
+
   /** Pepper for hashing API key secrets (never log). */
   get apiKeyPepper(): string {
     return this.env.API_KEY_PEPPER;

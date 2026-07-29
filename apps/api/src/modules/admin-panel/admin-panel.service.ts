@@ -5,11 +5,14 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { MembershipRole, TenantStatus } from '@finenumbers/db';
 import { normalizePhoneE164, JobsValidationError } from '@finenumbers/jobs';
 import { isProviderError } from '@finenumbers/provider-core';
+import { verifyCallbackSignature } from '@finenumbers/provider-smsc';
 import { hash } from 'bcryptjs';
 
+import { AppConfigService } from '../../common/config/app-config.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -37,6 +40,7 @@ export class AdminPanelService {
     private readonly provider: ProviderSmscService,
     private readonly webhooks: WebhooksService,
     private readonly apiKeys: ApiKeysService,
+    private readonly config: AppConfigService,
   ) {}
 
   async dashboard() {
@@ -866,6 +870,133 @@ export class AdminPanelService {
     } catch (error) {
       throw mapProviderHttpError(error);
     }
+  }
+
+  /**
+   * No-charge SMSC connectivity check:
+   * - outbound: live getBalance (auth + network to SMSC)
+   * - inbound: local callback signature round-trip with SMSC_CALLBACK_SECRET
+   * Never calls submitHlr / submitPing.
+   */
+  async testSmscConnectivity(correlationId?: string) {
+    const credentialsConfigured = this.config.smscConfigured;
+    const callbackSecretConfigured = this.config.smscCallbackSecretConfigured;
+    const publicCallbackUrl = `${this.config.raw.PUBLIC_API_URL.replace(/\/$/, '')}/internal/smsc/callback`;
+
+    const outbound = await this.probeSmscOutbound(correlationId);
+    const inbound = this.probeSmscInboundCallback();
+
+    const ok =
+      credentialsConfigured &&
+      outbound.ok &&
+      callbackSecretConfigured &&
+      inbound.ok;
+
+    return {
+      ok,
+      charged: false as const,
+      credentialsConfigured,
+      callbackSecretConfigured,
+      publicCallbackUrl,
+      outbound,
+      inbound,
+    };
+  }
+
+  private async probeSmscOutbound(correlationId?: string): Promise<{
+    ok: boolean;
+    latencyMs: number | null;
+    balance: string | null;
+    currency: string | null;
+    error: string | null;
+  }> {
+    if (!this.config.smscConfigured) {
+      return {
+        ok: false,
+        latencyMs: null,
+        balance: null,
+        currency: null,
+        error: 'SMSC credentials are not configured (SMSC_LOGIN/PASSWORD or SMSC_API_KEY)',
+      };
+    }
+
+    const started = Date.now();
+    try {
+      const balance = await this.provider.getBalance(correlationId);
+      return {
+        ok: true,
+        latencyMs: Date.now() - started,
+        balance: balance.balance,
+        currency: balance.currency,
+        error: null,
+      };
+    } catch (error) {
+      const message =
+        error instanceof ServiceUnavailableException
+          ? String(
+              (error.getResponse() as { message?: string })?.message ??
+                error.message,
+            )
+          : isProviderError(error)
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : 'SMSC outbound probe failed';
+      return {
+        ok: false,
+        latencyMs: Date.now() - started,
+        balance: null,
+        currency: null,
+        error: message,
+      };
+    }
+  }
+
+  private probeSmscInboundCallback(): {
+    ok: boolean;
+    signatureVerifyOk: boolean;
+    rejectInvalidOk: boolean;
+    error: string | null;
+  } {
+    if (!this.config.smscCallbackSecretConfigured) {
+      return {
+        ok: false,
+        signatureVerifyOk: false,
+        rejectInvalidOk: false,
+        error: 'SMSC_CALLBACK_SECRET is empty — inbound signature verify is disabled',
+      };
+    }
+
+    const secret = this.config.smscCallbackSecret;
+    const payload = {
+      id: 'fn-self-test',
+      phone: '79991234567',
+      status: '1',
+    };
+    const base = `${payload.id}:${payload.phone}:${payload.status}:${secret}`;
+    const md5 = createHash('md5').update(base).digest('hex');
+
+    const valid = verifyCallbackSignature({
+      payload: { ...payload, md5 },
+      secret,
+    });
+    const invalid = verifyCallbackSignature({
+      payload: { ...payload, md5: 'deadbeefdeadbeefdeadbeefdeadbeef' },
+      secret,
+    });
+
+    const signatureVerifyOk = valid === true;
+    const rejectInvalidOk = invalid === false;
+    const ok = signatureVerifyOk && rejectInvalidOk;
+
+    return {
+      ok,
+      signatureVerifyOk,
+      rejectInvalidOk,
+      error: ok
+        ? null
+        : 'Callback signature verification failed self-test',
+    };
   }
 }
 
