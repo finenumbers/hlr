@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
     <div className="grid min-h-screen place-items-center px-4 py-10">
       <Card className="w-full max-w-md">
         <div className="mb-4 flex items-start justify-between gap-3">
-          <BrandLogo className="h-9 w-auto" priority />
+          <BrandLogo className="h-[2.7rem] w-auto" priority />
           <LocaleSwitcher />
         </div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">

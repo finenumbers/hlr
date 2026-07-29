@@ -50,7 +50,7 @@ export function AppShell({
     <div className="min-h-screen lg:grid lg:grid-cols-[192px_1fr]">
       <aside className="border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-3 px-3 py-5">
-          <BrandLogo variant="dark" priority className="h-7 w-auto" />
+          <BrandLogo variant="dark" priority className="h-[2.1rem] w-auto" />
         </div>
         <div className="px-3 pb-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] !text-white">

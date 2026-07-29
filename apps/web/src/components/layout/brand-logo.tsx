@@ -16,7 +16,7 @@ const DARK_SRC = '/branding/logo-horizontal-dark.png?v=20260730';
  */
 export function BrandLogo({
   variant = 'theme',
-  className = 'h-8 w-auto',
+  className = 'h-[2.4rem] w-auto',
   priority = false,
 }: {
   /** `theme` follows next-themes; `dark` always uses the on-dark asset. */
@@ -41,8 +41,8 @@ export function BrandLogo({
     <Image
       src={src}
       alt="fine numbers"
-      width={160}
-      height={36}
+      width={192}
+      height={43}
       className={cn('bg-transparent', className)}
       priority={priority}
       unoptimized
