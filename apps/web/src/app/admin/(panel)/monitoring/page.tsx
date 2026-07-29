@@ -108,7 +108,7 @@ export default function AdminMonitoringPage() {
                   disabled={!configured}
                 >
                   <option value="HLR">HLR</option>
-                  <option value="PING">Ping-SMS</option>
+                  <option value="PING">Silent SMS</option>
                 </select>
               </div>
               <div className="space-y-1">

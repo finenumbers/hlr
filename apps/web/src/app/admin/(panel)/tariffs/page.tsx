@@ -178,7 +178,7 @@ export default function AdminTariffsPage() {
                 }
               >
                 <option value="HLR">HLR</option>
-                <option value="PING">Ping-SMS</option>
+                <option value="PING">Silent SMS</option>
               </select>
             </div>
             <div>

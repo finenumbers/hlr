@@ -12,7 +12,7 @@ export function Badge({
     ok: 'bg-[color-mix(in_oklab,var(--color-ok)_20%,transparent)] text-[var(--color-ok)]',
     warn: 'bg-[color-mix(in_oklab,var(--color-warn)_20%,transparent)] text-[var(--color-warn)]',
     danger: 'bg-[color-mix(in_oklab,var(--color-danger)_18%,transparent)] text-[var(--color-danger)]',
-    accent: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]',
+    accent: 'bg-[var(--color-accent)] text-[var(--color-on-accent)]',
   };
   return (
     <span

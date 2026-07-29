@@ -95,7 +95,7 @@ describe('ProductSubmitPage UI (tariff states)', () => {
     render(renderProviders({ children: <ProductSubmitPage checkType="PING" /> }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Ping-SMS unavailable: no tariff assigned/i)).toBeInTheDocument();
+      expect(screen.getByText(/Silent SMS unavailable: no tariff assigned/i)).toBeInTheDocument();
     });
     expect(screen.queryByPlaceholderText('+79991234567')).not.toBeInTheDocument();
   });

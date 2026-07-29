@@ -4,7 +4,7 @@ export function isCheckType(value: unknown): value is CheckType {
   return value === 'HLR' || value === 'PING';
 }
 
-/** Display label for UI — never show raw PING to users. */
+/** Display label for UI — never show raw PING; show Silent SMS. */
 export function serviceLabel(
   checkType: string | null | undefined,
   t: (key: string) => string,

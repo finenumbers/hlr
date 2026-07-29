@@ -1,12 +1,12 @@
 'use client';
 
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { BrandLogo } from '@/components/layout/brand-logo';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -52,13 +52,7 @@ export default function CabinetLoginPage() {
     <div className="grid min-h-screen place-items-center px-4 py-10">
       <Card className="w-full max-w-md">
         <div className="mb-4 flex items-start justify-between gap-3">
-          <Image
-            src="/branding/logo-horizontal.png"
-            alt="Finenumbers"
-            width={180}
-            height={40}
-            className="h-9 w-auto"
-          />
+          <BrandLogo className="h-9 w-auto" priority />
           <LocaleSwitcher />
         </div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">

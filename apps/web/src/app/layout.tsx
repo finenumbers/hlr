@@ -23,7 +23,7 @@ const display = Source_Serif_4({
 
 export const metadata: Metadata = {
   title: 'Finenumbers HLR Lookup Service',
-  description: 'Admin panel and client cabinet for HLR / Ping-SMS checks',
+  description: 'Admin panel and client cabinet for HLR / Silent SMS checks',
   icons: {
     icon: '/favicon.png',
   },

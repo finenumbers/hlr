@@ -1,11 +1,11 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import type { ReactNode } from 'react';
 
+import { BrandLogo } from '@/components/layout/brand-logo';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -48,19 +48,12 @@ export function AppShell({
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
-      <aside className="border-b border-[var(--color-line)] bg-[var(--color-panel-elevated)] lg:border-b-0 lg:border-r">
+      <aside className="border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-3 px-5 py-5">
-          <Image
-            src="/branding/logo-horizontal.png"
-            alt="Finenumbers"
-            width={160}
-            height={36}
-            className="h-8 w-auto"
-            priority
-          />
+          <BrandLogo variant="dark" priority />
         </div>
         <div className="px-5 pb-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-nav-ink-muted)]">
             {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
           </p>
         </div>
@@ -74,8 +67,8 @@ export function AppShell({
                 className={cn(
                   'rounded-md px-3 py-2 text-sm whitespace-nowrap',
                   active
-                    ? 'bg-[var(--color-accent-soft)] font-medium text-[var(--color-accent)]'
-                    : 'text-[var(--color-ink-muted)] hover:bg-[color-mix(in_oklab,var(--color-accent)_8%,transparent)] hover:text-[var(--color-ink)]',
+                    ? 'bg-[color-mix(in_oklab,var(--color-accent)_22%,transparent)] font-medium text-[var(--color-accent)]'
+                    : 'text-[var(--color-nav-ink-muted)] hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] hover:text-[var(--color-nav-ink)]',
                 )}
               >
                 {t(item.labelKey)}
