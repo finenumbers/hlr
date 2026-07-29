@@ -4,7 +4,11 @@ import { PlatformRole, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const SUPERADMIN_EMAIL = process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@finenumbers.local';
+const SUPERADMIN_EMAIL = (
+  process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@finenumbers.local'
+)
+  .trim()
+  .toLowerCase();
 const SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMeNow!';
 
 /** Legacy bootstrap demo org/user — remove if still present from older seeds. */
@@ -24,7 +28,36 @@ async function removeLegacyDemo(): Promise<void> {
   }
 }
 
+/**
+ * If SEED email changed away from the old default, demote the leftover
+ * admin@finenumbers.local so operators are not confused by two superadmins.
+ */
+async function demoteLegacyDefaultAdmin(): Promise<void> {
+  const legacyEmail = 'admin@finenumbers.local';
+  if (SUPERADMIN_EMAIL === legacyEmail) {
+    return;
+  }
+
+  const legacy = await prisma.user.findUnique({ where: { email: legacyEmail } });
+  if (!legacy || legacy.platformRole !== PlatformRole.SUPERADMIN) {
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: legacy.id },
+    data: { platformRole: null, isActive: false },
+  });
+  console.log(`  demoted legacy superadmin ${legacyEmail}`);
+}
+
 async function main(): Promise<void> {
+  if (!SUPERADMIN_EMAIL || !SUPERADMIN_EMAIL.includes('@')) {
+    throw new Error(`Invalid SEED_SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}`);
+  }
+  if (!SUPERADMIN_PASSWORD || SUPERADMIN_PASSWORD.length < 8) {
+    throw new Error('SEED_SUPERADMIN_PASSWORD must be at least 8 characters');
+  }
+
   await prisma.platformSettings.upsert({
     where: { id: 'default' },
     create: {
@@ -60,11 +93,13 @@ async function main(): Promise<void> {
     },
   });
 
+  await demoteLegacyDefaultAdmin();
   await removeLegacyDemo();
 
   console.log('Seed completed (empty tenants — create clients in admin):');
   console.log(`  platform settings: default`);
-  console.log(`  superadmin: ${superadmin.email} (password from SEED_SUPERADMIN_PASSWORD or default)`);
+  console.log(`  superadmin email: ${superadmin.email}`);
+  console.log(`  superadmin password: from SEED_SUPERADMIN_PASSWORD (${SUPERADMIN_PASSWORD.length} chars)`);
 }
 
 main()

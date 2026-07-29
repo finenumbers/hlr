@@ -81,7 +81,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Миграции БД + создание первого админа (каждый redeploy; пароль из SEED_*).
+  # Миграции БД + создание/обновление superadmin из SEED_*.
+  # Labels с email заставляют Compose/Portainer пересоздать контейнер при смене SEED.
   migrate:
     image: ghcr.io/finenumbers/hlr-api:latest
     pull_policy: always
@@ -93,12 +94,15 @@ services:
       DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!}
+    labels:
+      - "hlr.seed.email=${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}"
     working_dir: /app/packages/db
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -eu
+        echo ">> seed email=$${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}"
         if [ -x /app/infra/scripts/migrate-and-seed.sh ]; then
           exec /app/infra/scripts/migrate-and-seed.sh
         fi

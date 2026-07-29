@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: 'admin@finenumbers.local', password: '' },
+    defaultValues: { email: '', password: '' },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {

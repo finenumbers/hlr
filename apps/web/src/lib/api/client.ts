@@ -48,13 +48,23 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
-async function parseApiResponse<T>(res: Response): Promise<T> {
+async function parseApiResponse<T>(res: Response, apiBase: string): Promise<T> {
   if (res.status === 204) {
     return undefined as T;
   }
 
   const text = await res.text();
-  const data = text ? (JSON.parse(text) as unknown) : null;
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      throw new ApiError(
+        `API returned non-JSON (${res.status}) from ${apiBase}. Check PUBLIC_API_URL / NPM.`,
+        res.status,
+      );
+    }
+  }
 
   if (!res.ok) {
     const err = data as { error?: { message?: string; code?: string; details?: unknown } } | null;
@@ -70,6 +80,7 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const apiBase = getPublicApiUrl();
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
@@ -83,14 +94,22 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const res = await fetch(`${getPublicApiUrl()}${path}`, {
-    method: options.method ?? (options.body !== undefined ? 'POST' : 'GET'),
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}${path}`, {
+      method: options.method ?? (options.body !== undefined ? 'POST' : 'GET'),
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${apiBase}. Check PUBLIC_API_URL and that api is up.`,
+      0,
+    );
+  }
 
-  return parseApiResponse<T>(res);
+  return parseApiResponse<T>(res, apiBase);
 }
 
 /** Multipart upload (do not set Content-Type — browser sets boundary). */
@@ -109,14 +128,23 @@ export async function apiFormRequest<T>(
   const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const res = await fetch(`${getPublicApiUrl()}${path}`, {
-    method: options.method ?? 'POST',
-    headers,
-    body: form,
-    signal: options.signal,
-  });
+  const apiBase = getPublicApiUrl();
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}${path}`, {
+      method: options.method ?? 'POST',
+      headers,
+      body: form,
+      signal: options.signal,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${apiBase}. Check PUBLIC_API_URL and that api is up.`,
+      0,
+    );
+  }
 
-  return parseApiResponse<T>(res);
+  return parseApiResponse<T>(res, apiBase);
 }
 
 export type LoginResponse = {

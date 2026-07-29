@@ -60,7 +60,9 @@ No Kubernetes required. Data plane stays on internal `hlr_net`; `api` / `web` al
 | `SMSC_LOGIN` + `SMSC_PASSWORD` | Доступ к SMSC.ru (или `SMSC_API_KEY`) |
 | `SMSC_CALLBACK_SECRET` | Секрет подписи callback от SMSC |
 
-По умолчанию админ: `admin@finenumbers.local` / `ChangeMeNow!`. Клиентов seed не создаёт — только пустые platform settings + superadmin. Сервис `migrate` при старте стека применяет миграции и seed.
+По умолчанию админ: `admin@finenumbers.local` / `ChangeMeNow!`. Клиентов seed не создаёт — только пустые platform settings + superadmin. Сервис `migrate` при старте стека применяет миграции и seed (создаёт/обновляет пользователя из `SEED_SUPERADMIN_*`).
+
+После смены `SEED_SUPERADMIN_*` в Portainer обязательно **Update/Redeploy** стека и проверьте логи контейнера `migrate` (`superadmin email: …`). Если migrate не пересоздался — удалите его вручную и снова Redeploy.
 
 Секреты не коммитьте — только в Environment variables стека Portainer.
 
