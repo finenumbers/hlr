@@ -47,17 +47,17 @@ export function AppShell({
   );
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
+    <div className="min-h-screen lg:grid lg:grid-cols-[192px_1fr]">
       <aside className="border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-3 px-5 py-5">
-          <BrandLogo variant="dark" priority />
+        <div className="flex items-center gap-3 px-3 py-5">
+          <BrandLogo variant="dark" priority className="h-7 w-auto" />
         </div>
-        <div className="px-5 pb-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] !text-white/80">
+        <div className="px-3 pb-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] !text-white">
             {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
           </p>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-4 lg:flex-col">
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-4 lg:flex-col">
           {items.map((item) => {
             const active = item.href === activeHref;
             return (
@@ -65,10 +65,10 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'rounded-md px-3 py-2 text-sm whitespace-nowrap',
+                  'rounded-md px-2.5 py-2 text-sm font-bold whitespace-nowrap',
                   active
-                    ? 'bg-[color-mix(in_oklab,var(--color-accent)_22%,transparent)] font-medium !text-[var(--color-accent)]'
-                    : '!text-white hover:bg-[color-mix(in_oklab,var(--color-accent)_12%,transparent)] hover:!text-white',
+                    ? 'bg-[var(--color-accent-bright)] !text-black'
+                    : '!text-white hover:bg-[color-mix(in_oklab,var(--color-accent-bright)_18%,transparent)] hover:!text-white',
                 )}
               >
                 {t(item.labelKey)}

@@ -11,6 +11,8 @@
   --color-panel-elevated: #ffffff;
   --color-line: #d9dde5;
   --color-accent: #fee801;
+  /* Bright yellow from brand swatch — solid active nav / highlights */
+  --color-accent-bright: #fae74e;
   --color-accent-soft: #fff6a8;
   --color-on-accent: #211f20;
   --color-nav: #211f20;
@@ -29,6 +31,7 @@
   --color-panel-elevated: #171e2b;
   --color-line: #2a3445;
   --color-accent: #fee801;
+  --color-accent-bright: #fae74e;
   --color-accent-soft: #3a3208;
   --color-on-accent: #211f20;
   --color-nav: #211f20;
