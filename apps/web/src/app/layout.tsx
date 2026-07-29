@@ -7,6 +7,8 @@ import { getPublicRuntimeEnv } from '@/lib/public-env';
 
 import './globals.css';
 
+export const dynamic = 'force-dynamic';
+
 const sans = IBM_Plex_Sans({
   subsets: ['latin', 'cyrillic'],
   weight: ['400', '500', '600', '700'],

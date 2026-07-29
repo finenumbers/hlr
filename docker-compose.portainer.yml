@@ -128,7 +128,6 @@ services:
       UPLOAD_DIR: /data/uploads
       PUBLIC_API_URL: ${PUBLIC_API_URL:?Задайте PUBLIC_API_URL}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?Задайте PUBLIC_WEB_URL}
-      CORS_ORIGINS: ${PUBLIC_WEB_URL}
       API_KEY_PEPPER: ${API_KEY_PEPPER:?Задайте API_KEY_PEPPER}
       TRUST_PROXY: "true"
       METRICS_ENABLED: "true"
@@ -193,8 +192,8 @@ services:
       - api
     environment:
       NODE_ENV: production
-      PUBLIC_API_URL: ${PUBLIC_API_URL}
-      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:?Задайте PUBLIC_API_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?Задайте PUBLIC_WEB_URL}
     ports:
       - "127.0.0.1:3000:3000"
     networks:

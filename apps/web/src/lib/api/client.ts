@@ -1,5 +1,5 @@
 import type { AuthUser } from '@/lib/auth/permissions';
-import { getPublicApiUrl } from '@/lib/public-env';
+import { resolvePublicApiUrl } from '@/lib/public-env';
 
 const TOKEN_KEY = 'fn.session.token';
 const TENANT_KEY = 'fn.session.tenantId';
@@ -80,7 +80,7 @@ async function parseApiResponse<T>(res: Response, apiBase: string): Promise<T> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const apiBase = getPublicApiUrl();
+  const apiBase = await resolvePublicApiUrl();
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
@@ -128,7 +128,7 @@ export async function apiFormRequest<T>(
   const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const apiBase = getPublicApiUrl();
+  const apiBase = await resolvePublicApiUrl();
   let res: Response;
   try {
     res = await fetch(`${apiBase}${path}`, {

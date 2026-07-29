@@ -207,12 +207,18 @@ export function loadWebEnv(options?: LoadEnvOptions): WebEnv {
   return loadEnv(webEnvSchema, options);
 }
 
-/** Resolve CORS allow-list from env. */
+/** Resolve CORS allow-list from env (bare hosts → https://). */
 export function resolveCorsOrigins(env: Pick<ApiEnv, 'CORS_ORIGINS' | 'PUBLIC_WEB_URL'>): string[] {
-  if (env.CORS_ORIGINS?.trim()) {
-    return env.CORS_ORIGINS.split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean);
-  }
-  return [env.PUBLIC_WEB_URL];
+  const raw = env.CORS_ORIGINS?.trim()
+    ? env.CORS_ORIGINS.split(',')
+    : [env.PUBLIC_WEB_URL];
+
+  return [
+    ...new Set(
+      raw
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+        .map((origin) => normalizePublicUrl(origin)),
+    ),
+  ];
 }

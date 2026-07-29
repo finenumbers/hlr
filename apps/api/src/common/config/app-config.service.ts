@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ApiEnv } from '@finenumbers/config';
+import { resolveCorsOrigins, type ApiEnv } from '@finenumbers/config';
 
 import { APP_CONFIG } from './app-config.tokens';
 
@@ -59,12 +59,7 @@ export class AppConfigService {
   }
 
   get corsOrigins(): string[] {
-    if (this.env.CORS_ORIGINS?.trim()) {
-      return this.env.CORS_ORIGINS.split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean);
-    }
-    const origins = [this.env.PUBLIC_WEB_URL];
+    const origins = resolveCorsOrigins(this.env);
     if (!this.isProduction) {
       origins.push('http://localhost:3000');
     }
