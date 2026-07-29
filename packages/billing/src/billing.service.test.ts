@@ -235,7 +235,7 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '20');
-    const plan = db.seedAssignedPlan(tenantId, {
+    db.seedAssignedPlan(tenantId, {
       code: 'standard',
       sellPrice: '1.000000',
       providerCost: '0.300000',
