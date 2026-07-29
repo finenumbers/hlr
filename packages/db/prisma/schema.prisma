@@ -1,0 +1,600 @@
+// Finenumbers domain schema (PostgreSQL).
+// Package: @finenumbers/db
+// See packages/db/README.md for model overview.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+/// Platform-level role on User. Null = tenant-only account.
+enum PlatformRole {
+  SUPERADMIN
+  SUPPORT
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  HOLD
+  RELEASE
+  ADJUSTMENT
+}
+
+enum CheckType {
+  HLR
+  PING
+}
+
+enum JobSource {
+  SINGLE
+  BULK
+  API
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+  CANCELLED
+}
+
+/// Per-item lifecycle (reserve → send → pending → terminal).
+enum JobItemStatus {
+  QUEUED
+  RESERVED
+  SENT
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderRequestKind {
+  SEND
+  STATUS
+  COST
+  BALANCE
+  OTHER
+}
+
+enum ProviderRequestStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERING
+  SUCCEEDED
+  FAILED
+  DEAD
+}
+
+enum ActorType {
+  USER
+  API_KEY
+  SYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & identity
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id             String       @id @default(cuid())
+  slug           String       @unique
+  name           String
+  status         TenantStatus @default(ACTIVE)
+  /// Optional per-tenant overrides (null → PlatformSettings).
+  rateLimitRpm   Int?
+  maxCsvRows     Int?
+  maxCsvBytes    Int?
+  maxBatchPhones Int?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  memberships         TenantMembership[]
+  apiKeys             ApiKey[]
+  wallet              Wallet?
+  tenantTariff        TenantTariff?
+  jobs                Job[]
+  jobItems            JobItem[]
+  webhookEndpoints    WebhookEndpoint[]
+  webhookDeliveries   WebhookDelivery[]
+  providerRequests    ProviderRequest[]
+  providerCallbacks   ProviderCallback[]
+  walletTransactions  WalletTransaction[]
+  auditLogs           AuditLog[]
+  idempotencyRecords  IdempotencyRecord[]
+
+  @@index([status, createdAt])
+  @@map("tenants")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String?
+  platformRole PlatformRole?
+  isActive     Boolean       @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  memberships              TenantMembership[]
+  sessions                 Session[]
+  createdApiKeys           ApiKey[]            @relation("ApiKeyCreatedBy")
+  walletTransactionsCreated WalletTransaction[] @relation("WalletTxCreatedBy")
+  auditLogsAsActor         AuditLog[]          @relation("AuditActorUser")
+  jobsCreated              Job[]               @relation("JobCreatedBy")
+
+  @@index([platformRole])
+  @@map("users")
+}
+
+model TenantMembership {
+  id        String         @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      MembershipRole
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// API keys
+// ---------------------------------------------------------------------------
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  tenantId     String
+  name         String
+  /// Public prefix used for lookup (e.g. fn_live_abc123).
+  prefix       String    @unique
+  /// bcrypt/argon2 hash of the secret part — never store plaintext.
+  secretHash   String
+  scopes       String[]  @default([])
+  rateLimitRpm Int?
+  lastUsedAt   DateTime?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  jobs      Job[]  @relation("JobCreatedByApiKey")
+
+  @@index([tenantId, revokedAt])
+  @@index([tenantId, createdAt])
+  @@map("api_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+model Wallet {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique
+  currency         String   @default("RUB") @db.Char(3)
+  /// Cached spendable balance. Ledger (WalletTransaction) is the source of truth.
+  availableBalance Decimal  @default(0) @db.Decimal(18, 6)
+  /// Cached funds on hold (reserved for in-flight checks).
+  heldBalance      Decimal  @default(0) @db.Decimal(18, 6)
+  /// Optimistic concurrency token for wallet updates.
+  version          Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id                    String                @id @default(cuid())
+  walletId              String
+  tenantId              String
+  type                  WalletTransactionType
+  /// Always non-negative; direction is implied by `type`.
+  amount                Decimal               @db.Decimal(18, 6)
+  currency              String                @default("RUB") @db.Char(3)
+  balanceAfterAvailable Decimal?              @db.Decimal(18, 6)
+  balanceAfterHeld      Decimal?              @db.Decimal(18, 6)
+  /// Links DEBIT/RELEASE back to the originating HOLD row.
+  relatedHoldId         String?
+  jobItemId             String?
+  idempotencyKey        String?
+  description           String?
+  metadata              Json?
+  createdById           String?
+  createdAt             DateTime              @default(now())
+
+  wallet      Wallet             @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  relatedHold WalletTransaction? @relation("HoldChain", fields: [relatedHoldId], references: [id], onDelete: SetNull)
+  children    WalletTransaction[] @relation("HoldChain")
+  jobItem     JobItem?           @relation(fields: [jobItemId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation("WalletTxCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([walletId, createdAt])
+  @@index([tenantId, createdAt])
+  @@index([jobItemId])
+  @@index([relatedHoldId])
+  @@index([type, createdAt])
+  @@map("wallet_transactions")
+}
+
+model TariffPlan {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  currency    String   @default("RUB") @db.Char(3)
+  /// Tenant sell price per HLR check (what the client pays).
+  hlrPrice    Decimal  @db.Decimal(18, 6)
+  /// Tenant sell price per Ping check (what the client pays).
+  pingPrice   Decimal  @db.Decimal(18, 6)
+  /// Internal provider cost per HLR check (margin accounting; never billed to client).
+  hlrProviderCost Decimal @default(0) @db.Decimal(18, 6)
+  /// Internal provider cost per Ping check (margin accounting; never billed to client).
+  pingProviderCost Decimal @default(0) @db.Decimal(18, 6)
+  /// Fallback plan when tenant has no TenantTariff assignment.
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenantTariffs TenantTariff[]
+
+  @@index([isActive])
+  @@index([isDefault, isActive])
+  @@map("tariff_plans")
+}
+
+/// Current tariff assignment for a tenant (one row; history deferred).
+model TenantTariff {
+  id                String    @id @default(cuid())
+  tenantId          String    @unique
+  tariffPlanId      String
+  hlrPriceOverride  Decimal?  @db.Decimal(18, 6)
+  pingPriceOverride Decimal?  @db.Decimal(18, 6)
+  effectiveFrom     DateTime  @default(now())
+  effectiveTo       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tariffPlan TariffPlan @relation(fields: [tariffPlanId], references: [id], onDelete: Restrict)
+
+  @@index([tariffPlanId])
+  @@map("tenant_tariffs")
+}
+
+// ---------------------------------------------------------------------------
+// Jobs / checks
+// ---------------------------------------------------------------------------
+
+/// Batch or single-check wrapper. A single API check is still a Job with 1 item.
+model Job {
+  id               String     @id @default(cuid())
+  tenantId         String
+  checkType        CheckType
+  source           JobSource
+  status           JobStatus  @default(QUEUED)
+  itemCount        Int        @default(0)
+  successCount     Int        @default(0)
+  failureCount     Int        @default(0)
+  estimatedCost    Decimal?   @db.Decimal(18, 6)
+  actualCost       Decimal?   @db.Decimal(18, 6)
+  currency         String     @default("RUB") @db.Char(3)
+  originalFilename String?
+  idempotencyKey   String?
+  createdByUserId  String?
+  apiKeyId         String?
+  errorCode        String?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  metadata         Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser User?     @relation("JobCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  apiKey        ApiKey?   @relation("JobCreatedByApiKey", fields: [apiKeyId], references: [id], onDelete: SetNull)
+  items         JobItem[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([status, createdAt])
+  @@map("jobs")
+}
+
+/// One phone check. Holds normalized result fields; raw provider I/O lives elsewhere.
+model JobItem {
+  id                String        @id @default(cuid())
+  jobId             String
+  tenantId          String
+  checkType         CheckType
+  status            JobItemStatus @default(QUEUED)
+  phoneE164         String
+  /// Provider code for multi-provider readiness (default SMSC).
+  providerCode      String        @default("smsc")
+  providerMessageId String?
+  estimatedCost     Decimal?      @db.Decimal(18, 6)
+  actualCost        Decimal?      @db.Decimal(18, 6)
+  currency          String        @default("RUB") @db.Char(3)
+  /// Normalized (provider-agnostic) outcome summary, e.g. "reachable".
+  resultStatus      String?
+  isReachable       Boolean?
+  imsi              String?
+  mcc               String?
+  mnc               String?
+  operatorName      String?
+  countryCode       String?
+  ported            Boolean?
+  roaming           Boolean?
+  /// Extra normalized fields that do not warrant dedicated columns yet.
+  normalizedResult  Json?
+  errorCode         String?
+  errorMessage      String?
+  sentAt            DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  job                 Job                  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  providerRequests    ProviderRequest[]
+  providerCallbacks   ProviderCallback[]
+  walletTransactions  WalletTransaction[]
+  webhookDeliveries   WebhookDelivery[]
+
+  @@index([jobId, status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([providerCode, providerMessageId])
+  @@index([phoneE164])
+  @@map("job_items")
+}
+
+// ---------------------------------------------------------------------------
+// Provider I/O (raw payloads separated from normalized JobItem fields)
+// ---------------------------------------------------------------------------
+
+model ProviderRequest {
+  id                String                @id @default(cuid())
+  tenantId          String
+  jobItemId         String?
+  providerCode      String
+  kind              ProviderRequestKind
+  status            ProviderRequestStatus @default(PENDING)
+  providerMessageId String?
+  httpStatus        Int?
+  errorCode         String?
+  errorMessage      String?
+  /// Outbound request body/params (secrets redacted). Kept immutable for re-debug.
+  requestPayload    Json
+  /// Raw provider response body. Kept even if mapping rules change later.
+  responsePayload   Json?
+  /// Snapshot of NormalizedResult at write time (re-mappable from raw later).
+  normalizedResult  Json?
+  /// Outbound SEND dedupe key (unique among PENDING/SUCCEEDED via partial index).
+  idempotencyKey    String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime              @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobItem JobItem? @relation(fields: [jobItemId], references: [id], onDelete: SetNull)
+
+  @@index([jobItemId, createdAt])
+  @@index([providerCode, providerMessageId])
+  @@index([tenantId, createdAt])
+  @@index([kind, createdAt])
+  @@index([providerCode, tenantId, idempotencyKey])
+  @@map("provider_requests")
+}
+
+model ProviderCallback {
+  id                String    @id @default(cuid())
+  tenantId          String?
+  jobItemId         String?
+  providerCode      String
+  providerMessageId String?
+  /// Inbound raw callback body (+ optional _meta.dedupeKey wrapper).
+  rawPayload        Json
+  /// Snapshot of NormalizedResult at ingest time.
+  normalizedResult  Json?
+  /// Callback fingerprint; unique per provider when set (see migration).
+  dedupeKey         String?
+  signatureValid    Boolean?
+  processedAt       DateTime?
+  processError      String?
+  createdAt         DateTime  @default(now())
+
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  jobItem JobItem? @relation(fields: [jobItemId], references: [id], onDelete: SetNull)
+
+  @@index([providerCode, providerMessageId])
+  @@index([jobItemId])
+  @@index([tenantId, createdAt])
+  @@index([createdAt])
+  @@index([providerCode, dedupeKey])
+  @@map("provider_callbacks")
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks
+// ---------------------------------------------------------------------------
+
+model WebhookEndpoint {
+  id          String   @id @default(cuid())
+  tenantId    String
+  url         String
+  /// HMAC signing secret (plaintext for MVP signing; encrypt-at-rest later if needed).
+  secret      String
+  description String?
+  enabled     Boolean  @default(true)
+  events      String[] @default([])
+  /// Consecutive failed deliveries; reset on success. Auto-disable threshold in app.
+  consecutiveFailures Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId, enabled])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id               String                @id @default(cuid())
+  tenantId         String
+  endpointId       String
+  jobItemId        String?
+  eventType        String
+  payload          Json
+  status           WebhookDeliveryStatus @default(PENDING)
+  attemptCount     Int                   @default(0)
+  maxAttempts      Int                   @default(8)
+  nextAttemptAt    DateTime?
+  lastResponseCode Int?
+  lastError        String?
+  deliveredAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  jobItem  JobItem?        @relation(fields: [jobItemId], references: [id], onDelete: SetNull)
+
+  @@index([endpointId, status])
+  @@index([tenantId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([jobItemId])
+  @@map("webhook_deliveries")
+}
+
+// ---------------------------------------------------------------------------
+// Platform / audit / idempotency
+// ---------------------------------------------------------------------------
+
+/// Singleton runtime settings (id = "default"). Secrets stay in env, not here.
+model PlatformSettings {
+  id                  String   @id @default("default")
+  currency            String   @default("RUB") @db.Char(3)
+  defaultRateLimitRpm Int      @default(60)
+  maxCsvRows          Int      @default(100000)
+  maxCsvBytes         Int      @default(52428800)
+  maxBatchPhones      Int      @default(1000)
+  checkTimeoutSec     Int      @default(3600)
+  pollIntervalSec     Int      @default(30)
+  webhookMaxAttempts  Int      @default(8)
+  webhookTimeoutMs    Int      @default(5000)
+  retentionDays       Int      @default(90)
+  smscBaseUrl         String?
+  extras              Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  tenantId      String?
+  actorType     ActorType
+  actorUserId   String?
+  actorApiKeyId String?
+  action        String
+  targetType    String?
+  targetId      String?
+  ip            String?
+  userAgent     String?
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+
+  tenant    Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actorUser User?   @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model IdempotencyRecord {
+  id           String   @id @default(cuid())
+  tenantId     String
+  key          String
+  requestHash  String
+  responseCode Int
+  responseBody Json
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}

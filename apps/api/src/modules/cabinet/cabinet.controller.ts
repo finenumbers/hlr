@@ -1,0 +1,331 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, Min } from 'class-validator';
+
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { TenantId } from '../../common/decorators/tenant-id.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import type { AuthenticatedUser } from '../../common/types/authenticated-user';
+import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
+import { CreateWebhookDto } from '../webhooks/dto/create-webhook.dto';
+import { UpdateWebhookDto } from '../webhooks/dto/update-webhook.dto';
+import { CabinetService } from './cabinet.service';
+
+class CabinetSubmitDto {
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100_000)
+  @IsString({ each: true })
+  phones!: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
+class CabinetEstimateDto {
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
+
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitCount!: number;
+}
+
+class CabinetJobsQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  checkType?: string;
+}
+
+class CabinetDeliveriesQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  endpointId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+@ApiTags('cabinet')
+@ApiBearerAuth()
+@ApiHeader({ name: 'X-Tenant-Id', required: true })
+@Roles('OWNER', 'ADMIN', 'MEMBER')
+@Controller('cabinet')
+export class CabinetController {
+  constructor(private readonly cabinet: CabinetService) {}
+
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Tenant ops dashboard' })
+  dashboard(@TenantId() tenantId: string) {
+    return this.cabinet.dashboard(tenantId);
+  }
+
+  @Post('billing/estimate')
+  estimate(@TenantId() tenantId: string, @Body() dto: CabinetEstimateDto) {
+    return this.cabinet.estimate(tenantId, dto.checkType, dto.unitCount);
+  }
+
+  @Post('checks')
+  submitSingle(
+    @TenantId() tenantId: string,
+    @Body() dto: CabinetSubmitDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const phone = dto.phones[0];
+    if (!phone) {
+      return this.cabinet.createJob({
+        tenantId,
+        checkType: dto.checkType,
+        phones: dto.phones,
+        source: 'SINGLE',
+        createdByUserId: user.userId,
+        idempotencyKey: dto.idempotencyKey,
+      });
+    }
+    return this.cabinet.createJob({
+      tenantId,
+      checkType: dto.checkType,
+      phones: [phone],
+      source: 'SINGLE',
+      createdByUserId: user.userId,
+      idempotencyKey: dto.idempotencyKey,
+    });
+  }
+
+  @Post('jobs')
+  submitBulk(
+    @TenantId() tenantId: string,
+    @Body() dto: CabinetSubmitDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.cabinet.createJob({
+      tenantId,
+      checkType: dto.checkType,
+      phones: dto.phones,
+      source: dto.phones.length === 1 ? 'SINGLE' : 'BULK',
+      createdByUserId: user.userId,
+      idempotencyKey: dto.idempotencyKey,
+    });
+  }
+
+  @Get('jobs')
+  listJobs(@TenantId() tenantId: string, @Query() query: CabinetJobsQueryDto) {
+    return this.cabinet.listJobs(tenantId, query.page, query.pageSize, {
+      status: query.status,
+      checkType: query.checkType,
+    });
+  }
+
+  @Get('jobs/:id')
+  getJob(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.cabinet.getJob(tenantId, id);
+  }
+
+  @Get('jobs/:id/items')
+  listItems(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto & { status?: string },
+  ) {
+    return this.cabinet.listJobItems(
+      tenantId,
+      id,
+      query.page,
+      query.pageSize,
+      query.status,
+    );
+  }
+
+  @Get('billing/balance')
+  balance(@TenantId() tenantId: string) {
+    return this.cabinet.getBalance(tenantId);
+  }
+
+  @Get('billing/ledger')
+  ledger(@TenantId() tenantId: string) {
+    return this.cabinet.listLedger(tenantId);
+  }
+
+  @Get('billing/tariff')
+  tariff(@TenantId() tenantId: string) {
+    return this.cabinet.getTariff(tenantId);
+  }
+
+  @Get('api-keys')
+  listKeys(@TenantId() tenantId: string, @Query() query: PaginationQueryDto) {
+    return this.cabinet.listApiKeys(tenantId, query.page, query.pageSize);
+  }
+
+  @Post('api-keys')
+  @Roles('OWNER', 'ADMIN')
+  createKey(
+    @TenantId() tenantId: string,
+    @Body() dto: CreateApiKeyDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.createApiKey(tenantId, dto, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('api-keys/:id/rotate')
+  @Roles('OWNER', 'ADMIN')
+  rotateKey(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.rotateApiKey(tenantId, id, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('api-keys/:id/revoke')
+  @Roles('OWNER', 'ADMIN')
+  revokeKey(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.revokeApiKey(tenantId, id, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Get('webhooks')
+  listWebhooks(@TenantId() tenantId: string, @Query() query: PaginationQueryDto) {
+    return this.cabinet.listWebhooks(tenantId, query.page, query.pageSize);
+  }
+
+  @Get('webhooks/summary')
+  webhookSummary(@TenantId() tenantId: string) {
+    return this.cabinet.webhookSummary(tenantId);
+  }
+
+  @Get('webhooks/deliveries')
+  listDeliveries(
+    @TenantId() tenantId: string,
+    @Query() query: CabinetDeliveriesQueryDto,
+  ) {
+    return this.cabinet.listDeliveries(tenantId, query.page, query.pageSize, {
+      endpointId: query.endpointId,
+      status: query.status,
+    });
+  }
+
+  @Post('webhooks')
+  @Roles('OWNER', 'ADMIN')
+  createWebhook(
+    @TenantId() tenantId: string,
+    @Body() dto: CreateWebhookDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.createWebhook(tenantId, dto, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Patch('webhooks/:id')
+  @Roles('OWNER', 'ADMIN')
+  updateWebhook(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateWebhookDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.updateWebhook(tenantId, id, dto, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('webhooks/:id/rotate-secret')
+  @Roles('OWNER', 'ADMIN')
+  rotateWebhook(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.cabinet.rotateWebhookSecret(tenantId, id, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Delete('webhooks/:id')
+  @HttpCode(204)
+  @Roles('OWNER', 'ADMIN')
+  async deleteWebhook(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.cabinet.deleteWebhook(tenantId, id, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser, @TenantId() tenantId: string) {
+    return {
+      userId: user.userId,
+      email: user.email,
+      tenantId,
+      membershipRole: user.membershipRole,
+    };
+  }
+}

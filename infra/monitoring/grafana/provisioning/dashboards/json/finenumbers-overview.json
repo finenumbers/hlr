@@ -1,0 +1,157 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API / Worker / DB / Redis",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "up{job=\"api\"}", "legendFormat": "api" },
+        { "expr": "up{job=\"worker\"}", "legendFormat": "worker" },
+        { "expr": "min(app_db_up)", "legendFormat": "db" },
+        { "expr": "min(app_redis_up)", "legendFormat": "redis" }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "SMSC balance",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "provider_balance{provider=\"smsc\"}",
+          "legendFormat": "{{currency}}"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency — HTTP p95 / p50",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "job:http_request_duration_seconds:p95",
+          "legendFormat": "p95 (recording)"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (queue) (rate(worker_job_duration_seconds_bucket[5m])))",
+          "legendFormat": "worker p95 {{queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate — HTTP 5xx ratio",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "job:http_error_rate:ratio_rate5m",
+          "legendFormat": "5xx ratio"
+        },
+        {
+          "expr": "sum by (status_class) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{status_class}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue backlog (waiting+delayed)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 12,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (queue) (queue_jobs_waiting)",
+          "legendFormat": "{{queue}}"
+        },
+        {
+          "expr": "job:queue_backlog:sum",
+          "legendFormat": "total"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker failures",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 13,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (queue) (rate(worker_jobs_processed_total{status=\"failed\"}[5m]))",
+          "legendFormat": "failed {{queue}}"
+        },
+        {
+          "expr": "sum by (queue) (rate(worker_jobs_processed_total{status=\"completed\"}[5m]))",
+          "legendFormat": "ok {{queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook failures",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 14,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(webhook_deliveries_total[5m]))",
+          "legendFormat": "{{status}}"
+        },
+        {
+          "expr": "job:webhook_failure_rate:rate5m",
+          "legendFormat": "failed+dead rate"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Provider errors",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 15,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (stage, kind) (rate(provider_errors_total[5m]))",
+          "legendFormat": "{{stage}}/{{kind}}"
+        },
+        {
+          "expr": "job:provider_error_rate:rate5m",
+          "legendFormat": "total rate"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["finenumbers", "sli"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Finenumbers Overview",
+  "uid": "finenumbers-overview",
+  "version": 2
+}

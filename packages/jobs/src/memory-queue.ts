@@ -1,0 +1,42 @@
+import type { JobsQueuePublisher } from './ports.js';
+import type {
+  FinalizeJobPayload,
+  PollItemPayload,
+  ReconcileStalePayload,
+  SubmitBatchPayload,
+} from './types.js';
+
+export type QueuedMessage =
+  | { queue: 'submit'; payload: SubmitBatchPayload; delayMs?: number }
+  | { queue: 'poll'; payload: PollItemPayload; delayMs?: number }
+  | { queue: 'finalize'; payload: FinalizeJobPayload; delayMs?: number }
+  | { queue: 'reconciliation'; payload: ReconcileStalePayload; delayMs?: number };
+
+/** In-memory queue publisher for unit tests. */
+export class InMemoryJobsQueue implements JobsQueuePublisher {
+  readonly messages: QueuedMessage[] = [];
+
+  async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
+    this.messages.push({ queue: 'submit', payload });
+  }
+
+  async enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void> {
+    this.messages.push({ queue: 'poll', payload, delayMs });
+  }
+
+  async enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void> {
+    this.messages.push({ queue: 'finalize', payload });
+  }
+
+  async enqueueReconciliation(payload: ReconcileStalePayload = {}): Promise<void> {
+    this.messages.push({ queue: 'reconciliation', payload });
+  }
+
+  clear(): void {
+    this.messages.length = 0;
+  }
+
+  of(queue: QueuedMessage['queue']): QueuedMessage[] {
+    return this.messages.filter((message) => message.queue === queue);
+  }
+}

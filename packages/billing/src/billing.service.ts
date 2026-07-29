@@ -1,0 +1,991 @@
+import type { PrismaClient } from '@finenumbers/db';
+
+import { BillingError } from './errors.js';
+import {
+  adjustmentIdempotencyKey,
+  debitIdempotencyKey,
+  holdIdempotencyKey,
+  releaseIdempotencyKey,
+  releaseRemainderIdempotencyKey,
+  topupIdempotencyKey,
+} from './idempotency.js';
+import {
+  balancesMatchCache,
+  projectedBalancesToView,
+} from './ledger-projection.js';
+import { LedgerService } from './ledger.service.js';
+import {
+  assertPositiveMoney,
+  money,
+  moneyMin,
+  moneySub,
+  moneyToString,
+  moneyZero,
+} from './money.js';
+import { TariffResolver } from './tariff-resolver.js';
+import type {
+  AdjustmentResult,
+  AuditWriter,
+  BillingCheckType,
+  BillingLogger,
+  CaptureResult,
+  CostEstimate,
+  CreditResult,
+  LedgerEntryView,
+  ReleaseResult,
+  ReserveResult,
+  WalletBalances,
+} from './types.js';
+
+const silentLogger: BillingLogger = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+};
+
+const silentAudit: AuditWriter = async () => {};
+
+export type BillingServiceDeps = {
+  prisma: PrismaClient;
+  logger?: BillingLogger;
+  audit?: AuditWriter;
+};
+
+/**
+ * High-level billing use-cases: estimate, reserve/capture/release, top-up, adjustment.
+ * Ledger rows are the source of truth; wallet balances are a transactional cache.
+ */
+export class BillingService {
+  readonly ledger: LedgerService;
+  readonly tariffs: TariffResolver;
+  private readonly prisma: PrismaClient;
+  private readonly logger: BillingLogger;
+  private readonly audit: AuditWriter;
+
+  constructor(deps: BillingServiceDeps) {
+    this.prisma = deps.prisma;
+    this.logger = deps.logger ?? silentLogger;
+    this.audit = deps.audit ?? silentAudit;
+    this.ledger = new LedgerService(deps.prisma);
+    this.tariffs = new TariffResolver(deps.prisma, this.logger);
+  }
+
+  async ensureWallet(tenantId: string, currency = 'RUB'): Promise<WalletBalances> {
+    const wallet = await this.ledger.ensureWallet(tenantId, currency);
+    return this.ledger.toBalances(wallet);
+  }
+
+  async getWallet(tenantId: string): Promise<WalletBalances> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+    return this.ledger.toBalances(wallet);
+  }
+
+  /**
+   * Reconstruct balances from `wallet_transactions` only (ledger = source of truth).
+   * Does not trust wallet.availableBalance / heldBalance cache fields.
+   */
+  async getBalancesFromLedger(tenantId: string): Promise<{
+    walletId: string;
+    tenantId: string;
+    currency: string;
+    availableBalance: string;
+    heldBalance: string;
+    entryCount: number;
+  }> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+    const projected = await this.ledger.projectBalancesFromLedger(wallet.id);
+    const entryCount = await this.prisma.walletTransaction.count({
+      where: { walletId: wallet.id },
+    });
+    const view = projectedBalancesToView(projected);
+    return {
+      walletId: wallet.id,
+      tenantId: wallet.tenantId,
+      currency: wallet.currency,
+      availableBalance: view.availableBalance,
+      heldBalance: view.heldBalance,
+      entryCount,
+    };
+  }
+
+  /**
+   * Compare wallet cache vs ledger fold. Optionally repair cache from ledger.
+   */
+  async reconcileWallet(
+    tenantId: string,
+    options?: { repair?: boolean },
+  ): Promise<{
+    matched: boolean;
+    cache: { availableBalance: string; heldBalance: string };
+    ledger: { availableBalance: string; heldBalance: string };
+    repaired: boolean;
+    entryCount: number;
+  }> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+
+    const projected = await this.ledger.projectBalancesFromLedger(wallet.id);
+    const matched = balancesMatchCache(projected, wallet);
+    const entryCount = await this.prisma.walletTransaction.count({
+      where: { walletId: wallet.id },
+    });
+    const ledgerView = projectedBalancesToView(projected);
+    const cacheView = {
+      availableBalance: moneyToString(wallet.availableBalance),
+      heldBalance: moneyToString(wallet.heldBalance),
+    };
+
+    if (matched || !options?.repair) {
+      if (!matched) {
+        this.logger.warn('billing.wallet.cache_drift', {
+          tenantId,
+          cache: cacheView,
+          ledger: ledgerView,
+          entryCount,
+        });
+      }
+      return {
+        matched,
+        cache: cacheView,
+        ledger: ledgerView,
+        repaired: false,
+        entryCount,
+      };
+    }
+
+    const repairedWallet = await this.ledger.withWalletLock(tenantId, async (tx, locked) => {
+      const again = await this.ledger.projectBalancesFromLedger(locked.id, tx);
+      return this.ledger.applyWalletBalances(tx, locked, {
+        available: again.available,
+        held: again.held,
+      });
+    });
+
+    this.logger.warn('billing.wallet.cache_repaired_from_ledger', {
+      tenantId,
+      before: cacheView,
+      after: {
+        availableBalance: moneyToString(repairedWallet.availableBalance),
+        heldBalance: moneyToString(repairedWallet.heldBalance),
+      },
+      entryCount,
+    });
+
+    await this.audit({
+      tenantId,
+      actorType: 'SYSTEM',
+      action: 'billing.wallet.reconcile_repair',
+      targetType: 'Wallet',
+      targetId: wallet.id,
+      metadata: {
+        before: cacheView,
+        after: {
+          availableBalance: moneyToString(repairedWallet.availableBalance),
+          heldBalance: moneyToString(repairedWallet.heldBalance),
+        },
+        entryCount,
+      },
+    });
+
+    return {
+      matched: false,
+      cache: cacheView,
+      ledger: {
+        availableBalance: moneyToString(repairedWallet.availableBalance),
+        heldBalance: moneyToString(repairedWallet.heldBalance),
+      },
+      repaired: true,
+      entryCount,
+    };
+  }
+
+  async listLedger(tenantId: string): Promise<LedgerEntryView[]> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+    return this.ledger.listLedgerEntries(wallet.id);
+  }
+
+  /** All money movements for one check (job item). */
+  async listLedgerForJobItem(jobItemId: string): Promise<LedgerEntryView[]> {
+    return this.ledger.listLedgerEntriesForJobItem(jobItemId);
+  }
+
+  /** All money movements for every item in a job. */
+  async listLedgerForJob(jobId: string): Promise<LedgerEntryView[]> {
+    return this.ledger.listLedgerEntriesForJob(jobId);
+  }
+
+  private async resolveJobItemContext(jobItemId: string): Promise<{
+    jobId: string;
+    phoneE164: string | null;
+  }> {
+    const item = await this.prisma.jobItem.findUnique({
+      where: { id: jobItemId },
+      select: { jobId: true, phoneE164: true },
+    });
+    if (!item) {
+      throw new BillingError('VALIDATION_FAILED', `Job item ${jobItemId} not found`, {
+        details: { jobItemId },
+      });
+    }
+    return { jobId: item.jobId, phoneE164: item.phoneE164 };
+  }
+
+  estimate(input: {
+    tenantId: string;
+    checkType: BillingCheckType;
+    unitCount: number;
+  }): Promise<CostEstimate> {
+    return this.tariffs.estimate(input);
+  }
+
+  /**
+   * Fail-fast pre-check before job creation (best-effort; reserve is authoritative).
+   */
+  async assertCanAfford(input: {
+    tenantId: string;
+    checkType: BillingCheckType;
+    unitCount: number;
+  }): Promise<CostEstimate> {
+    const estimate = await this.estimate(input);
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId: input.tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${input.tenantId} not found`, {
+        details: { tenantId: input.tenantId },
+      });
+    }
+    if (money(wallet.availableBalance).lt(money(estimate.estimatedSellTotal))) {
+      throw new BillingError('INSUFFICIENT_FUNDS', 'Insufficient funds for estimated job cost', {
+        details: {
+          tenantId: input.tenantId,
+          required: estimate.estimatedSellTotal,
+          available: moneyToString(wallet.availableBalance),
+        },
+      });
+    }
+    return estimate;
+  }
+
+  async reserveForJobItem(input: {
+    tenantId: string;
+    jobItemId: string;
+    checkType: BillingCheckType;
+    idempotencyKey?: string;
+  }): Promise<ReserveResult> {
+    const idemKey = input.idempotencyKey ?? holdIdempotencyKey(input.jobItemId);
+    await this.ledger.ensureWallet(input.tenantId);
+
+    const existing = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+    if (existing) {
+      const wallet = await this.getWallet(input.tenantId);
+      const tariff = await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
+      return {
+        hold: this.ledger.toEntryView(existing),
+        wallet,
+        tariff: TariffResolver.toTariffView(tariff),
+        created: false,
+      };
+    }
+
+    const tariff = await this.tariffs.resolveForTenant(input.tenantId, input.checkType);
+    const amount = tariff.sellPrice;
+    const jobContext = await this.resolveJobItemContext(input.jobItemId);
+
+    try {
+      return await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
+        const raced = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey, tx);
+        if (raced) {
+          return {
+            hold: this.ledger.toEntryView(raced),
+            wallet: this.ledger.toBalances(locked),
+            tariff: TariffResolver.toTariffView(tariff),
+            created: false,
+          };
+        }
+
+        const next = this.ledger.applyHold(locked, amount);
+        const wallet = await this.ledger.applyWalletBalances(tx, locked, next);
+
+        const hold = await this.ledger.createEntry(tx, {
+          walletId: wallet.id,
+          tenantId: input.tenantId,
+          type: 'HOLD',
+          amount,
+          currency: tariff.currency,
+          balanceAfterAvailable: wallet.availableBalance,
+          balanceAfterHeld: wallet.heldBalance,
+          jobItemId: input.jobItemId,
+          idempotencyKey: idemKey,
+          description: `Reserve for ${tariff.checkType} check`,
+          metadata: {
+            jobId: jobContext.jobId,
+            jobItemId: input.jobItemId,
+            phoneE164: jobContext.phoneE164,
+            checkType: tariff.checkType,
+            sellPrice: moneyToString(tariff.sellPrice),
+            providerCost: moneyToString(tariff.providerCost),
+            tariffPlanId: tariff.tariffPlanId,
+            tariffPlanCode: tariff.tariffPlanCode,
+            tenantTariffId: tariff.tenantTariffId,
+            source: tariff.source,
+          },
+        });
+
+        await tx.jobItem.update({
+          where: { id: input.jobItemId },
+          data: {
+            estimatedCost: amount,
+            currency: tariff.currency,
+          },
+        });
+
+        this.logger.info('billing.reserve.created', {
+          tenantId: input.tenantId,
+          jobItemId: input.jobItemId,
+          amount: moneyToString(amount),
+          holdId: hold.id,
+        });
+
+        return {
+          hold: this.ledger.toEntryView(hold),
+          wallet: this.ledger.toBalances(wallet),
+          tariff: TariffResolver.toTariffView(tariff),
+          created: true,
+        };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+        if (again) {
+          const wallet = await this.getWallet(input.tenantId);
+          return {
+            hold: this.ledger.toEntryView(again),
+            wallet,
+            tariff: TariffResolver.toTariffView(tariff),
+            created: false,
+          };
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Capture (DEBIT) against the item HOLD.
+   * Policy B default: charge full reserved sell price.
+   * If `chargeAmount` < hold, debit charge and RELEASE the remainder (partial return).
+   */
+  async captureForJobItem(input: {
+    tenantId: string;
+    jobItemId: string;
+    /** Optional actual charge; defaults to full hold (Policy B). Must be <= hold. */
+    chargeAmount?: string;
+    idempotencyKey?: string;
+  }): Promise<CaptureResult> {
+    const debitKey = input.idempotencyKey ?? debitIdempotencyKey(input.jobItemId);
+    const remainderKey = releaseRemainderIdempotencyKey(input.jobItemId);
+
+    const existingDebit = await this.ledger.findByIdempotencyKey(input.tenantId, debitKey);
+    if (existingDebit) {
+      const remainder = await this.ledger.findByIdempotencyKey(input.tenantId, remainderKey);
+      const wallet = await this.getWallet(input.tenantId);
+      return {
+        debit: this.ledger.toEntryView(existingDebit),
+        release: remainder ? this.ledger.toEntryView(remainder) : null,
+        wallet,
+        chargedAmount: moneyToString(existingDebit.amount),
+        releasedAmount: remainder ? moneyToString(remainder.amount) : '0',
+        created: false,
+      };
+    }
+
+    try {
+      return await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
+        const racedDebit = await this.ledger.findByIdempotencyKey(input.tenantId, debitKey, tx);
+        if (racedDebit) {
+          const remainder = await this.ledger.findByIdempotencyKey(
+            input.tenantId,
+            remainderKey,
+            tx,
+          );
+          return {
+            debit: this.ledger.toEntryView(racedDebit),
+            release: remainder ? this.ledger.toEntryView(remainder) : null,
+            wallet: this.ledger.toBalances(locked),
+            chargedAmount: moneyToString(racedDebit.amount),
+            releasedAmount: remainder ? moneyToString(remainder.amount) : '0',
+            created: false,
+          };
+        }
+
+        const hold = await this.ledger.findHoldForJobItem(input.jobItemId, tx);
+        if (!hold) {
+          this.logger.warn('billing.capture.no_hold', {
+            tenantId: input.tenantId,
+            jobItemId: input.jobItemId,
+          });
+          return {
+            debit: null,
+            release: null,
+            wallet: this.ledger.toBalances(locked),
+            chargedAmount: '0',
+            releasedAmount: '0',
+            created: false,
+          };
+        }
+
+        const settlements = await this.ledger.findSettlementsForHold(hold.id, tx);
+        if (settlements.length > 0) {
+          const debit = settlements.find((s) => s.type === 'DEBIT') ?? null;
+          const release = settlements.find((s) => s.type === 'RELEASE') ?? null;
+          return {
+            debit: debit ? this.ledger.toEntryView(debit) : null,
+            release: release ? this.ledger.toEntryView(release) : null,
+            wallet: this.ledger.toBalances(locked),
+            chargedAmount: debit ? moneyToString(debit.amount) : '0',
+            releasedAmount: release ? moneyToString(release.amount) : '0',
+            created: false,
+          };
+        }
+
+        const holdAmount = money(hold.amount);
+        let charge = holdAmount;
+        if (input.chargeAmount !== undefined) {
+          charge = assertPositiveMoney(input.chargeAmount, 'chargeAmount');
+          if (charge.gt(holdAmount)) {
+            throw new BillingError(
+              'VALIDATION_FAILED',
+              'chargeAmount cannot exceed reserved hold amount',
+              {
+                details: {
+                  chargeAmount: moneyToString(charge),
+                  holdAmount: moneyToString(holdAmount),
+                },
+              },
+            );
+          }
+        }
+        charge = moneyMin(charge, holdAmount);
+        const remainder = moneySub(holdAmount, charge);
+
+        let wallet = locked;
+        let debitRow = null;
+        let releaseRow = null;
+
+        if (charge.gt(0)) {
+          const afterDebit = this.ledger.applyDebitFromHeld(wallet, charge);
+          wallet = await this.ledger.applyWalletBalances(tx, wallet, afterDebit);
+          debitRow = await this.ledger.createEntry(tx, {
+            walletId: wallet.id,
+            tenantId: input.tenantId,
+            type: 'DEBIT',
+            amount: charge,
+            currency: hold.currency,
+            balanceAfterAvailable: wallet.availableBalance,
+            balanceAfterHeld: wallet.heldBalance,
+            relatedHoldId: hold.id,
+            jobItemId: input.jobItemId,
+            idempotencyKey: debitKey,
+            description: 'Capture reserved funds',
+            metadata: {
+              ...jobLinkFromHoldMetadata(hold.metadata),
+              holdId: hold.id,
+              holdAmount: moneyToString(holdAmount),
+              chargeAmount: moneyToString(charge),
+            },
+          });
+        }
+
+        if (remainder.gt(0)) {
+          const afterRelease = this.ledger.applyRelease(wallet, remainder);
+          wallet = await this.ledger.applyWalletBalances(tx, wallet, afterRelease);
+          releaseRow = await this.ledger.createEntry(tx, {
+            walletId: wallet.id,
+            tenantId: input.tenantId,
+            type: 'RELEASE',
+            amount: remainder,
+            currency: hold.currency,
+            balanceAfterAvailable: wallet.availableBalance,
+            balanceAfterHeld: wallet.heldBalance,
+            relatedHoldId: hold.id,
+            jobItemId: input.jobItemId,
+            idempotencyKey: remainderKey,
+            description: 'Release unused reserved funds after partial capture',
+            metadata: {
+              ...jobLinkFromHoldMetadata(hold.metadata),
+              holdId: hold.id,
+              reason: 'partial_capture_remainder',
+            },
+          });
+        }
+
+        await tx.jobItem.update({
+          where: { id: input.jobItemId },
+          data: {
+            actualCost: charge,
+            currency: hold.currency,
+          },
+        });
+
+        this.logger.info('billing.capture.created', {
+          tenantId: input.tenantId,
+          jobItemId: input.jobItemId,
+          chargedAmount: moneyToString(charge),
+          releasedAmount: moneyToString(remainder),
+        });
+
+        return {
+          debit: debitRow ? this.ledger.toEntryView(debitRow) : null,
+          release: releaseRow ? this.ledger.toEntryView(releaseRow) : null,
+          wallet: this.ledger.toBalances(wallet),
+          chargedAmount: moneyToString(charge),
+          releasedAmount: moneyToString(remainder),
+          created: true,
+        };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.ledger.findByIdempotencyKey(input.tenantId, debitKey);
+        if (again) {
+          const remainder = await this.ledger.findByIdempotencyKey(input.tenantId, remainderKey);
+          const wallet = await this.getWallet(input.tenantId);
+          return {
+            debit: this.ledger.toEntryView(again),
+            release: remainder ? this.ledger.toEntryView(remainder) : null,
+            wallet,
+            chargedAmount: moneyToString(again.amount),
+            releasedAmount: remainder ? moneyToString(remainder.amount) : '0',
+            created: false,
+          };
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Full release of an open HOLD (send-fail / timeout / cancel).
+   */
+  async releaseForJobItem(input: {
+    tenantId: string;
+    jobItemId: string;
+    idempotencyKey?: string;
+    reason?: string;
+  }): Promise<ReleaseResult> {
+    const releaseKey = input.idempotencyKey ?? releaseIdempotencyKey(input.jobItemId);
+
+    const existing = await this.ledger.findByIdempotencyKey(input.tenantId, releaseKey);
+    if (existing) {
+      const wallet = await this.getWallet(input.tenantId);
+      return {
+        release: this.ledger.toEntryView(existing),
+        wallet,
+        releasedAmount: moneyToString(existing.amount),
+        created: false,
+      };
+    }
+
+    // Already captured (or remainder-released after capture) — treat as idempotent no-op.
+    const debit = await this.ledger.findByIdempotencyKey(
+      input.tenantId,
+      debitIdempotencyKey(input.jobItemId),
+    );
+    if (debit) {
+      const wallet = await this.getWallet(input.tenantId);
+      this.logger.debug('billing.release.skipped_already_captured', {
+        tenantId: input.tenantId,
+        jobItemId: input.jobItemId,
+      });
+      return {
+        release: null,
+        wallet,
+        releasedAmount: '0',
+        created: false,
+      };
+    }
+
+    try {
+      return await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
+        const raced = await this.ledger.findByIdempotencyKey(input.tenantId, releaseKey, tx);
+        if (raced) {
+          return {
+            release: this.ledger.toEntryView(raced),
+            wallet: this.ledger.toBalances(locked),
+            releasedAmount: moneyToString(raced.amount),
+            created: false,
+          };
+        }
+
+        // Re-check capture under lock (callback+poll race).
+        const captured = await this.ledger.findByIdempotencyKey(
+          input.tenantId,
+          debitIdempotencyKey(input.jobItemId),
+          tx,
+        );
+        if (captured) {
+          return {
+            release: null,
+            wallet: this.ledger.toBalances(locked),
+            releasedAmount: '0',
+            created: false,
+          };
+        }
+
+        const hold = await this.ledger.findOpenHoldForJobItem(input.jobItemId, tx);
+        if (!hold) {
+          this.logger.warn('billing.release.no_open_hold', {
+            tenantId: input.tenantId,
+            jobItemId: input.jobItemId,
+          });
+          return {
+            release: null,
+            wallet: this.ledger.toBalances(locked),
+            releasedAmount: '0',
+            created: false,
+          };
+        }
+
+        const amount = money(hold.amount);
+        const next = this.ledger.applyRelease(locked, amount);
+        const wallet = await this.ledger.applyWalletBalances(tx, locked, next);
+        const release = await this.ledger.createEntry(tx, {
+          walletId: wallet.id,
+          tenantId: input.tenantId,
+          type: 'RELEASE',
+          amount,
+          currency: hold.currency,
+          balanceAfterAvailable: wallet.availableBalance,
+          balanceAfterHeld: wallet.heldBalance,
+          relatedHoldId: hold.id,
+          jobItemId: input.jobItemId,
+          idempotencyKey: releaseKey,
+        description: input.reason ?? 'Release reserved funds',
+        metadata: {
+          ...jobLinkFromHoldMetadata(hold.metadata),
+          holdId: hold.id,
+          reason: input.reason ?? 'release',
+        },
+      });
+
+        await tx.jobItem.update({
+          where: { id: input.jobItemId },
+          data: { actualCost: moneyZero() },
+        });
+
+        this.logger.info('billing.release.created', {
+          tenantId: input.tenantId,
+          jobItemId: input.jobItemId,
+          amount: moneyToString(amount),
+        });
+
+        return {
+          release: this.ledger.toEntryView(release),
+          wallet: this.ledger.toBalances(wallet),
+          releasedAmount: moneyToString(amount),
+          created: true,
+        };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.ledger.findByIdempotencyKey(input.tenantId, releaseKey);
+        if (again) {
+          const wallet = await this.getWallet(input.tenantId);
+          return {
+            release: this.ledger.toEntryView(again),
+            wallet,
+            releasedAmount: moneyToString(again.amount),
+            created: false,
+          };
+        }
+      }
+      throw error;
+    }
+  }
+
+  async topup(input: {
+    tenantId: string;
+    amount: string;
+    description?: string;
+    createdById: string;
+    idempotencyKey: string;
+    currency?: string;
+  }): Promise<CreditResult> {
+    let amount;
+    try {
+      amount = assertPositiveMoney(input.amount, 'amount');
+    } catch (error) {
+      throw new BillingError('INVALID_AMOUNT', 'Top-up amount must be > 0', { cause: error });
+    }
+
+    const idemKey = topupIdempotencyKey(input.tenantId, input.idempotencyKey);
+    await this.ledger.ensureWallet(input.tenantId, input.currency ?? 'RUB');
+
+    const existing = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+    if (existing) {
+      const wallet = await this.getWallet(input.tenantId);
+      return {
+        credit: this.ledger.toEntryView(existing),
+        wallet,
+        created: false,
+      };
+    }
+
+    let result: CreditResult;
+    try {
+      result = await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
+        const raced = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey, tx);
+        if (raced) {
+          return {
+            credit: this.ledger.toEntryView(raced),
+            wallet: this.ledger.toBalances(locked),
+            created: false,
+          };
+        }
+
+        const next = this.ledger.applyCredit(locked, amount);
+        const wallet = await this.ledger.applyWalletBalances(tx, locked, next);
+        const credit = await this.ledger.createEntry(tx, {
+          walletId: wallet.id,
+          tenantId: input.tenantId,
+          type: 'CREDIT',
+          amount,
+          currency: locked.currency,
+          balanceAfterAvailable: wallet.availableBalance,
+          balanceAfterHeld: wallet.heldBalance,
+          idempotencyKey: idemKey,
+          description: input.description ?? 'Manual top-up',
+          createdById: input.createdById,
+          metadata: { kind: 'manual_topup' },
+        });
+
+        return {
+          credit: this.ledger.toEntryView(credit),
+          wallet: this.ledger.toBalances(wallet),
+          created: true,
+        };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+        if (again) {
+          const wallet = await this.getWallet(input.tenantId);
+          result = {
+            credit: this.ledger.toEntryView(again),
+            wallet,
+            created: false,
+          };
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    if (result.created) {
+      await this.audit({
+        tenantId: input.tenantId,
+        actorType: 'USER',
+        actorUserId: input.createdById,
+        action: 'billing.wallet.topup',
+        targetType: 'Wallet',
+        targetId: result.wallet.walletId,
+        metadata: {
+          amount: moneyToString(amount),
+          currency: result.wallet.currency,
+          ledgerEntryId: result.credit.id,
+          idempotencyKey: idemKey,
+        },
+      });
+    }
+
+    return result;
+  }
+
+  async adjust(input: {
+    tenantId: string;
+    amount: string;
+    direction: 'credit' | 'debit';
+    description?: string;
+    createdById: string;
+    idempotencyKey: string;
+    allowNegative?: boolean;
+  }): Promise<AdjustmentResult> {
+    let amount;
+    try {
+      amount = assertPositiveMoney(input.amount, 'amount');
+    } catch (error) {
+      throw new BillingError('INVALID_AMOUNT', 'Adjustment amount must be > 0', { cause: error });
+    }
+
+    const idemKey = adjustmentIdempotencyKey(input.tenantId, input.idempotencyKey);
+    await this.ledger.ensureWallet(input.tenantId);
+
+    const existing = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+    if (existing) {
+      const wallet = await this.getWallet(input.tenantId);
+      return {
+        adjustment: this.ledger.toEntryView(existing),
+        wallet,
+        created: false,
+      };
+    }
+
+    let result: AdjustmentResult;
+    try {
+      result = await this.ledger.withWalletLock(input.tenantId, async (tx, locked) => {
+        const raced = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey, tx);
+        if (raced) {
+          return {
+            adjustment: this.ledger.toEntryView(raced),
+            wallet: this.ledger.toBalances(locked),
+            created: false,
+          };
+        }
+
+        const next =
+          input.direction === 'credit'
+            ? this.ledger.applyCredit(locked, amount)
+            : this.ledger.applyDebitFromAvailable(locked, amount, input.allowNegative ?? false);
+
+        const wallet = await this.ledger.applyWalletBalances(tx, locked, next);
+        const adjustment = await this.ledger.createEntry(tx, {
+          walletId: wallet.id,
+          tenantId: input.tenantId,
+          type: 'ADJUSTMENT',
+          amount,
+          currency: locked.currency,
+          balanceAfterAvailable: wallet.availableBalance,
+          balanceAfterHeld: wallet.heldBalance,
+          idempotencyKey: idemKey,
+          description: input.description ?? `Manual adjustment (${input.direction})`,
+          createdById: input.createdById,
+          metadata: {
+            kind: 'manual_adjustment',
+            direction: input.direction,
+          },
+        });
+
+        return {
+          adjustment: this.ledger.toEntryView(adjustment),
+          wallet: this.ledger.toBalances(wallet),
+          created: true,
+        };
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const again = await this.ledger.findByIdempotencyKey(input.tenantId, idemKey);
+        if (again) {
+          const wallet = await this.getWallet(input.tenantId);
+          result = {
+            adjustment: this.ledger.toEntryView(again),
+            wallet,
+            created: false,
+          };
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    if (result.created) {
+      await this.audit({
+        tenantId: input.tenantId,
+        actorType: 'USER',
+        actorUserId: input.createdById,
+        action: 'billing.wallet.adjustment',
+        targetType: 'Wallet',
+        targetId: result.wallet.walletId,
+        metadata: {
+          amount: moneyToString(amount),
+          direction: input.direction,
+          currency: result.wallet.currency,
+          ledgerEntryId: result.adjustment.id,
+          idempotencyKey: idemKey,
+        },
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Sum actualCost of job items and persist on Job (called from job-finalized hook).
+   */
+  async reconcileJobCosts(jobId: string): Promise<{ estimatedCost: string; actualCost: string }> {
+    const items = await this.prisma.jobItem.findMany({
+      where: { jobId },
+      select: { estimatedCost: true, actualCost: true },
+    });
+
+    let estimated = moneyZero();
+    let actual = moneyZero();
+    for (const item of items) {
+      if (item.estimatedCost !== null) {
+        estimated = estimated.plus(money(item.estimatedCost));
+      }
+      if (item.actualCost !== null) {
+        actual = actual.plus(money(item.actualCost));
+      }
+    }
+
+    await this.prisma.job.update({
+      where: { id: jobId },
+      data: {
+        estimatedCost: estimated,
+        actualCost: actual,
+      },
+    });
+
+    return {
+      estimatedCost: moneyToString(estimated),
+      actualCost: moneyToString(actual),
+    };
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === 'P2002'
+  );
+}
+
+/** Copy job linkage fields from HOLD metadata onto DEBIT/RELEASE rows. */
+function jobLinkFromHoldMetadata(
+  metadata: unknown,
+): { jobId?: string; jobItemId?: string; phoneE164?: string; checkType?: string } {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {};
+  }
+  const m = metadata as Record<string, unknown>;
+  return {
+    ...(typeof m.jobId === 'string' ? { jobId: m.jobId } : {}),
+    ...(typeof m.jobItemId === 'string' ? { jobItemId: m.jobItemId } : {}),
+    ...(typeof m.phoneE164 === 'string' ? { phoneE164: m.phoneE164 } : {}),
+    ...(typeof m.checkType === 'string' ? { checkType: m.checkType } : {}),
+  };
+}

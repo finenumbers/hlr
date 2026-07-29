@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --color-ink: #142033;
+  --color-ink-muted: #5b6578;
+  --color-panel: #f6f4f0;
+  --color-panel-elevated: #ffffff;
+  --color-line: #d9dde5;
+  --color-accent: #0f6e56;
+  --color-accent-soft: #d8efe7;
+  --color-danger: #b42318;
+  --color-warn: #b54708;
+  --color-ok: #027a48;
+}
+
+.dark {
+  --color-ink: #e8edf5;
+  --color-ink-muted: #9aa6b8;
+  --color-panel: #0f1520;
+  --color-panel-elevated: #171e2b;
+  --color-line: #2a3445;
+  --color-accent: #3dba95;
+  --color-accent-soft: #16362c;
+  --color-danger: #f97066;
+  --color-warn: #fdb022;
+  --color-ok: #6ce9a6;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-ink);
+  background:
+    radial-gradient(1200px 600px at 0% -10%, color-mix(in oklab, var(--color-accent) 12%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--color-panel), color-mix(in oklab, var(--color-panel) 88%, #cfd8e6));
+  font-family: var(--font-sans);
+}
+
+.dark body {
+  background:
+    radial-gradient(1000px 500px at 10% -20%, color-mix(in oklab, var(--color-accent) 18%, transparent), transparent 50%),
+    linear-gradient(180deg, #0b1018, var(--color-panel));
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

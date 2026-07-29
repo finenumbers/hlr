@@ -1,0 +1,23 @@
+FROM node:22-bookworm-slim AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json .npmrc ./
+COPY packages ./packages
+COPY apps/worker/package.json ./apps/worker/package.json
+RUN pnpm install --frozen-lockfile --filter @finenumbers/worker...
+
+FROM base AS build
+COPY --from=deps /app /app
+COPY . .
+RUN pnpm --filter @finenumbers/worker... build
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN useradd --system --uid 1001 worker
+COPY --from=build /app /app
+USER worker
+EXPOSE 9091
+CMD ["node", "apps/worker/dist/main.js"]

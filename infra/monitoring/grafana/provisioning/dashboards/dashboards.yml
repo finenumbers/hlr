@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Finenumbers
+    orgId: 1
+    folder: Finenumbers
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

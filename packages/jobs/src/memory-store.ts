@@ -1,0 +1,382 @@
+import { randomUUID } from 'node:crypto';
+
+import { DEFAULT_JOB_RUNTIME_SETTINGS } from './queue-names.js';
+import {
+  assertJobItemTransition,
+  assertJobTransition,
+  computeProgress,
+  isTerminalJobItemStatus,
+} from './state-machine.js';
+import type { JobsStore } from './ports.js';
+import type {
+  JobItemRecord,
+  JobRecord,
+  JobRuntimeSettings,
+} from './types.js';
+
+function cloneJob(job: JobRecord): JobRecord {
+  return { ...job, metadata: job.metadata ? { ...job.metadata } : null };
+}
+
+function cloneItem(item: JobItemRecord): JobItemRecord {
+  return {
+    ...item,
+    normalizedResult: item.normalizedResult ? { ...item.normalizedResult } : null,
+  };
+}
+
+/** In-memory JobsStore for unit tests. */
+export class InMemoryJobsStore implements JobsStore {
+  readonly jobs = new Map<string, JobRecord>();
+  readonly items = new Map<string, JobItemRecord>();
+  settings: JobRuntimeSettings = { ...DEFAULT_JOB_RUNTIME_SETTINGS };
+
+  async getRuntimeSettings(): Promise<JobRuntimeSettings> {
+    return { ...this.settings };
+  }
+
+  async findJobByIdempotencyKey(
+    tenantId: string,
+    idempotencyKey: string,
+  ): Promise<JobRecord | null> {
+    for (const job of this.jobs.values()) {
+      if (job.tenantId === tenantId && job.idempotencyKey === idempotencyKey) {
+        return cloneJob(job);
+      }
+    }
+    return null;
+  }
+
+  async findJobById(jobId: string): Promise<JobRecord | null> {
+    const job = this.jobs.get(jobId);
+    return job ? cloneJob(job) : null;
+  }
+
+  async createJobWithItems(input: {
+    tenantId: string;
+    checkType: JobRecord['checkType'];
+    source: JobRecord['source'];
+    phones: string[];
+    idempotencyKey: string | null;
+    createdByUserId: string | null;
+    apiKeyId: string | null;
+    originalFilename: string | null;
+    currency: string;
+    metadata: Record<string, unknown> | null;
+  }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
+    // Mirror Postgres @@unique([tenantId, idempotencyKey]) for race-path tests.
+    if (input.idempotencyKey) {
+      for (const existing of this.jobs.values()) {
+        if (
+          existing.tenantId === input.tenantId &&
+          existing.idempotencyKey === input.idempotencyKey
+        ) {
+          throw Object.assign(new Error('Unique constraint failed on tenantId_idempotencyKey'), {
+            code: 'P2002',
+          });
+        }
+      }
+    }
+
+    const now = new Date();
+    const job: JobRecord = {
+      id: randomUUID(),
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      source: input.source,
+      status: 'QUEUED',
+      itemCount: input.phones.length,
+      successCount: 0,
+      failureCount: 0,
+      estimatedCost: null,
+      actualCost: null,
+      currency: input.currency,
+      originalFilename: input.originalFilename,
+      idempotencyKey: input.idempotencyKey,
+      createdByUserId: input.createdByUserId,
+      apiKeyId: input.apiKeyId,
+      errorCode: null,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
+      metadata: input.metadata,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.jobs.set(job.id, job);
+
+    const items: JobItemRecord[] = input.phones.map((phoneE164) => {
+      const item: JobItemRecord = {
+        id: randomUUID(),
+        jobId: job.id,
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        status: 'QUEUED',
+        phoneE164,
+        providerCode: 'smsc',
+        providerMessageId: null,
+        estimatedCost: null,
+        actualCost: null,
+        currency: input.currency,
+        resultStatus: null,
+        isReachable: null,
+        imsi: null,
+        mcc: null,
+        mnc: null,
+        operatorName: null,
+        countryCode: null,
+        ported: null,
+        roaming: null,
+        normalizedResult: null,
+        errorCode: null,
+        errorMessage: null,
+        sentAt: null,
+        completedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.items.set(item.id, item);
+      return cloneItem(item);
+    });
+
+    return { job: cloneJob(job), items };
+  }
+
+  async listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]> {
+    return itemIds
+      .map((id) => this.items.get(id))
+      .filter((item): item is JobItemRecord => Boolean(item))
+      .map(cloneItem);
+  }
+
+  async listItemsByJobId(jobId: string): Promise<JobItemRecord[]> {
+    return [...this.items.values()]
+      .filter((item) => item.jobId === jobId)
+      .map(cloneItem);
+  }
+
+  async findItemById(jobItemId: string): Promise<JobItemRecord | null> {
+    const item = this.items.get(jobItemId);
+    return item ? cloneItem(item) : null;
+  }
+
+  async findItemByProviderMessageId(input: {
+    providerCode: string;
+    providerMessageId: string;
+    tenantId?: string;
+  }): Promise<JobItemRecord | null> {
+    for (const item of this.items.values()) {
+      if (
+        item.providerCode === input.providerCode &&
+        item.providerMessageId === input.providerMessageId &&
+        (!input.tenantId || item.tenantId === input.tenantId)
+      ) {
+        return cloneItem(item);
+      }
+    }
+    return null;
+  }
+
+  async claimItemForSubmit(jobItemId: string): Promise<JobItemRecord | null> {
+    const item = this.items.get(jobItemId);
+    if (!item) {
+      return null;
+    }
+    if (item.status === 'RESERVED') {
+      return cloneItem(item);
+    }
+    if (item.status !== 'QUEUED') {
+      return null;
+    }
+    assertJobItemTransition(item.status, 'RESERVED');
+    item.status = 'RESERVED';
+    item.updatedAt = new Date();
+    return cloneItem(item);
+  }
+
+  async markJobProcessing(jobId: string): Promise<JobRecord | null> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      return null;
+    }
+    if (job.status === 'PROCESSING') {
+      return cloneJob(job);
+    }
+    if (job.status !== 'QUEUED') {
+      return cloneJob(job);
+    }
+    assertJobTransition(job.status, 'PROCESSING');
+    job.status = 'PROCESSING';
+    job.startedAt = job.startedAt ?? new Date();
+    job.updatedAt = new Date();
+    return cloneJob(job);
+  }
+
+  async updateItemAfterSubmit(input: {
+    jobItemId: string;
+    status: 'SENT' | 'PENDING' | 'COMPLETED' | 'FAILED';
+    providerMessageId: string | null;
+    providerCode: string;
+    normalizedResult?: Record<string, unknown> | null;
+    resultStatus?: string | null;
+    isReachable?: boolean | null;
+    imsi?: string | null;
+    mcc?: string | null;
+    mnc?: string | null;
+    operatorName?: string | null;
+    countryCode?: string | null;
+    ported?: boolean | null;
+    roaming?: boolean | null;
+    actualCost?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    sentAt?: Date | null;
+    completedAt?: Date | null;
+  }): Promise<JobItemRecord | null> {
+    const item = this.items.get(input.jobItemId);
+    if (!item) {
+      return null;
+    }
+    if (item.status !== 'RESERVED' && item.status !== 'SENT') {
+      if (isTerminalJobItemStatus(item.status)) {
+        return cloneItem(item);
+      }
+      return null;
+    }
+    assertJobItemTransition(item.status, input.status);
+    item.status = input.status;
+    item.providerMessageId = input.providerMessageId;
+    item.providerCode = input.providerCode;
+    if (input.normalizedResult !== undefined) {
+      item.normalizedResult = input.normalizedResult;
+    }
+    if (input.resultStatus !== undefined) item.resultStatus = input.resultStatus;
+    if (input.isReachable !== undefined) item.isReachable = input.isReachable;
+    if (input.imsi !== undefined) item.imsi = input.imsi;
+    if (input.mcc !== undefined) item.mcc = input.mcc;
+    if (input.mnc !== undefined) item.mnc = input.mnc;
+    if (input.operatorName !== undefined) item.operatorName = input.operatorName;
+    if (input.countryCode !== undefined) item.countryCode = input.countryCode;
+    if (input.ported !== undefined) item.ported = input.ported;
+    if (input.roaming !== undefined) item.roaming = input.roaming;
+    if (input.actualCost !== undefined) item.actualCost = input.actualCost;
+    if (input.errorCode !== undefined) item.errorCode = input.errorCode;
+    if (input.errorMessage !== undefined) item.errorMessage = input.errorMessage;
+    if (input.sentAt !== undefined) item.sentAt = input.sentAt;
+    if (input.completedAt !== undefined) item.completedAt = input.completedAt;
+    item.updatedAt = new Date();
+    return cloneItem(item);
+  }
+
+  async transitionItem(input: {
+    jobItemId: string;
+    fromStatuses: Array<JobItemRecord['status']>;
+    toStatus: JobItemRecord['status'];
+    patch: Partial<{
+      providerMessageId: string | null;
+      normalizedResult: Record<string, unknown> | null;
+      resultStatus: string | null;
+      isReachable: boolean | null;
+      imsi: string | null;
+      mcc: string | null;
+      mnc: string | null;
+      operatorName: string | null;
+      countryCode: string | null;
+      ported: boolean | null;
+      roaming: boolean | null;
+      actualCost: string | null;
+      errorCode: string | null;
+      errorMessage: string | null;
+      sentAt: Date | null;
+      completedAt: Date | null;
+    }>;
+  }): Promise<JobItemRecord | null> {
+    const item = this.items.get(input.jobItemId);
+    if (!item) {
+      return null;
+    }
+    if (!input.fromStatuses.includes(item.status)) {
+      return null;
+    }
+    assertJobItemTransition(item.status, input.toStatus);
+    item.status = input.toStatus;
+    Object.assign(item, input.patch);
+    item.updatedAt = new Date();
+    return cloneItem(item);
+  }
+
+  async refreshJobCounters(jobId: string): Promise<JobRecord> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error(`Job ${jobId} not found`);
+    }
+    const items = [...this.items.values()].filter((i) => i.jobId === jobId);
+    job.itemCount = items.length;
+    job.successCount = items.filter((i) => i.status === 'COMPLETED').length;
+    job.failureCount = items.filter(
+      (i) => i.status === 'FAILED' || i.status === 'CANCELLED',
+    ).length;
+    job.updatedAt = new Date();
+    return cloneJob(job);
+  }
+
+  async finalizeJob(input: {
+    jobId: string;
+    status: JobRecord['status'];
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  }): Promise<JobRecord | null> {
+    const job = this.jobs.get(input.jobId);
+    if (!job) {
+      return null;
+    }
+    const terminal = new Set([
+      'COMPLETED',
+      'COMPLETED_WITH_ERRORS',
+      'FAILED',
+      'CANCELLED',
+    ]);
+    if (terminal.has(job.status)) {
+      return cloneJob(job);
+    }
+    assertJobTransition(job.status, input.status);
+    job.status = input.status;
+    job.errorCode = input.errorCode ?? null;
+    job.errorMessage = input.errorMessage ?? null;
+    job.completedAt = new Date();
+    job.updatedAt = new Date();
+    return cloneJob(job);
+  }
+
+  async listStalePendingItems(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobItemRecord[]> {
+    return [...this.items.values()]
+      .filter(
+        (item) =>
+          (item.status === 'PENDING' || item.status === 'SENT') &&
+          (item.updatedAt < input.olderThan ||
+            (item.sentAt !== null && item.sentAt < input.olderThan)),
+      )
+      .slice(0, input.limit)
+      .map(cloneItem);
+  }
+
+  async listJobsNeedingFinalize(input: { limit: number }): Promise<JobRecord[]> {
+    const result: JobRecord[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.status !== 'PROCESSING' && job.status !== 'QUEUED') {
+        continue;
+      }
+      const progress = computeProgress(job);
+      if (progress.pending === 0 && progress.total > 0) {
+        result.push(cloneJob(job));
+      }
+      if (result.length >= input.limit) {
+        break;
+      }
+    }
+    return result;
+  }
+}

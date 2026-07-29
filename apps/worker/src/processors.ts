@@ -1,0 +1,272 @@
+import {
+  QUEUE_JOB_NAMES,
+  QUEUE_NAMES,
+  type FinalizeJobPayload,
+  type JobLifecycleService,
+  type PollItemPayload,
+  type ReconcileStalePayload,
+  type SubmitBatchPayload,
+} from '@finenumbers/jobs';
+import { isProviderError } from '@finenumbers/provider-core';
+import type { Job, Worker } from 'bullmq';
+import { UnrecoverableError, Worker as BullWorker } from 'bullmq';
+import type IORedis from 'ioredis';
+
+import { workerLogger } from './logger';
+import { observeWorkerJob, type WorkerMetrics } from './metrics';
+
+export type JobsWorkers = {
+  submit: Worker;
+  poll: Worker;
+  finalize: Worker;
+  reconciliation: Worker;
+  retention: Worker;
+};
+
+export function createJobsWorkers(input: {
+  connection: IORedis;
+  concurrency: number;
+  lifecycle: JobLifecycleService;
+  metrics?: WorkerMetrics;
+  onRetention?: () => Promise<unknown>;
+}): JobsWorkers {
+  const { connection, concurrency, lifecycle, metrics, onRetention } = input;
+
+  const submit = new BullWorker(
+    QUEUE_NAMES.JOBS_SUBMIT,
+    async (job: Job<SubmitBatchPayload>) => {
+      if (job.name !== QUEUE_JOB_NAMES.SUBMIT_BATCH) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      workerLogger.info('jobs.worker.submit.start', {
+        bullJobId: job.id,
+        jobId: job.data.jobId,
+        tenantId: job.data.tenantId,
+        ...(job.data.requestId ? { requestId: job.data.requestId } : {}),
+      });
+      try {
+        const result = await lifecycle.processSubmitBatch(job.data);
+        // Non-retryable provider/item failures are absorbed inside the batch and
+        // still complete the BullMQ job — count them here so metrics stay useful.
+        if (result.failed > 0) {
+          metrics?.providerErrorsTotal.inc(
+            { provider: 'smsc', kind: 'submit_item', stage: 'submit' },
+            result.failed,
+          );
+        }
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_SUBMIT,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_SUBMIT,
+          status: 'failed',
+          started,
+        });
+        recordProviderThrow(metrics, error, 'submit');
+        throw error;
+      }
+    },
+    { connection, concurrency },
+  );
+
+  submit.on('failed', (job, error) => {
+    workerLogger.error('jobs.worker.submit.failed', {
+      bullJobId: job?.id,
+      jobId: job?.data?.jobId,
+      tenantId: job?.data?.tenantId,
+      attemptsMade: job?.attemptsMade,
+      message: error.message,
+      ...(job?.data?.requestId ? { requestId: job.data.requestId } : {}),
+    });
+    const maxAttempts = job?.opts.attempts ?? 1;
+    if (job && job.attemptsMade >= maxAttempts && job.data) {
+      void lifecycle
+        .markSubmitBatchDeadLetter(job.data, error.message)
+        .catch((deadLetterError: unknown) => {
+          workerLogger.error('jobs.worker.submit.dead_letter_failed', {
+            message:
+              deadLetterError instanceof Error
+                ? deadLetterError.message
+                : String(deadLetterError),
+          });
+        });
+    }
+  });
+
+  const poll = new BullWorker(
+    QUEUE_NAMES.JOBS_STATUS_POLL,
+    async (job: Job<PollItemPayload>) => {
+      if (job.name !== QUEUE_JOB_NAMES.POLL_ITEM) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      workerLogger.info('jobs.worker.poll.start', {
+        bullJobId: job.id,
+        jobItemId: job.data.jobItemId,
+        tenantId: job.data.tenantId,
+        attempt: job.data.attempt,
+        ...(job.data.requestId ? { requestId: job.data.requestId } : {}),
+      });
+      try {
+        const result = await lifecycle.processPollItem(job.data);
+        if (result.status === 'FAILED') {
+          metrics?.providerErrorsTotal.inc({
+            provider: 'smsc',
+            kind: 'poll_failed',
+            stage: 'poll',
+          });
+        }
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_STATUS_POLL,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_STATUS_POLL,
+          status: 'failed',
+          started,
+        });
+        recordProviderThrow(metrics, error, 'poll');
+        throw error;
+      }
+    },
+    { connection, concurrency },
+  );
+
+  const finalize = new BullWorker(
+    QUEUE_NAMES.JOBS_FINALIZE,
+    async (job: Job<FinalizeJobPayload>) => {
+      if (job.name !== QUEUE_JOB_NAMES.FINALIZE_JOB) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      workerLogger.info('jobs.worker.finalize.start', {
+        bullJobId: job.id,
+        jobId: job.data.jobId,
+        tenantId: job.data.tenantId,
+        ...(job.data.requestId ? { requestId: job.data.requestId } : {}),
+      });
+      try {
+        const result = await lifecycle.processFinalizeJob(job.data);
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_FINALIZE,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_FINALIZE,
+          status: 'failed',
+          started,
+        });
+        throw error;
+      }
+    },
+    { connection, concurrency: Math.max(1, Math.floor(concurrency / 2)) },
+  );
+
+  const reconciliation = new BullWorker(
+    QUEUE_NAMES.JOBS_RECONCILIATION,
+    async (job: Job<ReconcileStalePayload>) => {
+      if (job.name !== QUEUE_JOB_NAMES.RECONCILE_STALE) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      try {
+        const result = await lifecycle.processReconciliation(job.data ?? {});
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_RECONCILIATION,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_RECONCILIATION,
+          status: 'failed',
+          started,
+        });
+        throw error;
+      }
+    },
+    { connection, concurrency: 1 },
+  );
+
+  const retention = new BullWorker(
+    QUEUE_NAMES.JOBS_RETENTION,
+    async (job) => {
+      if (job.name !== QUEUE_JOB_NAMES.RETENTION_SWEEP) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      try {
+        const result = onRetention ? await onRetention() : { skipped: true };
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_RETENTION,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_RETENTION,
+          status: 'failed',
+          started,
+        });
+        throw error;
+      }
+    },
+    { connection, concurrency: 1 },
+  );
+
+  for (const worker of [submit, poll, finalize, reconciliation, retention]) {
+    worker.on('ready', () => {
+      workerLogger.info('jobs.worker.ready', { queue: worker.name });
+    });
+    worker.on('completed', (job) => {
+      workerLogger.info('jobs.worker.completed', {
+        queue: worker.name,
+        bullJobId: job.id,
+        jobId: (job.data as { jobId?: string } | undefined)?.jobId,
+        jobItemId: (job.data as { jobItemId?: string } | undefined)?.jobItemId,
+      });
+    });
+    worker.on('failed', (job, error) => {
+      if (worker === submit) {
+        return;
+      }
+      workerLogger.error('jobs.worker.failed', {
+        queue: worker.name,
+        bullJobId: job?.id,
+        jobId: (job?.data as { jobId?: string } | undefined)?.jobId,
+        jobItemId: (job?.data as { jobItemId?: string } | undefined)?.jobItemId,
+        message: error.message,
+      });
+    });
+  }
+
+  return { submit, poll, finalize, reconciliation, retention };
+}
+
+function recordProviderThrow(
+  metrics: WorkerMetrics | undefined,
+  error: unknown,
+  stage: 'submit' | 'poll',
+): void {
+  if (!metrics || !isProviderError(error)) {
+    return;
+  }
+  metrics.providerErrorsTotal.inc({
+    provider: error.providerCode || 'smsc',
+    kind: error.kind,
+    stage,
+  });
+}

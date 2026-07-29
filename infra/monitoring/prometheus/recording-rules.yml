@@ -1,0 +1,34 @@
+groups:
+  - name: finenumbers-sli
+    interval: 15s
+    rules:
+      # API error rate (5xx / all)
+      - record: job:http_error_rate:ratio_rate5m
+        expr: |
+          sum(rate(http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total[5m])), 1e-9)
+
+      # API latency p95
+      - record: job:http_request_duration_seconds:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      # Queue backlog (all queues)
+      - record: job:queue_backlog:sum
+        expr: sum(queue_jobs_waiting)
+
+      # Worker failure rate
+      - record: job:worker_failure_rate:rate5m
+        expr: sum(rate(worker_jobs_processed_total{status="failed"}[5m]))
+
+      # Webhook failure rate (failed + dead)
+      - record: job:webhook_failure_rate:rate5m
+        expr: sum(rate(webhook_deliveries_total{status=~"failed|dead"}[5m]))
+
+      # Provider error rate
+      - record: job:provider_error_rate:rate5m
+        expr: sum(rate(provider_errors_total[5m]))

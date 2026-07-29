@@ -1,0 +1,133 @@
+import { describe, expect, it } from 'vitest';
+
+import { CreateJobService } from './create-job.service.js';
+import { InMemoryJobsQueue } from './memory-queue.js';
+import { InMemoryJobsStore } from './memory-store.js';
+import { JobsValidationError } from './types.js';
+
+describe('CreateJobService', () => {
+  it('creates job, dedupes phones, and enqueues submit batches', async () => {
+    const store = new InMemoryJobsStore();
+    store.settings = { ...store.settings, submitBatchSize: 2, maxBatchPhones: 100 };
+    const queue = new InMemoryJobsQueue();
+    const service = new CreateJobService({ store, queue });
+
+    const result = await service.create({
+      tenantId: 'tenant-1',
+      checkType: 'HLR',
+      source: 'BULK',
+      phones: ['+79991234567', '79991234567', '+79997654321', '+79991112233'],
+    });
+
+    expect(result.deduplicated).toBe(false);
+    expect(result.deduplicatedPhoneCount).toBe(1);
+    expect(result.workUnits).toBe(3);
+    expect(result.job.itemCount).toBe(3);
+    expect(result.job.status).toBe('QUEUED');
+    expect(result.batchesEnqueued).toBe(2);
+    expect(queue.of('submit')).toHaveLength(2);
+    expect(queue.of('submit')[0]).toMatchObject({
+      payload: { jobId: result.job.id, tenantId: 'tenant-1' },
+    });
+  });
+
+  it('returns existing job for idempotency key without creating a second job', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const service = new CreateJobService({ store, queue });
+
+    const first = await service.create({
+      tenantId: 'tenant-1',
+      checkType: 'PING',
+      source: 'API',
+      phones: ['+79991234567'],
+      idempotencyKey: 'idem-1',
+    });
+    queue.clear();
+
+    const second = await service.create({
+      tenantId: 'tenant-1',
+      checkType: 'PING',
+      source: 'API',
+      phones: ['+79991234567'],
+      idempotencyKey: 'idem-1',
+    });
+
+    expect(second.deduplicated).toBe(true);
+    expect(second.job.id).toBe(first.job.id);
+    expect(queue.messages).toHaveLength(0);
+    const byKey = await store.findJobByIdempotencyKey('tenant-1', 'idem-1');
+    expect(byKey?.id).toBe(first.job.id);
+  });
+
+  it('concurrent creates with same idempotency key collapse to one job', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const service = new CreateJobService({ store, queue });
+
+    // Force both callers past the pre-check by delaying the first write slightly.
+    const originalCreate = store.createJobWithItems.bind(store);
+    let gate: (() => void) | null = null;
+    const released = new Promise<void>((resolve) => {
+      gate = resolve;
+    });
+    let started = 0;
+    store.createJobWithItems = async (input) => {
+      started += 1;
+      if (started === 1) {
+        // Let the sibling request also pass findJobByIdempotencyKey.
+        await new Promise<void>((r) => setTimeout(r, 20));
+        gate?.();
+        return originalCreate(input);
+      }
+      await released;
+      return originalCreate(input);
+    };
+
+    const [a, b] = await Promise.all([
+      service.create({
+        tenantId: 'tenant-1',
+        checkType: 'HLR',
+        source: 'API',
+        phones: ['+79991234567'],
+        idempotencyKey: 'race-1',
+      }),
+      service.create({
+        tenantId: 'tenant-1',
+        checkType: 'HLR',
+        source: 'API',
+        phones: ['+79991234567'],
+        idempotencyKey: 'race-1',
+      }),
+    ]);
+
+    expect(a.job.id).toBe(b.job.id);
+    expect([a.deduplicated, b.deduplicated].filter(Boolean)).toHaveLength(1);
+    const only = await store.findJobByIdempotencyKey('tenant-1', 'race-1');
+    expect(only?.id).toBe(a.job.id);
+  });
+
+  it('rejects invalid phones and single-source multi-phone', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const service = new CreateJobService({ store, queue });
+
+    await expect(
+      service.create({
+        tenantId: 'tenant-1',
+        checkType: 'HLR',
+        source: 'SINGLE',
+        phones: ['not-valid'],
+      }),
+    ).rejects.toBeInstanceOf(JobsValidationError);
+
+    await expect(
+      service.create({
+        tenantId: 'tenant-1',
+        checkType: 'HLR',
+        source: 'SINGLE',
+        phones: ['+79991234567', '+79997654321'],
+      }),
+    ).rejects.toBeInstanceOf(JobsValidationError);
+  });
+});

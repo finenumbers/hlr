@@ -1,0 +1,42 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# builds
+dist
+build
+.next
+out
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+!infra/docker/.env.example
+
+# logs / coverage
+logs
+*.log
+coverage
+.nyc_output
+
+# tooling
+.turbo
+.eslintcache
+.DS_Store
+*.pem
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# uploads / runtime
+uploads
+tmp

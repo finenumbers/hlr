@@ -1,0 +1,113 @@
+groups:
+  - name: finenumbers-runtime
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API metrics scrape is down"
+          description: "Prometheus cannot scrape api:3001/metrics for >2m."
+
+      - alert: WorkerDown
+        expr: up{job="worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker metrics scrape is down"
+          description: "Prometheus cannot scrape worker:9091/metrics for >2m."
+
+      - alert: DatabaseDown
+        expr: app_db_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Postgres connectivity failed"
+          description: "app_db_up is 0 on {{ $labels.service }}."
+
+      - alert: RedisDown
+        expr: app_redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis connectivity failed"
+          description: "app_redis_up is 0 on {{ $labels.service }}."
+
+      - alert: HighHttp5xxRate
+        expr: job:http_error_rate:ratio_rate5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated HTTP 5xx rate"
+          description: "More than 5% of API requests are 5xx over 5m."
+
+      - alert: HighHttpLatencyP95
+        expr: job:http_request_duration_seconds:p95 > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency high"
+          description: "HTTP p95 latency >2s for 10m."
+
+      - alert: QueueBacklogGrowing
+        expr: |
+          sum by (queue) (queue_jobs_waiting) > 200
+          and
+          sum by (queue) (delta(queue_jobs_waiting[15m])) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue backlog growing ({{ $labels.queue }})"
+          description: "Waiting+delayed jobs >200 and still rising over 15m."
+
+      - alert: WorkerJobFailureSpike
+        expr: job:worker_failure_rate:rate5m > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker job failures elevated"
+          description: "Failed job rate >0.2/s over 5m."
+
+      - alert: ProviderErrorSpike
+        expr: job:provider_error_rate:rate5m > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Provider error spike"
+          description: "provider_errors_total rate >0.1/s over 5m."
+
+      - alert: WebhookDeliveryFailures
+        expr: job:webhook_failure_rate:rate5m > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook delivery failures elevated"
+          description: "Failed+dead webhook deliveries >0.05/s over 5–10m."
+
+      - alert: LowProviderBalance
+        expr: provider_balance{provider="smsc"} < 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMSC provider balance low"
+          description: "provider_balance is {{ $value }} (threshold 100). Adjust threshold for your currency."
+
+      - alert: RateLimitPressure
+        expr: sum(rate(rate_limit_hits_total[10m])) > 1
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Sustained rate-limit pressure"
+          description: "Clients are hitting RPM limits (>1 deny/s over 10m)."

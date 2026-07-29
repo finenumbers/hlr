@@ -1,0 +1,30 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "content": "# Finenumbers scaffold\n\nObservability stack is provisioned. Application metrics/dashboards arrive in a later stage.",
+        "mode": "markdown"
+      },
+      "title": "Welcome",
+      "type": "text"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["finenumbers", "scaffold"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Scaffold Overview",
+  "uid": "finenumbers-scaffold",
+  "version": 1
+}
