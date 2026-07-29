@@ -81,13 +81,41 @@ services:
       timeout: 5s
       retries: 10
 
+  # Миграции БД + создание первого админа (каждый redeploy; пароль из SEED_*).
+  migrate:
+    image: ghcr.io/finenumbers/hlr-api:latest
+    pull_policy: always
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
+      SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!}
+      SEED_DEMO_ADMIN_EMAIL: ${SEED_DEMO_ADMIN_EMAIL:-demo@finenumbers.local}
+      SEED_DEMO_ADMIN_PASSWORD: ${SEED_DEMO_ADMIN_PASSWORD:-ChangeMeNow!}
+    working_dir: /app/packages/db
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ -x /app/infra/scripts/migrate-and-seed.sh ]; then
+          exec /app/infra/scripts/migrate-and-seed.sh
+        fi
+        npx --yes prisma migrate deploy
+        npx --yes tsx prisma/seed.ts
+    networks:
+      - hlr_net
+
   api:
     image: ghcr.io/finenumbers/hlr-api:latest
     pull_policy: always
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     environment:
@@ -130,8 +158,8 @@ services:
     pull_policy: always
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     environment:

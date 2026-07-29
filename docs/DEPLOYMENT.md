@@ -52,14 +52,16 @@ No Kubernetes required. Data plane stays on internal `hlr_net`; `api` / `web` al
 
 | Переменная | Зачем |
 |------------|--------|
-| `POSTGRES_PASSWORD` | Пароль базы данных |
-| `API_KEY_PEPPER` | Секрет для защиты API-ключей клиентов |
-| `PUBLIC_API_URL` | Публичный HTTPS-адрес API |
-| `PUBLIC_WEB_URL` | Публичный HTTPS-адрес кабинета |
-| `SMSC_LOGIN` + `SMSC_PASSWORD` | Доступ к SMSC.ru (или вместо них `SMSC_API_KEY`) |
+| `POSTGRES_PASSWORD` | Пароль базы Postgres (**не** логин на сайт) |
+| `API_KEY_PEPPER` | Секрет для API-ключей клиентов (**не** логин на сайт) |
+| `PUBLIC_API_URL` | Публичный HTTPS API (браузер ходит сюда при логине) |
+| `PUBLIC_WEB_URL` | Публичный HTTPS кабинета |
+| `SEED_SUPERADMIN_EMAIL` / `SEED_SUPERADMIN_PASSWORD` | **Вход в админку** `/admin/login` |
+| `SEED_DEMO_ADMIN_EMAIL` / `SEED_DEMO_ADMIN_PASSWORD` | Вход в кабинет `/app/login` |
+| `SMSC_LOGIN` + `SMSC_PASSWORD` | Доступ к SMSC.ru (или `SMSC_API_KEY`) |
 | `SMSC_CALLBACK_SECRET` | Секрет подписи callback от SMSC |
 
-Остальное (CORS = адрес кабинета, `TRUST_PROXY`, порты, пользователь БД) задано в compose и менять не нужно.
+По умолчанию админ: `admin@finenumbers.local` / `ChangeMeNow!`. Сервис `migrate` при старте стека применяет миграции и seed.
 
 Секреты не коммитьте — только в Environment variables стека Portainer.
 
@@ -82,24 +84,17 @@ Portainer → **Stacks** → **Add stack** → **Repository**:
 
 Deploy. Сеть `hlr_net` создаётся автоматически; сеть **`proxy` должна уже существовать** (external).
 
-### 3. Migrations (first boot / after schema changes)
+### 3. Migrations & first admin
 
-From Portainer → stack → `api` container → **Console**, or any host with DB access:
+Сервис **`migrate`** в стеке сам делает `prisma migrate deploy` + seed (создание админа). Отдельно запускать не нужно.
 
-```bash
-# On a machine with the repo + network access to Postgres:
-export DATABASE_URL=postgresql://finenumbers:...@127.0.0.1:5432/finenumbers?schema=public
-pnpm --filter @finenumbers/db prisma migrate deploy
-pnpm --filter @finenumbers/db prisma db seed   # first boot only
-```
-
-Alternatively run migrate from a one-off container that has the image and `DATABASE_URL` pointing at `postgres` on `hlr_net`.
+Если логин не работает после старого деплоя: **Pull and redeploy** стека (пересоздаст seed-пароль из `SEED_*`) и проверьте, что `PUBLIC_API_URL` в env — тот же HTTPS-хост, что у API в NPM.
 
 ### 4. Update
 
-Всегда latest: Portainer → stack → **Pull and redeploy** (подтянет `:latest` и актуальный compose с `main`).
+Всегда latest: Portainer → stack → **Pull and redeploy**.
 
-Проверка: `/health/live`, `/health/ready`, smoke login + check.
+Проверка: `/health/live`, `/health/ready`, вход `SEED_SUPERADMIN_EMAIL` / `SEED_SUPERADMIN_PASSWORD`.
 
 ---
 

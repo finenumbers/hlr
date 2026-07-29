@@ -40,6 +40,8 @@ async function main(): Promise<void> {
     update: {
       platformRole: PlatformRole.SUPERADMIN,
       isActive: true,
+      // Re-seed resets bootstrap password from env (Portainer first boot / recovery).
+      passwordHash: hashSync(SUPERADMIN_PASSWORD, 12),
     },
   });
 
@@ -79,6 +81,7 @@ async function main(): Promise<void> {
     update: {
       isActive: true,
       name: 'Demo Tenant Admin',
+      passwordHash: hashSync(DEMO_ADMIN_PASSWORD, 12),
     },
   });
 

@@ -1,6 +1,5 @@
 import type { AuthUser } from '@/lib/auth/permissions';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getPublicApiUrl } from '@/lib/public-env';
 
 const TOKEN_KEY = 'fn.session.token';
 const TENANT_KEY = 'fn.session.tenantId';
@@ -84,7 +83,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getPublicApiUrl()}${path}`, {
     method: options.method ?? (options.body !== undefined ? 'POST' : 'GET'),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -110,7 +109,7 @@ export async function apiFormRequest<T>(
   const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getPublicApiUrl()}${path}`, {
     method: options.method ?? 'POST',
     headers,
     body: form,
