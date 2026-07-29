@@ -13,7 +13,7 @@ estimate(tariff) → HOLD (reserve) → provider work
 
 Policy B (product default): on provider final status (including provider `err` / unreachable) we **capture** the reserved **sell price**. Release is only for send failure / timeout before a final provider status.
 
-1. **Estimate** — `TariffResolver` picks tenant assignment → plan overrides → default plan; returns sell price + internal provider cost separately.
+1. **Estimate** — `TariffResolver` picks tenant assignment for the requested `checkType` (optional sell override); returns sell price + internal provider cost separately. No silent default-plan fallback.
 2. **Reserve** — before provider submit (`JobsBillingHooks.onItemReserved`): `HOLD` for sell price, `available → held`, stamp `JobItem.estimatedCost`.
 3. **Capture** — on terminal provider result: `DEBIT` linked via `relatedHoldId`; optional partial capture releases unused hold.
 4. **Release** — on submit/timeout failure: full `RELEASE` of open hold.
@@ -54,11 +54,11 @@ Idempotency key conventions:
 
 ## Tariff resolution
 
-1. Active `TenantTariff` for tenant (with optional HLR/Ping **sell** overrides)
-2. Else active `TariffPlan` where `isDefault = true`
-3. Else `TARIFF_NOT_CONFIGURED` (cannot start / reserve checks)
+1. Active `TenantTariff` for `(tenantId, checkType)` pointing at a `TariffPlan` of the same `checkType`
+2. Optional `priceOverride` on the assignment replaces plan `sellPrice`
+3. Else `TARIFF_NOT_CONFIGURED` (cannot estimate / start / reserve that product)
 
-Provider costs live on the plan (`hlrProviderCost` / `pingProviderCost`) and are never mixed into client charge fields (`JobItem.estimatedCost` / `actualCost` are sell-side).
+`TariffPlan.isDefault` is catalog metadata only and is **not** auto-applied in billing. Provider cost (`providerCost`) is never mixed into client charge fields (`JobItem.estimatedCost` / `actualCost` are sell-side).
 
 ## Jobs integration
 

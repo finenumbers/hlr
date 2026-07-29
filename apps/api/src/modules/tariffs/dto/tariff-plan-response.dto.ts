@@ -10,20 +10,17 @@ export class TariffPlanResponseDto {
   @ApiProperty()
   name!: string;
 
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  checkType!: 'HLR' | 'PING';
+
   @ApiProperty()
   currency!: string;
 
   @ApiProperty({ example: '0.150000' })
-  hlrPrice!: string;
-
-  @ApiProperty({ example: '0.250000' })
-  pingPrice!: string;
+  sellPrice!: string;
 
   @ApiProperty({ example: '0.050000' })
-  hlrProviderCost!: string;
-
-  @ApiProperty({ example: '0.080000' })
-  pingProviderCost!: string;
+  providerCost!: string;
 
   @ApiProperty()
   isDefault!: boolean;

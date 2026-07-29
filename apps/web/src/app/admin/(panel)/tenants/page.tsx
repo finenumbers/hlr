@@ -139,8 +139,14 @@ function AdminTenantsPage() {
               key: 'tariff',
               header: t('adminTenants.colTariff'),
               cell: (row) => {
-                const tariff = row.tariff as { code?: string } | null;
-                return tariff?.code ?? t('common.dash');
+                const tariffs = row.tariffs as {
+                  hlr?: { code?: string } | null;
+                  ping?: { code?: string } | null;
+                } | null;
+                const hlr = tariffs?.hlr?.code;
+                const ping = tariffs?.ping?.code;
+                if (!hlr && !ping) return t('common.dash');
+                return `HLR: ${hlr ?? '—'} · Ping: ${ping ?? '—'}`;
               },
             },
             {

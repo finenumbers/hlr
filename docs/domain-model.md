@@ -15,7 +15,7 @@
 | `ApiKey` | `api_keys` | Ключ `/v1` (`prefix` + `secretHash`) |
 | `PlatformSettings` | `platform_settings` | Singleton runtime-настроек |
 | `TariffPlan` | `tariff_plans` | Каталог цен HLR/Ping |
-| `TenantTariff` | `tenant_tariffs` | Назначение тарифа тенанту (+ overrides) |
+| `TenantTariff` | `tenant_tariffs` | Назначение тарифа тенанту по `checkType` (HLR / PING; + override) |
 | `Wallet` | `wallets` | Кэш `availableBalance` + `heldBalance` |
 | `WalletTransaction` | `wallet_transactions` | Ledger: credit/debit/hold/release/adjustment |
 | `Job` | `jobs` | Пакет или single-обёртка |
@@ -53,7 +53,7 @@ Ledger types:
 | `RELEASE` | Снятие hold при send-fail / timeout без финала |
 | `ADJUSTMENT` | Ручная корректировка |
 
-`Wallet.availableBalance` / `heldBalance` — кэш; истина — сумма проводок. Тарифы только из Админки. Без `TenantTariff` и без default `TariffPlan` — нельзя создать/reserve check (`TARIFF_NOT_CONFIGURED`). Sell price и provider cost разделены (`hlrPrice`/`pingPrice` vs `hlrProviderCost`/`pingProviderCost`).
+`Wallet.availableBalance` / `heldBalance` — кэш; истина — сумма проводок. Тарифы только из Админки. У клиента до двух назначений (`TenantTariff` unique по `(tenantId, checkType)`). План каталога (`TariffPlan`) относится ровно к одному `checkType` (`sellPrice` / `providerCost`). Без назначения на запрошенный тип — нельзя estimate/create/reserve (`TARIFF_NOT_CONFIGURED`); silent default fallback нет.
 
 ---
 
@@ -90,7 +90,7 @@ Ledger types:
 - `TenantMembership (tenantId, userId)` unique
 - `ApiKey.prefix` unique
 - `Wallet.tenantId` unique
-- `TenantTariff.tenantId` unique (одно текущее назначение)
+- `TenantTariff (tenantId, checkType)` unique (до двух текущих назначений)
 - `Job (tenantId, idempotencyKey)` unique
 - `WalletTransaction (tenantId, idempotencyKey)` unique
 - `IdempotencyRecord (tenantId, key)` unique

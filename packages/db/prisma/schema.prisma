@@ -121,7 +121,8 @@ model Tenant {
   memberships         TenantMembership[]
   apiKeys             ApiKey[]
   wallet              Wallet?
-  tenantTariff        TenantTariff?
+  /// Up to one assignment per CheckType (HLR and/or PING).
+  tenantTariffs       TenantTariff[]
   jobs                Job[]
   jobItems            JobItem[]
   webhookEndpoints    WebhookEndpoint[]
@@ -279,48 +280,48 @@ model WalletTransaction {
   @@map("wallet_transactions")
 }
 
+/// Catalog plan for exactly one product (HLR or PING).
 model TariffPlan {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  currency    String   @default("RUB") @db.Char(3)
-  /// Tenant sell price per HLR check (what the client pays).
-  hlrPrice    Decimal  @db.Decimal(18, 6)
-  /// Tenant sell price per Ping check (what the client pays).
-  pingPrice   Decimal  @db.Decimal(18, 6)
-  /// Internal provider cost per HLR check (margin accounting; never billed to client).
-  hlrProviderCost Decimal @default(0) @db.Decimal(18, 6)
-  /// Internal provider cost per Ping check (margin accounting; never billed to client).
-  pingProviderCost Decimal @default(0) @db.Decimal(18, 6)
-  /// Fallback plan when tenant has no TenantTariff assignment.
-  isDefault   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String    @id @default(cuid())
+  code         String    @unique
+  name         String
+  currency     String    @default("RUB") @db.Char(3)
+  checkType    CheckType
+  /// Tenant sell price per check (what the client pays).
+  sellPrice    Decimal   @db.Decimal(18, 6)
+  /// Internal provider cost (margin accounting; never billed to client).
+  providerCost Decimal   @default(0) @db.Decimal(18, 6)
+  /// Suggested catalog default per checkType (not auto-applied in billing).
+  isDefault    Boolean   @default(false)
+  isActive     Boolean   @default(true)
+  description  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   tenantTariffs TenantTariff[]
 
   @@index([isActive])
-  @@index([isDefault, isActive])
+  @@index([checkType, isActive])
+  @@index([checkType, isDefault, isActive])
   @@map("tariff_plans")
 }
 
-/// Current tariff assignment for a tenant (one row; history deferred).
+/// Current tariff assignment for a tenant + checkType (history deferred).
 model TenantTariff {
-  id                String    @id @default(cuid())
-  tenantId          String    @unique
-  tariffPlanId      String
-  hlrPriceOverride  Decimal?  @db.Decimal(18, 6)
-  pingPriceOverride Decimal?  @db.Decimal(18, 6)
-  effectiveFrom     DateTime  @default(now())
-  effectiveTo       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  tenantId      String
+  checkType     CheckType
+  tariffPlanId  String
+  priceOverride Decimal?  @db.Decimal(18, 6)
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tariffPlan TariffPlan @relation(fields: [tariffPlanId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, checkType])
   @@index([tariffPlanId])
   @@map("tenant_tariffs")
 }

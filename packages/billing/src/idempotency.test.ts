@@ -20,11 +20,10 @@ describe('billing idempotency — no double charge', () => {
     const tenantId = 'tenant-1';
     // Start at 0 + CREDIT via ledger (never invent cache balance without a ledger row).
     db.seedWallet(tenantId, '0');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '4.500000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '4.500000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -62,11 +61,10 @@ describe('billing idempotency — no double charge', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '2.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '2.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -96,11 +94,10 @@ describe('billing idempotency — no double charge', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '3.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '3.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -127,11 +124,10 @@ describe('billing idempotency — no double charge', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '4.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '4.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -192,11 +188,10 @@ describe('billing idempotency — no double charge', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '0');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -231,11 +226,10 @@ describe('billing idempotency — no double charge', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '0');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);

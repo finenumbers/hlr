@@ -13,8 +13,8 @@ Prisma schema, migrations, seed and client export for Finenumbers.
 | `ApiKey` | `api_keys` | Public API keys (`prefix` + `secretHash`) |
 | `Wallet` | `wallets` | Cached `availableBalance` / `heldBalance` |
 | `WalletTransaction` | `wallet_transactions` | Ledger (source of truth) |
-| `TariffPlan` | `tariff_plans` | Catalog sell prices + provider costs for HLR/Ping |
-| `TenantTariff` | `tenant_tariffs` | Plan assignment (+ optional overrides) |
+| `TariffPlan` | `tariff_plans` | Per-`checkType` catalog plan (`sellPrice` + `providerCost`) |
+| `TenantTariff` | `tenant_tariffs` | Assignment per `(tenantId, checkType)` (+ optional override) |
 | `Job` | `jobs` | Batch / single / API job wrapper |
 | `JobItem` | `job_items` | One phone check + normalized result |
 | `ProviderRequest` | `provider_requests` | Outbound provider call + raw payloads |

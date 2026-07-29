@@ -171,22 +171,23 @@ class UpdateTenantLimitsDto {
 }
 
 class AssignTariffDto {
-  @ApiProperty()
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Plan id for this checkType; omit/null/empty to unassign',
+  })
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  tariffPlanId!: string;
+  tariffPlanId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrPriceOverride?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingPriceOverride?: string;
+  priceOverride?: string;
 }
 
 class AdminTopupDto {
@@ -370,10 +371,15 @@ export class AdminPanelController {
     @Body() dto: AssignTariffDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.admin.assignTariff(id, dto.tariffPlanId, user.userId, {
-      hlrPriceOverride: dto.hlrPriceOverride,
-      pingPriceOverride: dto.pingPriceOverride,
-    });
+    return this.admin.assignTariff(
+      id,
+      {
+        checkType: dto.checkType,
+        tariffPlanId: dto.tariffPlanId,
+        priceOverride: dto.priceOverride,
+      },
+      user.userId,
+    );
   }
 
   @Get('jobs')

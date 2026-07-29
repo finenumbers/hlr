@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 
 export class AssignTenantTariffDto {
   @ApiProperty()
@@ -7,20 +7,21 @@ export class AssignTenantTariffDto {
   @IsNotEmpty()
   tenantId!: string;
 
-  @ApiProperty()
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
+
+  @ApiProperty({
+    description: 'Tariff plan id for this checkType, or null/empty to unassign',
+    nullable: true,
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  tariffPlanId!: string;
+  tariffPlanId?: string | null;
 
   @ApiPropertyOptional({ example: '0.120000' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrPriceOverride?: string;
-
-  @ApiPropertyOptional({ example: '0.220000' })
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingPriceOverride?: string;
+  priceOverride?: string;
 }

@@ -23,7 +23,8 @@ export default function AdminTenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
-  const [tariffPlanId, setTariffPlanId] = useState('');
+  const [hlrPlanId, setHlrPlanId] = useState('');
+  const [pingPlanId, setPingPlanId] = useState('');
   const [topupAmount, setTopupAmount] = useState('100');
   const [confirmTopup, setConfirmTopup] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
@@ -67,7 +68,8 @@ export default function AdminTenantDetailPage() {
     },
   });
   const tariffMut = useMutation({
-    mutationFn: () => api.admin.assignTariff(id, { tariffPlanId }),
+    mutationFn: (input: { checkType: 'HLR' | 'PING'; tariffPlanId: string | null }) =>
+      api.admin.assignTariff(id, input),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['admin', 'tenant', id] });
     },
@@ -179,37 +181,78 @@ export default function AdminTenantDetailPage() {
               </div>
             </Can>
           </Card>
-          <Card>
-            <h2 className="font-semibold">{t('adminTenants.tariff')}</h2>
-            <p className="mt-2 text-sm">
-              {(tenant?.tariff as { code?: string; name?: string } | null)?.code ?? t('adminTenants.notAssigned')} —{' '}
-              {(tenant?.tariff as { name?: string } | null)?.name ?? ''}
-            </p>
-            <Can permission="admin.tenants.write">
-              <div className="mt-4 space-y-2">
-                <Label>{t('adminTenants.assignPlan')}</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
-                  value={tariffPlanId}
-                  onChange={(e) => setTariffPlanId(e.target.value)}
-                >
-                  <option value="">{t('adminTenants.select')}</option>
-                  {(tariffs.data?.items ?? []).map((plan) => (
-                    <option key={String(plan.id)} value={String(plan.id)}>
-                      {String(plan.code)} — {String(plan.name)}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!tariffPlanId || tariffMut.isPending}
-                  onClick={() => tariffMut.mutate()}
-                >
-                  {t('adminTenants.assign')}
-                </Button>
+          <Card className="space-y-4">
+            <h2 className="font-semibold">{t('adminTenants.tariffs')}</h2>
+            {(
+              [
+                {
+                  checkType: 'HLR' as const,
+                  label: t('adminTenants.assignHlr'),
+                  current: (tenant?.tariffs as { hlr?: { code?: string; name?: string; sellPrice?: string } | null } | undefined)?.hlr,
+                  value: hlrPlanId,
+                  setValue: setHlrPlanId,
+                },
+                {
+                  checkType: 'PING' as const,
+                  label: t('adminTenants.assignPing'),
+                  current: (tenant?.tariffs as { ping?: { code?: string; name?: string; sellPrice?: string } | null } | undefined)?.ping,
+                  value: pingPlanId,
+                  setValue: setPingPlanId,
+                },
+              ] as const
+            ).map((slot) => (
+              <div key={slot.checkType} className="rounded-md border border-[var(--color-line)] p-3">
+                <p className="text-sm font-medium">{slot.label}</p>
+                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                  {slot.current?.code
+                    ? `${slot.current.code} — ${slot.current.name ?? ''}${
+                        slot.current.sellPrice
+                          ? ` · ${formatMoney(slot.current.sellPrice, currency)}`
+                          : ''
+                      }`
+                    : t('adminTenants.notAssigned')}
+                </p>
+                <Can permission="admin.tenants.write">
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <select
+                      className="h-10 min-w-[12rem] flex-1 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
+                      value={slot.value}
+                      onChange={(e) => slot.setValue(e.target.value)}
+                    >
+                      <option value="">{t('adminTenants.select')}</option>
+                      {(tariffs.data?.items ?? [])
+                        .filter((plan) => plan.checkType === slot.checkType)
+                        .map((plan) => (
+                          <option key={String(plan.id)} value={String(plan.id)}>
+                            {String(plan.code)} — {String(plan.name)}
+                          </option>
+                        ))}
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!slot.value || tariffMut.isPending}
+                      onClick={() =>
+                        tariffMut.mutate({ checkType: slot.checkType, tariffPlanId: slot.value })
+                      }
+                    >
+                      {t('adminTenants.assign')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={!slot.current || tariffMut.isPending}
+                      onClick={() =>
+                        tariffMut.mutate({ checkType: slot.checkType, tariffPlanId: null })
+                      }
+                    >
+                      {t('adminTenants.unassign')}
+                    </Button>
+                  </div>
+                </Can>
               </div>
-            </Can>
+            ))}
           </Card>
         </div>
 

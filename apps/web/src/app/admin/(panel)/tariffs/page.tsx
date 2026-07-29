@@ -19,11 +19,10 @@ import { formatMoney } from '@/lib/utils';
 type TariffForm = {
   code: string;
   name: string;
+  checkType: 'HLR' | 'PING';
   currency: string;
-  hlrPrice: string;
-  pingPrice: string;
-  hlrProviderCost: string;
-  pingProviderCost: string;
+  sellPrice: string;
+  providerCost: string;
   isDefault: boolean;
   isActive: boolean;
   description: string;
@@ -32,11 +31,10 @@ type TariffForm = {
 const emptyForm: TariffForm = {
   code: '',
   name: '',
+  checkType: 'HLR',
   currency: 'RUB',
-  hlrPrice: '0.15',
-  pingPrice: '0.25',
-  hlrProviderCost: '0.05',
-  pingProviderCost: '0.08',
+  sellPrice: '0.15',
+  providerCost: '0.05',
   isDefault: false,
   isActive: true,
   description: '',
@@ -60,11 +58,10 @@ export default function AdminTariffsPage() {
       api.admin.createTariff({
         code: form.code.trim(),
         name: form.name.trim(),
+        checkType: form.checkType,
         currency: form.currency.trim().toUpperCase(),
-        hlrPrice: form.hlrPrice,
-        pingPrice: form.pingPrice,
-        hlrProviderCost: form.hlrProviderCost,
-        pingProviderCost: form.pingProviderCost,
+        sellPrice: form.sellPrice,
+        providerCost: form.providerCost,
         isDefault: form.isDefault,
         isActive: form.isActive,
         description: form.description.trim() || undefined,
@@ -86,10 +83,8 @@ export default function AdminTariffsPage() {
       return api.admin.updateTariff(editingId, {
         name: form.name.trim(),
         currency: form.currency.trim().toUpperCase(),
-        hlrPrice: form.hlrPrice,
-        pingPrice: form.pingPrice,
-        hlrProviderCost: form.hlrProviderCost,
-        pingProviderCost: form.pingProviderCost,
+        sellPrice: form.sellPrice,
+        providerCost: form.providerCost,
         isDefault: form.isDefault,
         isActive: form.isActive,
         description: form.description.trim() || null,
@@ -112,11 +107,10 @@ export default function AdminTariffsPage() {
     setForm({
       code: String(row.code ?? ''),
       name: String(row.name ?? ''),
+      checkType: row.checkType === 'PING' ? 'PING' : 'HLR',
       currency: String(row.currency ?? 'RUB'),
-      hlrPrice: String(row.hlrPrice ?? '0'),
-      pingPrice: String(row.pingPrice ?? '0'),
-      hlrProviderCost: String(row.hlrProviderCost ?? '0'),
-      pingProviderCost: String(row.pingProviderCost ?? '0'),
+      sellPrice: String(row.sellPrice ?? '0'),
+      providerCost: String(row.providerCost ?? '0'),
       isDefault: Boolean(row.isDefault),
       isActive: row.isActive !== false,
       description: String(row.description ?? ''),
@@ -170,6 +164,24 @@ export default function AdminTariffsPage() {
               />
             </div>
             <div>
+              <Label htmlFor="checkType">{t('adminTariffs.checkType')}</Label>
+              <select
+                id="checkType"
+                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
+                value={form.checkType}
+                disabled={Boolean(editingId)}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    checkType: e.target.value === 'PING' ? 'PING' : 'HLR',
+                  }))
+                }
+              >
+                <option value="HLR">HLR</option>
+                <option value="PING">Ping-SMS</option>
+              </select>
+            </div>
+            <div>
               <Label htmlFor="currency">{t('adminTariffs.currency')}</Label>
               <Input
                 id="currency"
@@ -178,35 +190,19 @@ export default function AdminTariffsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="hlrPrice">{t('adminTariffs.hlrPrice')}</Label>
+              <Label htmlFor="sellPrice">{t('adminTariffs.sellPrice')}</Label>
               <Input
-                id="hlrPrice"
-                value={form.hlrPrice}
-                onChange={(e) => setForm((f) => ({ ...f, hlrPrice: e.target.value }))}
+                id="sellPrice"
+                value={form.sellPrice}
+                onChange={(e) => setForm((f) => ({ ...f, sellPrice: e.target.value }))}
               />
             </div>
             <div>
-              <Label htmlFor="pingPrice">{t('adminTariffs.pingPrice')}</Label>
+              <Label htmlFor="providerCost">{t('adminTariffs.providerCost')}</Label>
               <Input
-                id="pingPrice"
-                value={form.pingPrice}
-                onChange={(e) => setForm((f) => ({ ...f, pingPrice: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="hlrProviderCost">{t('adminTariffs.hlrProviderCost')}</Label>
-              <Input
-                id="hlrProviderCost"
-                value={form.hlrProviderCost}
-                onChange={(e) => setForm((f) => ({ ...f, hlrProviderCost: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="pingProviderCost">{t('adminTariffs.pingProviderCost')}</Label>
-              <Input
-                id="pingProviderCost"
-                value={form.pingProviderCost}
-                onChange={(e) => setForm((f) => ({ ...f, pingProviderCost: e.target.value }))}
+                id="providerCost"
+                value={form.providerCost}
+                onChange={(e) => setForm((f) => ({ ...f, providerCost: e.target.value }))}
               />
             </div>
             <div className="sm:col-span-2">
@@ -273,28 +269,21 @@ export default function AdminTariffsPage() {
               ),
             },
             {
-              key: 'hlr',
-              header: t('adminTariffs.colHlr'),
-              cell: (row) =>
-                formatMoney(String(row.hlrPrice), String(row.currency ?? 'RUB')),
+              key: 'checkType',
+              header: t('adminTariffs.colType'),
+              cell: (row) => String(row.checkType),
             },
             {
-              key: 'ping',
-              header: t('adminTariffs.colPing'),
+              key: 'sell',
+              header: t('adminTariffs.colSell'),
               cell: (row) =>
-                formatMoney(String(row.pingPrice), String(row.currency ?? 'RUB')),
+                formatMoney(String(row.sellPrice), String(row.currency ?? 'RUB')),
             },
             {
               key: 'cost',
               header: t('adminTariffs.colProviderCost'),
-              cell: (row) => (
-                <span className="text-xs text-[var(--color-ink-muted)]">
-                  {t('adminTariffs.providerCostCell', {
-                    hlr: formatMoney(String(row.hlrProviderCost ?? 0), String(row.currency ?? 'RUB')),
-                    ping: formatMoney(String(row.pingProviderCost ?? 0), String(row.currency ?? 'RUB')),
-                  })}
-                </span>
-              ),
+              cell: (row) =>
+                formatMoney(String(row.providerCost ?? 0), String(row.currency ?? 'RUB')),
             },
             {
               key: 'flags',

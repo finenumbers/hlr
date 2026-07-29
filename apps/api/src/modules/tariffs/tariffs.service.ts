@@ -28,7 +28,7 @@ export class TariffsService {
       this.prisma.tariffPlan.findMany({
         skip,
         take: pageSize,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ checkType: 'asc' }, { createdAt: 'desc' }],
       }),
       this.prisma.tariffPlan.count(),
     ]);
@@ -55,7 +55,10 @@ export class TariffsService {
   async create(dto: CreateTariffPlanDto, actorUserId?: string): Promise<TariffPlanResponseDto> {
     let prices;
     try {
-      prices = TariffResolver.validatePlanPrices(dto);
+      prices = TariffResolver.validatePlanPrices({
+        sellPrice: dto.sellPrice,
+        providerCost: dto.providerCost,
+      });
     } catch (error) {
       throw new BadRequestException({
         errorCode: ErrorCodes.INVALID_TARIFF,
@@ -66,7 +69,7 @@ export class TariffsService {
     const plan = await this.prisma.$transaction(async (tx) => {
       if (dto.isDefault) {
         await tx.tariffPlan.updateMany({
-          where: { isDefault: true },
+          where: { isDefault: true, checkType: dto.checkType },
           data: { isDefault: false },
         });
       }
@@ -74,11 +77,10 @@ export class TariffsService {
         data: {
           code: dto.code,
           name: dto.name,
+          checkType: dto.checkType,
           currency: dto.currency ?? 'RUB',
-          hlrPrice: prices.hlrPrice,
-          pingPrice: prices.pingPrice,
-          hlrProviderCost: prices.hlrProviderCost,
-          pingProviderCost: prices.pingProviderCost,
+          sellPrice: prices.sellPrice,
+          providerCost: prices.providerCost,
           isDefault: dto.isDefault ?? false,
           isActive: dto.isActive ?? true,
           description: dto.description ?? null,
@@ -92,7 +94,7 @@ export class TariffsService {
       action: 'billing.tariff.create',
       targetType: 'TariffPlan',
       targetId: plan.id,
-      metadata: { code: plan.code, isDefault: plan.isDefault },
+      metadata: { code: plan.code, checkType: plan.checkType, isDefault: plan.isDefault },
     });
 
     return mapTariff(plan);
@@ -112,10 +114,8 @@ export class TariffsService {
     }
 
     const nextPrices = {
-      hlrPrice: dto.hlrPrice ?? existing.hlrPrice.toString(),
-      pingPrice: dto.pingPrice ?? existing.pingPrice.toString(),
-      hlrProviderCost: dto.hlrProviderCost ?? existing.hlrProviderCost.toString(),
-      pingProviderCost: dto.pingProviderCost ?? existing.pingProviderCost.toString(),
+      sellPrice: dto.sellPrice ?? existing.sellPrice.toString(),
+      providerCost: dto.providerCost ?? existing.providerCost.toString(),
     };
 
     let prices;
@@ -131,7 +131,7 @@ export class TariffsService {
     const plan = await this.prisma.$transaction(async (tx) => {
       if (dto.isDefault === true) {
         await tx.tariffPlan.updateMany({
-          where: { isDefault: true, NOT: { id } },
+          where: { isDefault: true, checkType: existing.checkType, NOT: { id } },
           data: { isDefault: false },
         });
       }
@@ -140,14 +140,11 @@ export class TariffsService {
         data: {
           name: dto.name ?? undefined,
           currency: dto.currency ?? undefined,
-          hlrPrice: prices.hlrPrice,
-          pingPrice: prices.pingPrice,
-          hlrProviderCost: prices.hlrProviderCost,
-          pingProviderCost: prices.pingProviderCost,
+          sellPrice: prices.sellPrice,
+          providerCost: prices.providerCost,
           isDefault: dto.isDefault ?? undefined,
           isActive: dto.isActive ?? undefined,
-          description:
-            dto.description === undefined ? undefined : dto.description,
+          description: dto.description === undefined ? undefined : dto.description,
         },
       });
     });
@@ -160,6 +157,7 @@ export class TariffsService {
       targetId: plan.id,
       metadata: {
         code: plan.code,
+        checkType: plan.checkType,
         isDefault: plan.isDefault,
         isActive: plan.isActive,
       },
@@ -172,20 +170,12 @@ export class TariffsService {
     dto: AssignTenantTariffDto,
     actorUserId?: string,
   ): Promise<{
-    id: string;
+    id: string | null;
     tenantId: string;
-    tariffPlanId: string;
-    hlrPriceOverride: string | null;
-    pingPriceOverride: string | null;
+    checkType: 'HLR' | 'PING';
+    tariffPlanId: string | null;
+    priceOverride: string | null;
   }> {
-    const plan = await this.prisma.tariffPlan.findUnique({ where: { id: dto.tariffPlanId } });
-    if (!plan || !plan.isActive) {
-      throw new BadRequestException({
-        errorCode: ErrorCodes.INVALID_TARIFF,
-        message: 'Tariff plan not found or inactive',
-      });
-    }
-
     const tenant = await this.prisma.tenant.findUnique({ where: { id: dto.tenantId } });
     if (!tenant) {
       throw new NotFoundException({
@@ -194,27 +184,66 @@ export class TariffsService {
       });
     }
 
-    const hlrOverride =
-      dto.hlrPriceOverride === undefined
-        ? null
-        : new Prisma.Decimal(dto.hlrPriceOverride);
-    const pingOverride =
-      dto.pingPriceOverride === undefined
-        ? null
-        : new Prisma.Decimal(dto.pingPriceOverride);
+    const planId = dto.tariffPlanId?.trim() ? dto.tariffPlanId.trim() : null;
+
+    if (!planId) {
+      const existing = await this.prisma.tenantTariff.findUnique({
+        where: {
+          tenantId_checkType: { tenantId: dto.tenantId, checkType: dto.checkType },
+        },
+      });
+      if (existing) {
+        await this.prisma.tenantTariff.delete({ where: { id: existing.id } });
+        await this.audit.write({
+          tenantId: dto.tenantId,
+          actorType: 'USER',
+          actorUserId: actorUserId ?? null,
+          action: 'billing.tariff.unassign',
+          targetType: 'TenantTariff',
+          targetId: existing.id,
+          metadata: { checkType: dto.checkType },
+        });
+      }
+      return {
+        id: null,
+        tenantId: dto.tenantId,
+        checkType: dto.checkType,
+        tariffPlanId: null,
+        priceOverride: null,
+      };
+    }
+
+    const plan = await this.prisma.tariffPlan.findUnique({ where: { id: planId } });
+    if (!plan || !plan.isActive) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.INVALID_TARIFF,
+        message: 'Tariff plan not found or inactive',
+      });
+    }
+    if (plan.checkType !== dto.checkType) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.INVALID_TARIFF,
+        message: `Plan ${plan.code} is ${plan.checkType}, cannot assign to ${dto.checkType}`,
+        details: { planCheckType: plan.checkType, checkType: dto.checkType },
+      });
+    }
+
+    const priceOverride =
+      dto.priceOverride === undefined ? null : new Prisma.Decimal(dto.priceOverride);
 
     const row = await this.prisma.tenantTariff.upsert({
-      where: { tenantId: dto.tenantId },
+      where: {
+        tenantId_checkType: { tenantId: dto.tenantId, checkType: dto.checkType },
+      },
       create: {
         tenantId: dto.tenantId,
-        tariffPlanId: dto.tariffPlanId,
-        hlrPriceOverride: hlrOverride,
-        pingPriceOverride: pingOverride,
+        checkType: dto.checkType,
+        tariffPlanId: planId,
+        priceOverride,
       },
       update: {
-        tariffPlanId: dto.tariffPlanId,
-        hlrPriceOverride: hlrOverride,
-        pingPriceOverride: pingOverride,
+        tariffPlanId: planId,
+        priceOverride,
         effectiveFrom: new Date(),
         effectiveTo: null,
       },
@@ -228,18 +257,18 @@ export class TariffsService {
       targetType: 'TenantTariff',
       targetId: row.id,
       metadata: {
-        tariffPlanId: dto.tariffPlanId,
-        hlrPriceOverride: dto.hlrPriceOverride ?? null,
-        pingPriceOverride: dto.pingPriceOverride ?? null,
+        checkType: dto.checkType,
+        tariffPlanId: planId,
+        priceOverride: dto.priceOverride ?? null,
       },
     });
 
     return {
       id: row.id,
       tenantId: row.tenantId,
+      checkType: row.checkType,
       tariffPlanId: row.tariffPlanId,
-      hlrPriceOverride: row.hlrPriceOverride?.toString() ?? null,
-      pingPriceOverride: row.pingPriceOverride?.toString() ?? null,
+      priceOverride: row.priceOverride?.toString() ?? null,
     };
   }
 }
@@ -248,11 +277,10 @@ function mapTariff(plan: {
   id: string;
   code: string;
   name: string;
+  checkType: 'HLR' | 'PING';
   currency: string;
-  hlrPrice: { toString(): string };
-  pingPrice: { toString(): string };
-  hlrProviderCost: { toString(): string };
-  pingProviderCost: { toString(): string };
+  sellPrice: { toString(): string };
+  providerCost: { toString(): string };
   isDefault: boolean;
   isActive: boolean;
   description: string | null;
@@ -261,11 +289,10 @@ function mapTariff(plan: {
     id: plan.id,
     code: plan.code,
     name: plan.name,
+    checkType: plan.checkType,
     currency: plan.currency,
-    hlrPrice: plan.hlrPrice.toString(),
-    pingPrice: plan.pingPrice.toString(),
-    hlrProviderCost: plan.hlrProviderCost.toString(),
-    pingProviderCost: plan.pingProviderCost.toString(),
+    sellPrice: plan.sellPrice.toString(),
+    providerCost: plan.providerCost.toString(),
     isDefault: plan.isDefault,
     isActive: plan.isActive,
     description: plan.description,

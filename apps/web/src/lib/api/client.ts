@@ -210,8 +210,14 @@ export const api = {
         role?: 'OWNER' | 'ADMIN' | 'MEMBER';
       },
     ) => apiRequest(`/admin/tenants/${id}/users`, { method: 'POST', body }),
-    assignTariff: (id: string, body: { tariffPlanId: string }) =>
-      apiRequest(`/admin/tenants/${id}/tariff`, { method: 'POST', body }),
+    assignTariff: (
+      id: string,
+      body: {
+        checkType: 'HLR' | 'PING';
+        tariffPlanId?: string | null;
+        priceOverride?: string;
+      },
+    ) => apiRequest(`/admin/tenants/${id}/tariff`, { method: 'POST', body }),
     jobs: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/admin/jobs?${q}`),
     job: (id: string) => apiRequest<Record<string, unknown>>(`/admin/jobs/${id}`),
     jobItems: (id: string, q: string) =>
@@ -276,11 +282,10 @@ export const api = {
     createTariff: (body: {
       code: string;
       name: string;
+      checkType: 'HLR' | 'PING';
       currency?: string;
-      hlrPrice: string;
-      pingPrice: string;
-      hlrProviderCost?: string;
-      pingProviderCost?: string;
+      sellPrice: string;
+      providerCost?: string;
       isDefault?: boolean;
       isActive?: boolean;
       description?: string;
@@ -290,10 +295,8 @@ export const api = {
       body: {
         name?: string;
         currency?: string;
-        hlrPrice?: string;
-        pingPrice?: string;
-        hlrProviderCost?: string;
-        pingProviderCost?: string;
+        sellPrice?: string;
+        providerCost?: string;
         isDefault?: boolean;
         isActive?: boolean;
         description?: string | null;
@@ -336,7 +339,25 @@ export const api = {
       apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/jobs/${id}/items?${q}`),
     balance: () => apiRequest<Record<string, unknown>>('/cabinet/billing/balance'),
     ledger: () => apiRequest<unknown[]>('/cabinet/billing/ledger'),
-    tariff: () => apiRequest<Record<string, unknown> | null>('/cabinet/billing/tariff'),
+    tariff: () =>
+      apiRequest<{
+        hlr: {
+          checkType: 'HLR';
+          tariffPlanId: string;
+          code: string;
+          name: string;
+          currency: string;
+          sellPrice: string;
+        } | null;
+        ping: {
+          checkType: 'PING';
+          tariffPlanId: string;
+          code: string;
+          name: string;
+          currency: string;
+          sellPrice: string;
+        } | null;
+      }>('/cabinet/billing/tariff'),
     apiKeys: (q: string) =>
       apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/api-keys?${q}`),
     createApiKey: (body: { name: string }) =>

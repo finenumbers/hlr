@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -10,17 +11,21 @@ import {
 } from 'class-validator';
 
 export class CreateTariffPlanDto {
-  @ApiProperty({ example: 'standard' })
+  @ApiProperty({ example: 'standard-hlr' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)
   code!: string;
 
-  @ApiProperty({ example: 'Standard' })
+  @ApiProperty({ example: 'Standard HLR' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(128)
   name!: string;
+
+  @ApiProperty({ enum: ['HLR', 'PING'], example: 'HLR' })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
 
   @ApiPropertyOptional({ example: 'RUB', default: 'RUB' })
   @IsOptional()
@@ -31,24 +36,13 @@ export class CreateTariffPlanDto {
   @ApiProperty({ example: '0.150000' })
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrPrice!: string;
-
-  @ApiProperty({ example: '0.250000' })
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingPrice!: string;
+  sellPrice!: string;
 
   @ApiPropertyOptional({ example: '0.050000', default: '0' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrProviderCost?: string;
-
-  @ApiPropertyOptional({ example: '0.080000', default: '0' })
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingProviderCost?: string;
+  providerCost?: string;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()

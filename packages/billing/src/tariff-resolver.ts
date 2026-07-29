@@ -28,56 +28,6 @@ function asCheckType(checkType: BillingCheckType): CheckType {
   });
 }
 
-function pickPrices(
-  plan: {
-    id: string;
-    code: string;
-    currency: string;
-    hlrPrice: Prisma.Decimal;
-    pingPrice: Prisma.Decimal;
-    hlrProviderCost: Prisma.Decimal;
-    pingProviderCost: Prisma.Decimal;
-    isActive: boolean;
-  },
-  checkType: CheckType,
-  overrides?: {
-    hlrPriceOverride: Prisma.Decimal | null;
-    pingPriceOverride: Prisma.Decimal | null;
-  } | null,
-): { sellPrice: Prisma.Decimal; providerCost: Prisma.Decimal } {
-  if (!plan.isActive) {
-    throw new BillingError('INVALID_TARIFF', `Tariff plan ${plan.code} is inactive`, {
-      details: { tariffPlanId: plan.id },
-    });
-  }
-
-  const sellRaw =
-    checkType === 'HLR'
-      ? (overrides?.hlrPriceOverride ?? plan.hlrPrice)
-      : (overrides?.pingPriceOverride ?? plan.pingPrice);
-  const providerRaw = checkType === 'HLR' ? plan.hlrProviderCost : plan.pingProviderCost;
-
-  let sellPrice: Prisma.Decimal;
-  let providerCost: Prisma.Decimal;
-  try {
-    sellPrice = assertNonNegativeMoney(sellRaw, 'sellPrice');
-    providerCost = assertNonNegativeMoney(providerRaw, 'providerCost');
-  } catch (error) {
-    throw new BillingError('INVALID_TARIFF', 'Tariff prices must be non-negative decimals', {
-      details: { tariffPlanId: plan.id, checkType },
-      cause: error,
-    });
-  }
-
-  if (sellPrice.lte(0)) {
-    throw new BillingError('INVALID_TARIFF', `Sell price for ${checkType} must be > 0`, {
-      details: { tariffPlanId: plan.id, checkType, sellPrice: moneyToString(sellPrice) },
-    });
-  }
-
-  return { sellPrice, providerCost };
-}
-
 export class TariffResolver {
   private readonly logger: BillingLogger;
 
@@ -97,73 +47,84 @@ export class TariffResolver {
     const now = new Date();
 
     const assignment = await db.tenantTariff.findUnique({
-      where: { tenantId },
+      where: { tenantId_checkType: { tenantId, checkType: type } },
       include: { tariffPlan: true },
     });
 
-    if (assignment) {
-      if (assignment.effectiveTo && assignment.effectiveTo <= now) {
-        throw new BillingError(
-          'TARIFF_NOT_CONFIGURED',
-          `Tenant tariff assignment expired for tenant ${tenantId}`,
-          { details: { tenantId, tenantTariffId: assignment.id } },
-        );
-      }
-      if (assignment.effectiveFrom > now) {
-        throw new BillingError(
-          'TARIFF_NOT_CONFIGURED',
-          `Tenant tariff assignment not yet effective for tenant ${tenantId}`,
-          { details: { tenantId, tenantTariffId: assignment.id } },
-        );
-      }
-
-      const prices = pickPrices(assignment.tariffPlan, type, assignment);
-      const hasOverride =
-        type === 'HLR'
-          ? assignment.hlrPriceOverride !== null
-          : assignment.pingPriceOverride !== null;
-
-      return {
-        tariffPlanId: assignment.tariffPlan.id,
-        tariffPlanCode: assignment.tariffPlan.code,
-        tenantTariffId: assignment.id,
-        currency: assignment.tariffPlan.currency,
-        checkType: type,
-        sellPrice: prices.sellPrice,
-        providerCost: prices.providerCost,
-        source: hasOverride ? 'tenant_override' : 'tenant_plan',
-      };
-    }
-
-    const defaultPlan = await db.tariffPlan.findFirst({
-      where: { isDefault: true, isActive: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (!defaultPlan) {
+    if (!assignment) {
       throw new BillingError(
         'TARIFF_NOT_CONFIGURED',
-        `No tariff configured for tenant ${tenantId} and no default plan`,
+        `No ${type} tariff assigned for tenant ${tenantId}`,
         { details: { tenantId, checkType: type } },
       );
     }
 
-    const prices = pickPrices(defaultPlan, type, null);
-    this.logger.debug('billing.tariff.default_fallback', {
+    if (assignment.effectiveTo && assignment.effectiveTo <= now) {
+      throw new BillingError(
+        'TARIFF_NOT_CONFIGURED',
+        `Tenant ${type} tariff assignment expired for tenant ${tenantId}`,
+        { details: { tenantId, tenantTariffId: assignment.id, checkType: type } },
+      );
+    }
+    if (assignment.effectiveFrom > now) {
+      throw new BillingError(
+        'TARIFF_NOT_CONFIGURED',
+        `Tenant ${type} tariff assignment not yet effective for tenant ${tenantId}`,
+        { details: { tenantId, tenantTariffId: assignment.id, checkType: type } },
+      );
+    }
+
+    const plan = assignment.tariffPlan;
+    if (plan.checkType !== type) {
+      throw new BillingError(
+        'INVALID_TARIFF',
+        `Assigned plan ${plan.code} is ${plan.checkType}, expected ${type}`,
+        { details: { tenantId, tariffPlanId: plan.id, checkType: type } },
+      );
+    }
+    if (!plan.isActive) {
+      throw new BillingError('INVALID_TARIFF', `Tariff plan ${plan.code} is inactive`, {
+        details: { tariffPlanId: plan.id, checkType: type },
+      });
+    }
+
+    let sellPrice: Prisma.Decimal;
+    let providerCost: Prisma.Decimal;
+    try {
+      sellPrice = assertNonNegativeMoney(
+        assignment.priceOverride ?? plan.sellPrice,
+        'sellPrice',
+      );
+      providerCost = assertNonNegativeMoney(plan.providerCost, 'providerCost');
+    } catch (error) {
+      throw new BillingError('INVALID_TARIFF', 'Tariff prices must be non-negative decimals', {
+        details: { tariffPlanId: plan.id, checkType: type },
+        cause: error,
+      });
+    }
+
+    if (sellPrice.lte(0)) {
+      throw new BillingError('INVALID_TARIFF', `Sell price for ${type} must be > 0`, {
+        details: { tariffPlanId: plan.id, checkType: type, sellPrice: moneyToString(sellPrice) },
+      });
+    }
+
+    this.logger.debug('billing.tariff.resolved', {
       tenantId,
-      tariffPlanId: defaultPlan.id,
+      tariffPlanId: plan.id,
       checkType: type,
+      source: assignment.priceOverride !== null ? 'tenant_override' : 'tenant_plan',
     });
 
     return {
-      tariffPlanId: defaultPlan.id,
-      tariffPlanCode: defaultPlan.code,
-      tenantTariffId: null,
-      currency: defaultPlan.currency,
+      tariffPlanId: plan.id,
+      tariffPlanCode: plan.code,
+      tenantTariffId: assignment.id,
+      currency: plan.currency,
       checkType: type,
-      sellPrice: prices.sellPrice,
-      providerCost: prices.providerCost,
-      source: 'default_plan',
+      sellPrice,
+      providerCost,
+      source: assignment.priceOverride !== null ? 'tenant_override' : 'tenant_plan',
     };
   }
 
@@ -192,46 +153,25 @@ export class TariffResolver {
       estimatedSellTotal: moneyToString(estimatedSellTotal),
       estimatedProviderTotal: moneyToString(estimatedProviderTotal),
       currency: resolved.currency,
-      tariff: {
-        tariffPlanId: resolved.tariffPlanId,
-        tariffPlanCode: resolved.tariffPlanCode,
-        tenantTariffId: resolved.tenantTariffId,
-        currency: resolved.currency,
-        checkType: resolved.checkType,
-        sellPrice: moneyToString(resolved.sellPrice),
-        providerCost: moneyToString(resolved.providerCost),
-        source: resolved.source,
-      },
+      tariff: TariffResolver.toTariffView(resolved),
     };
   }
 
   /** Validate plan prices before persist (admin CRUD). */
   static validatePlanPrices(input: {
-    hlrPrice: string;
-    pingPrice: string;
-    hlrProviderCost?: string;
-    pingProviderCost?: string;
+    sellPrice: string;
+    providerCost?: string;
   }): {
-    hlrPrice: Prisma.Decimal;
-    pingPrice: Prisma.Decimal;
-    hlrProviderCost: Prisma.Decimal;
-    pingProviderCost: Prisma.Decimal;
+    sellPrice: Prisma.Decimal;
+    providerCost: Prisma.Decimal;
   } {
     try {
-      const hlrPrice = assertNonNegativeMoney(input.hlrPrice, 'hlrPrice');
-      const pingPrice = assertNonNegativeMoney(input.pingPrice, 'pingPrice');
-      const hlrProviderCost = assertNonNegativeMoney(
-        input.hlrProviderCost ?? '0',
-        'hlrProviderCost',
-      );
-      const pingProviderCost = assertNonNegativeMoney(
-        input.pingProviderCost ?? '0',
-        'pingProviderCost',
-      );
-      if (hlrPrice.lte(0) || pingPrice.lte(0)) {
-        throw new BillingError('INVALID_TARIFF', 'hlrPrice and pingPrice must be > 0');
+      const sellPrice = assertNonNegativeMoney(input.sellPrice, 'sellPrice');
+      const providerCost = assertNonNegativeMoney(input.providerCost ?? '0', 'providerCost');
+      if (sellPrice.lte(0)) {
+        throw new BillingError('INVALID_TARIFF', 'sellPrice must be > 0');
       }
-      return { hlrPrice, pingPrice, hlrProviderCost, pingProviderCost };
+      return { sellPrice, providerCost };
     } catch (error) {
       if (error instanceof BillingError) {
         throw error;

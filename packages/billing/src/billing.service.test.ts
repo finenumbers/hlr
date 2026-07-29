@@ -16,12 +16,11 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10.000000');
-    const plan = db.seedPlan({
+    const plan = db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.500000',
-      pingPrice: '2.000000',
-      hlrProviderCost: '0.400000',
-      isDefault: true,
+      sellPrice: '1.500000',
+      providerCost: '0.400000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -46,11 +45,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '0.500000');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.500000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.500000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -73,11 +71,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '5.000000');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.250000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.250000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -106,11 +103,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10.000000');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '2.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '2.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -137,11 +133,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '4.000000');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -167,11 +162,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10.000000');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
@@ -241,14 +235,13 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '20');
-    const plan = db.seedPlan({
+    const plan = db.seedAssignedPlan(tenantId, {
       code: 'standard',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      hlrProviderCost: '0.300000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      providerCost: '0.300000',
+      checkType: 'HLR',
+      priceOverride: '0.800000',
     });
-    db.assignTenantTariff(tenantId, plan.id, { hlrPriceOverride: '0.800000' });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);
 
@@ -286,11 +279,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     db.seedWallet(tenantId, '10');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '1.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '1.000000',
+      checkType: 'HLR',
     });
     const okItem = db.seedJobItem(tenantId);
     const failItem = db.seedJobItem(tenantId);
@@ -355,11 +347,10 @@ describe('BillingService ledger flows', () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';
     const wallet = db.seedWallet(tenantId, '0');
-    db.seedPlan({
+    db.seedAssignedPlan(tenantId, {
       code: 'default',
-      hlrPrice: '3.000000',
-      pingPrice: '2.000000',
-      isDefault: true,
+      sellPrice: '3.000000',
+      checkType: 'HLR',
     });
     const item = db.seedJobItem(tenantId);
     const billing = createBilling(db);

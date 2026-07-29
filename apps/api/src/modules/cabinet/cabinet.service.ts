@@ -133,20 +133,27 @@ export class CabinetService {
   }
 
   async getTariff(tenantId: string) {
-    const row = await this.prisma.tenantTariff.findUnique({
+    const rows = await this.prisma.tenantTariff.findMany({
       where: { tenantId },
       include: { tariffPlan: true },
     });
-    if (!row) {
-      return null;
-    }
+    const mapOne = (checkType: 'HLR' | 'PING') => {
+      const row = rows.find((r) => r.checkType === checkType);
+      if (!row) {
+        return null;
+      }
+      return {
+        checkType,
+        tariffPlanId: row.tariffPlanId,
+        code: row.tariffPlan.code,
+        name: row.tariffPlan.name,
+        currency: row.tariffPlan.currency,
+        sellPrice: (row.priceOverride ?? row.tariffPlan.sellPrice).toString(),
+      };
+    };
     return {
-      tariffPlanId: row.tariffPlanId,
-      code: row.tariffPlan.code,
-      name: row.tariffPlan.name,
-      currency: row.tariffPlan.currency,
-      hlrPrice: (row.hlrPriceOverride ?? row.tariffPlan.hlrPrice).toString(),
-      pingPrice: (row.pingPriceOverride ?? row.tariffPlan.pingPrice).toString(),
+      hlr: mapOne('HLR'),
+      ping: mapOne('PING'),
     };
   }
 

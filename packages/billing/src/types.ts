@@ -19,7 +19,7 @@ export type ResolvedTariff = {
   sellPrice: Prisma.Decimal;
   /** Internal provider cost for one check (not charged to client). */
   providerCost: Prisma.Decimal;
-  source: 'tenant_override' | 'tenant_plan' | 'default_plan';
+  source: 'tenant_override' | 'tenant_plan';
 };
 
 export type CostEstimate = {

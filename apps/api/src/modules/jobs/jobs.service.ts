@@ -415,6 +415,14 @@ export class JobsService {
       throw error;
     }
 
+    // Fail fast: product must have an assigned tariff (and at least 1 unit of funds).
+    // Full-file affordability is enforced per item at reserve time after parse.
+    await this.billing.assertCanAfford({
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      unitCount: 1,
+    });
+
     if (input.idempotencyKey) {
       const existing = await this.store.findJobByIdempotencyKey(
         input.tenantId,

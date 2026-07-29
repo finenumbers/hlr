@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 
 export class UpdateTariffPlanDto {
-  @ApiPropertyOptional({ example: 'Standard' })
+  @ApiPropertyOptional({ example: 'Standard HLR' })
   @IsOptional()
   @IsString()
   @MaxLength(128)
@@ -25,25 +25,13 @@ export class UpdateTariffPlanDto {
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrPrice?: string;
-
-  @ApiPropertyOptional({ example: '0.250000' })
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingPrice?: string;
+  sellPrice?: string;
 
   @ApiPropertyOptional({ example: '0.050000' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/)
-  hlrProviderCost?: string;
-
-  @ApiPropertyOptional({ example: '0.080000' })
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d+(\.\d+)?$/)
-  pingProviderCost?: string;
+  providerCost?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

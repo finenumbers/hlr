@@ -50,25 +50,40 @@ export default function CabinetBillingPage() {
           </Card>
           <Card>
             <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('cabinetBilling.tariff')}</p>
-            {tariff.data ? (
-              <div className="mt-2 space-y-1 text-sm">
-                <p className="font-medium">
-                  {String(tariff.data.code)} — {String(tariff.data.name)}
-                </p>
-                <p>
-                  {t('cabinetBilling.hlrPrice', {
-                    amount: formatMoney(String(tariff.data.hlrPrice), String(tariff.data.currency ?? 'RUB')),
-                  })}
-                </p>
-                <p>
-                  {t('cabinetBilling.pingPrice', {
-                    amount: formatMoney(String(tariff.data.pingPrice), String(tariff.data.currency ?? 'RUB')),
-                  })}
-                </p>
+            <div className="mt-2 space-y-2 text-sm">
+              <div>
+                <p className="font-medium">{t('cabinetBilling.hlrTitle')}</p>
+                {tariff.data?.hlr ? (
+                  <p>
+                    {tariff.data.hlr.code} —{' '}
+                    {t('cabinetBilling.price', {
+                      amount: formatMoney(
+                        tariff.data.hlr.sellPrice,
+                        tariff.data.hlr.currency,
+                      ),
+                    })}
+                  </p>
+                ) : (
+                  <p className="text-[var(--color-ink-muted)]">{t('cabinetBilling.hlrNotAssigned')}</p>
+                )}
               </div>
-            ) : (
-              <p className="mt-2 text-sm text-[var(--color-ink-muted)]">{t('cabinetBilling.noTariff')}</p>
-            )}
+              <div>
+                <p className="font-medium">{t('cabinetBilling.pingTitle')}</p>
+                {tariff.data?.ping ? (
+                  <p>
+                    {tariff.data.ping.code} —{' '}
+                    {t('cabinetBilling.price', {
+                      amount: formatMoney(
+                        tariff.data.ping.sellPrice,
+                        tariff.data.ping.currency,
+                      ),
+                    })}
+                  </p>
+                ) : (
+                  <p className="text-[var(--color-ink-muted)]">{t('cabinetBilling.pingNotAssigned')}</p>
+                )}
+              </div>
+            </div>
           </Card>
         </div>
         <Card className="mt-4">

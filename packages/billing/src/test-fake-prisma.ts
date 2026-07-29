@@ -39,10 +39,9 @@ type TariffPlanRow = {
   code: string;
   name: string;
   currency: string;
-  hlrPrice: Prisma.Decimal;
-  pingPrice: Prisma.Decimal;
-  hlrProviderCost: Prisma.Decimal;
-  pingProviderCost: Prisma.Decimal;
+  checkType: 'HLR' | 'PING';
+  sellPrice: Prisma.Decimal;
+  providerCost: Prisma.Decimal;
   isDefault: boolean;
   isActive: boolean;
   description: string | null;
@@ -53,9 +52,9 @@ type TariffPlanRow = {
 type TenantTariffRow = {
   id: string;
   tenantId: string;
+  checkType: 'HLR' | 'PING';
   tariffPlanId: string;
-  hlrPriceOverride: Prisma.Decimal | null;
-  pingPriceOverride: Prisma.Decimal | null;
+  priceOverride: Prisma.Decimal | null;
   effectiveFrom: Date;
   effectiveTo: Date | null;
   createdAt: Date;
@@ -319,10 +318,21 @@ export class FakeBillingPrisma {
       where,
       include,
     }: {
-      where: { tenantId: string };
+      where: {
+        tenantId?: string;
+        tenantId_checkType?: { tenantId: string; checkType: 'HLR' | 'PING' };
+      };
       include?: { tariffPlan: boolean };
     }) => {
-      const row = [...this.tenantTariffs.values()].find((t) => t.tenantId === where.tenantId);
+      let row: TenantTariffRow | undefined;
+      if (where.tenantId_checkType) {
+        const { tenantId, checkType } = where.tenantId_checkType;
+        row = [...this.tenantTariffs.values()].find(
+          (t) => t.tenantId === tenantId && t.checkType === checkType,
+        );
+      } else if (where.tenantId) {
+        row = [...this.tenantTariffs.values()].find((t) => t.tenantId === where.tenantId);
+      }
       if (!row) {
         return null;
       }
@@ -339,7 +349,7 @@ export class FakeBillingPrisma {
       where,
       orderBy,
     }: {
-      where: { isDefault?: boolean; isActive?: boolean };
+      where: { isDefault?: boolean; isActive?: boolean; checkType?: 'HLR' | 'PING' };
       orderBy?: { createdAt: 'asc' | 'desc' };
     }) => {
       let rows = [...this.tariffPlans.values()];
@@ -348,6 +358,9 @@ export class FakeBillingPrisma {
       }
       if (where.isActive !== undefined) {
         rows = rows.filter((p) => p.isActive === where.isActive);
+      }
+      if (where.checkType !== undefined) {
+        rows = rows.filter((p) => p.checkType === where.checkType);
       }
       rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       if (orderBy?.createdAt === 'desc') {
@@ -484,10 +497,9 @@ export class FakeBillingPrisma {
 
   seedPlan(input: {
     code: string;
-    hlrPrice: string;
-    pingPrice: string;
-    hlrProviderCost?: string;
-    pingProviderCost?: string;
+    sellPrice: string;
+    providerCost?: string;
+    checkType?: 'HLR' | 'PING';
     isDefault?: boolean;
   }): TariffPlanRow {
     const row: TariffPlanRow = {
@@ -495,10 +507,9 @@ export class FakeBillingPrisma {
       code: input.code,
       name: input.code,
       currency: 'RUB',
-      hlrPrice: dec(input.hlrPrice),
-      pingPrice: dec(input.pingPrice),
-      hlrProviderCost: dec(input.hlrProviderCost ?? '0'),
-      pingProviderCost: dec(input.pingProviderCost ?? '0'),
+      checkType: input.checkType ?? 'HLR',
+      sellPrice: dec(input.sellPrice),
+      providerCost: dec(input.providerCost ?? '0'),
       isDefault: input.isDefault ?? false,
       isActive: true,
       description: null,
@@ -509,24 +520,49 @@ export class FakeBillingPrisma {
     return row;
   }
 
+  /** Seed an HLR plan and assign it to the tenant (typical test setup). */
+  seedAssignedPlan(
+    tenantId: string,
+    input: {
+      code: string;
+      sellPrice: string;
+      providerCost?: string;
+      checkType?: 'HLR' | 'PING';
+      priceOverride?: string;
+    },
+  ): TariffPlanRow {
+    const plan = this.seedPlan(input);
+    this.assignTenantTariff(tenantId, plan.id, {
+      checkType: plan.checkType,
+      priceOverride: input.priceOverride,
+    });
+    return plan;
+  }
+
   assignTenantTariff(
     tenantId: string,
     planId: string,
-    overrides?: { hlrPriceOverride?: string; pingPriceOverride?: string },
+    opts?: { checkType?: 'HLR' | 'PING'; priceOverride?: string },
   ): TenantTariffRow {
+    const plan = this.tariffPlans.get(planId);
+    const checkType = opts?.checkType ?? plan?.checkType ?? 'HLR';
     const row: TenantTariffRow = {
       id: randomUUID(),
       tenantId,
+      checkType,
       tariffPlanId: planId,
-      hlrPriceOverride: overrides?.hlrPriceOverride ? dec(overrides.hlrPriceOverride) : null,
-      pingPriceOverride: overrides?.pingPriceOverride
-        ? dec(overrides.pingPriceOverride)
-        : null,
+      priceOverride: opts?.priceOverride ? dec(opts.priceOverride) : null,
       effectiveFrom: new Date(Date.now() - 60_000),
       effectiveTo: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+    // Replace existing assignment for this tenant+type
+    for (const [id, existing] of this.tenantTariffs) {
+      if (existing.tenantId === tenantId && existing.checkType === checkType) {
+        this.tenantTariffs.delete(id);
+      }
+    }
     this.tenantTariffs.set(row.id, row);
     return row;
   }
