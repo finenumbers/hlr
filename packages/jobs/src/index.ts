@@ -78,3 +78,8 @@ export { PrismaJobsStore } from './prisma-store.js';
 export { InMemoryJobsStore } from './memory-store.js';
 export { InMemoryJobsQueue } from './memory-queue.js';
 export type { QueuedMessage } from './memory-queue.js';
+export {
+  enqueueFinalizeJobOnQueue,
+  finalizeBullJobId,
+} from './enqueue-finalize.js';
+export type { FinalizeQueueLike } from './enqueue-finalize.js';

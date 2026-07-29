@@ -19,8 +19,11 @@ export function formatDate(
   value: string | Date | null | undefined,
   locale: string = 'en-GB',
 ): string {
-  if (!value) return '—';
+  if (value == null || value === '') return '—';
+  // Guard callers that did String(undefined) / String(null).
+  if (value === 'undefined' || value === 'null') return '—';
   const d = typeof value === 'string' ? new Date(value) : value;
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '—';
   const tag = locale.startsWith('ru') ? 'ru-RU' : 'en-GB';
   return new Intl.DateTimeFormat(tag, {
     dateStyle: 'medium',

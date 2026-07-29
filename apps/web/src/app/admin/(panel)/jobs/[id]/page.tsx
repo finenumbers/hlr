@@ -15,15 +15,19 @@ import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
   const t = useT();
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : '';
+  const shortId = id ? `${id.slice(0, 12)}…` : t('common.dash');
   const [page, setPage] = useState(1);
   const job = useQuery({
     queryKey: ['admin', 'job', id],
     queryFn: () => api.admin.job(id),
+    enabled: Boolean(id),
   });
   const items = useQuery({
     queryKey: ['admin', 'job-items', id, page],
     queryFn: () => api.admin.jobItems(id, `page=${page}&pageSize=20`),
+    enabled: Boolean(id),
   });
 
   const j = job.data;
@@ -31,11 +35,11 @@ export default function AdminJobDetailPage() {
   return (
     <div>
       <PageHeader
-        title={t('adminJobs.detailTitle', { id: `${id.slice(0, 12)}…` })}
+        title={t('adminJobs.detailTitle', { id: shortId })}
         description={t('adminJobs.detailDescription')}
       />
       <QueryState
-        isLoading={job.isLoading}
+        isLoading={job.isLoading || !job.data}
         isError={job.isError}
         error={job.error}
         onRetry={() => void job.refetch()}
@@ -43,27 +47,27 @@ export default function AdminJobDetailPage() {
         <div className="mb-4 grid gap-4 sm:grid-cols-4">
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.status')}</p>
-            <Badge className="mt-2">{String(j?.status)}</Badge>
+            <Badge className="mt-2">{String(j?.status ?? t('common.dash'))}</Badge>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.typeSource')}</p>
             <p className="mt-2 font-medium">
-              {String(j?.checkType)} · {String(j?.source)}
+              {String(j?.checkType ?? t('common.dash'))} · {String(j?.source ?? t('common.dash'))}
             </p>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.progress')}</p>
             <p className="mt-2 font-medium">
               {t('adminJobs.progressCell', {
-                ok: String(j?.successCount),
-                total: String(j?.itemCount),
-                fail: String(j?.failureCount),
+                ok: String(j?.successCount ?? 0),
+                total: String(j?.itemCount ?? 0),
+                fail: String(j?.failureCount ?? 0),
               })}
             </p>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.created')}</p>
-            <p className="mt-2 font-medium">{formatDate(String(j?.createdAt))}</p>
+            <p className="mt-2 font-medium">{formatDate(j?.createdAt as string | undefined)}</p>
           </Card>
         </div>
         <QueryState

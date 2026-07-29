@@ -2,6 +2,7 @@ import {
   QUEUE_DEFAULT_JOB_OPTIONS,
   QUEUE_JOB_NAMES,
   QUEUE_NAMES,
+  enqueueFinalizeJobOnQueue,
   type CsvParsePayload,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
@@ -56,9 +57,7 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
   }
 
   async enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void> {
-    await this.finalizeQueue.add(QUEUE_JOB_NAMES.FINALIZE_JOB, payload, {
-      jobId: `finalize:${payload.jobId}`,
-    });
+    await enqueueFinalizeJobOnQueue(this.finalizeQueue, payload);
   }
 
   async enqueueReconciliation(payload: ReconcileStalePayload = {}): Promise<void> {

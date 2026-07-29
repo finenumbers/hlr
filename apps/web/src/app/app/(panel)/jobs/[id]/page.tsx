@@ -18,13 +18,15 @@ import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
   const t = useT();
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : '';
+  const shortId = id ? `${id.slice(0, 12)}…` : t('common.dash');
   const { tenantId } = useAuth();
   const [page, setPage] = useState(1);
   const job = useQuery({
     queryKey: ['cabinet', 'job', tenantId, id],
     queryFn: () => api.cabinet.job(id),
-    enabled: Boolean(tenantId),
+    enabled: Boolean(tenantId && id),
     refetchInterval: (query) => {
       const status = String(query.state.data?.status ?? '');
       return status === 'QUEUED' || status === 'PROCESSING' ? 3000 : false;
@@ -33,7 +35,7 @@ export default function CabinetJobDetailPage() {
   const items = useQuery({
     queryKey: ['cabinet', 'job-items', tenantId, id, page],
     queryFn: () => api.cabinet.jobItems(id, `page=${page}&pageSize=50`),
-    enabled: Boolean(tenantId),
+    enabled: Boolean(tenantId && id),
   });
 
   const checkType = String(job.data?.checkType ?? '');
@@ -81,11 +83,11 @@ export default function CabinetJobDetailPage() {
           job.data
             ? t('cabinetJobs.detailTitle', {
                 service,
-                id: `${id.slice(0, 12)}…`,
+                id: shortId,
               })
             : t('cabinetJobs.detailTitle', {
                 service: t('common.loading'),
-                id: `${id.slice(0, 12)}…`,
+                id: shortId,
               })
         }
         description={t('cabinetJobs.detailDescription')}
@@ -101,11 +103,16 @@ export default function CabinetJobDetailPage() {
           </Button>
         }
       />
-      <QueryState isLoading={job.isLoading} isError={job.isError} error={job.error}>
+      <QueryState
+        isLoading={job.isLoading || !job.data}
+        isError={job.isError}
+        error={job.error}
+        onRetry={() => void job.refetch()}
+      >
         <div className="mb-4 grid gap-4 sm:grid-cols-4">
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.status')}</p>
-            <Badge className="mt-2">{String(job.data?.status)}</Badge>
+            <Badge className="mt-2">{String(job.data?.status ?? t('common.dash'))}</Badge>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.service')}</p>
@@ -114,12 +121,12 @@ export default function CabinetJobDetailPage() {
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.progress')}</p>
             <p className="mt-2 font-medium">
-              {String(job.data?.successCount)}/{String(job.data?.itemCount)}
+              {Number(job.data?.successCount ?? 0)}/{Number(job.data?.itemCount ?? 0)}
             </p>
           </Card>
           <Card>
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.created')}</p>
-            <p className="mt-2 font-medium">{formatDate(String(job.data?.createdAt))}</p>
+            <p className="mt-2 font-medium">{formatDate(job.data?.createdAt as string | undefined)}</p>
           </Card>
         </div>
         <DataTable

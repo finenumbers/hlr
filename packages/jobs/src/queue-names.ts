@@ -43,8 +43,10 @@ export const QUEUE_DEFAULT_JOB_OPTIONS = {
   finalize: {
     attempts: 5,
     backoff: { type: 'exponential' as const, delay: 1_000 },
-    removeOnComplete: { count: 1_000 },
-    removeOnFail: { count: 5_000 },
+    // Drop immediately so an early no-op finalize (pending > 0) does not
+    // block later finalize:${jobId} enqueues via BullMQ jobId dedupe.
+    removeOnComplete: true,
+    removeOnFail: { count: 1_000 },
   },
   reconciliation: {
     attempts: 3,

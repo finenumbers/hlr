@@ -7,6 +7,7 @@ import {
   QUEUE_DEFAULT_JOB_OPTIONS,
   QUEUE_JOB_NAMES,
   QUEUE_NAMES,
+  enqueueFinalizeJobOnQueue,
   type CsvParsePayload,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
@@ -114,10 +115,7 @@ export class BullMqJobsPublisher
       this.finalizeQueue,
       QUEUE_NAMES.JOBS_FINALIZE,
     );
-    await queue.add(QUEUE_JOB_NAMES.FINALIZE_JOB, payload, {
-      // Collapse concurrent finalize requests for the same job.
-      jobId: `finalize:${payload.jobId}`,
-    });
+    await enqueueFinalizeJobOnQueue(queue, payload);
   }
 
   async enqueueReconciliation(payload: ReconcileStalePayload = {}): Promise<void> {
