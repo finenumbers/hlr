@@ -8,7 +8,10 @@
 #   Branch: main
 #   Environment: см. infra/docker/.env.portainer.example
 #
-# Внешний NPM: подключить к сети hlr_net → web:3000 и api:3001
+# Внешний NPM уже в Docker-сети `proxy` (создайте сеть заранее, если её нет):
+#   docker network create proxy
+# api и web подключены к `proxy` → в NPM: web:3000 и api:3001
+# postgres / redis / worker остаются только во внутренней сети hlr_net
 
 name: hlr
 
@@ -110,6 +113,7 @@ services:
       - "127.0.0.1:3001:3001"
     networks:
       - hlr_net
+      - proxy
     healthcheck:
       test:
         [
@@ -165,10 +169,15 @@ services:
       - "127.0.0.1:3000:3000"
     networks:
       - hlr_net
+      - proxy
 
 networks:
   hlr_net:
     name: hlr_net
+  # Внешний Nginx Proxy Manager (и другие прокси) живут в этой сети.
+  proxy:
+    external: true
+    name: proxy
 
 volumes:
   postgres_data:

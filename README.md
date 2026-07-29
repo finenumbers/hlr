@@ -92,7 +92,7 @@ Recommended path:
 1. CI publishes `:latest` images to GHCR: `ghcr.io/finenumbers/hlr-{api,worker,web}`
 2. Deploy **Portainer** stack from GitHub (`main` + [`docker-compose.portainer.yml`](docker-compose.portainer.yml)) — always `latest`
 3. Env: minimal set in [`infra/docker/.env.portainer.example`](infra/docker/.env.portainer.example)
-4. TLS via **external Nginx Proxy Manager** (network `hlr_net` → `web:3000` / `api:3001`)
+4. TLS via **external Nginx Proxy Manager** on Docker network **`proxy`** → `web:3000` / `api:3001`
 
 Also: [MONITORING.md](docs/MONITORING.md) · [BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) · [RUNBOOK.md](docs/RUNBOOK.md)
 

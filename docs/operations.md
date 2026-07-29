@@ -34,7 +34,7 @@ SMSC credentials **никогда** не редактируются из UI.
 
 ## Docker
 
-Production: Portainer stack [`docker-compose.portainer.yml`](../docker-compose.portainer.yml) (всегда `:latest` + `main`) + external NPM on `hlr_net` — see [DEPLOYMENT.md](./DEPLOYMENT.md). Env: [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example).
+Production: Portainer stack [`docker-compose.portainer.yml`](../docker-compose.portainer.yml) (всегда `:latest` + `main`) + external NPM в сети **`proxy`** — see [DEPLOYMENT.md](./DEPLOYMENT.md). Env: [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example). Перед деплоем: `docker network create proxy` (если сети ещё нет).
 
 ```bash
 # App (local build)
@@ -57,12 +57,12 @@ Obs overlay: `prometheus`, `loki`, `promtail`, `grafana`.
 
 NPM **не** входит в compose. См. [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-| Host | Upstream (preferred: network `hlr_net`) | Fallback (same host) |
-|------|------------------------------------------|----------------------|
+| Host | Upstream (сеть `proxy`) | Fallback (same host) |
+|------|-------------------------|----------------------|
 | `app.example.com` | `http://web:3000` | `127.0.0.1:3000` |
 | `api.example.com` | `http://api:3001` | `127.0.0.1:3001` |
 
-Обязательно: TLS, `X-Forwarded-*`, `TRUST_PROXY=true` на API. Подключить контейнер NPM к Docker-сети `hlr_net`.
+Обязательно: TLS, `X-Forwarded-*`. NPM и сервисы `api`/`web` в Docker-сети **`proxy`**.
 
 ### SMSC callback
 

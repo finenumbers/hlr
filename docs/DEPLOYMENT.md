@@ -10,15 +10,15 @@ Related: [MONITORING.md](./MONITORING.md), [BACKUP_RESTORE.md](./BACKUP_RESTORE.
 | **App stack** | `postgres`, `redis`, `api`, `worker`, `web` |
 | **External Nginx Proxy Manager** | TLS termination + host routing (separate from this stack) |
 
-No Kubernetes required. App containers publish only to `127.0.0.1` (or stay on Docker network `hlr_net` for NPM).
+No Kubernetes required. Data plane stays on internal `hlr_net`; `api` / `web` also join external Docker network **`proxy`** where NPM already runs.
 
 | Service | Role | Reachability |
 |---------|------|----------------|
-| `postgres` | Primary data | `127.0.0.1:5432` (+ compose network) |
-| `redis` | BullMQ + rate limits (AOF) | `127.0.0.1:6379` |
-| `api` | NestJS HTTP | `127.0.0.1:3001` or `http://api:3001` on `hlr_net` |
-| `worker` | BullMQ + `/metrics:9091` | compose network only |
-| `web` | Next.js UI | `127.0.0.1:3000` or `http://web:3000` on `hlr_net` |
+| `postgres` | Primary data | `127.0.0.1:5432` + `hlr_net` only |
+| `redis` | BullMQ + rate limits (AOF) | `127.0.0.1:6379` + `hlr_net` only |
+| `api` | NestJS HTTP | `127.0.0.1:3001` + `http://api:3001` on **`proxy`** |
+| `worker` | BullMQ + `/metrics:9091` | `hlr_net` only |
+| `web` | Next.js UI | `127.0.0.1:3000` + `http://web:3000` on **`proxy`** |
 | obs (optional) | Prometheus / Grafana / Loki | see `docker-compose.obs.yml` |
 
 ## Container images (GHCR)
@@ -36,9 +36,15 @@ No Kubernetes required. App containers publish only to `127.0.0.1` (or stay on D
 ## Prerequisites
 
 1. Portainer (или Docker Compose v2).
-2. Внешний **Nginx Proxy Manager** (TLS, DNS).
-3. Минимальный набор env — см. ниже.
-4. Публичные hostname для web + API; callback SMSC доступен из интернета.
+2. Docker-сеть **`proxy`** уже существует (обычно её создаёт стек NPM):
+
+   ```bash
+   docker network create proxy   # только если сети ещё нет
+   ```
+
+3. Внешний **Nginx Proxy Manager** уже подключён к сети `proxy`.
+4. Минимальный набор env — см. ниже.
+5. Публичные hostname для web + API; callback SMSC доступен из интернета.
 
 ## Env для Portainer (минимум)
 
@@ -74,7 +80,7 @@ Portainer → **Stacks** → **Add stack** → **Repository**:
 
 Скопируйте значения из [`infra/docker/.env.portainer.example`](../infra/docker/.env.portainer.example) и подставьте свои секреты/домены.
 
-Deploy. Сеть `hlr_net` создаётся автоматически.
+Deploy. Сеть `hlr_net` создаётся автоматически; сеть **`proxy` должна уже существовать** (external).
 
 ### 3. Migrations (first boot / after schema changes)
 
@@ -99,42 +105,33 @@ Alternatively run migrate from a one-off container that has the image and `DATAB
 
 ## External Nginx Proxy Manager
 
-NPM is **not** part of this compose file. It terminates TLS and forwards to the app.
+NPM **не** входит в этот compose. Предполагается отдельный стек NPM в Docker-сети **`proxy`**.
 
-### Recommended: join Docker network `hlr_net`
+Стек HLR подключает к `proxy` только `api` и `web`. База и Redis в `proxy` не попадают.
 
-1. In Portainer (or `docker network connect`), attach the NPM container to network **`hlr_net`**.
-2. Create Proxy Hosts:
+### Proxy Hosts в NPM
 
 | Domain | Scheme | Forward hostname | Forward port | Notes |
 |--------|--------|------------------|--------------|--------|
 | `app.example.com` | `http` | `web` | `3000` | Websockets on if needed |
 | `api.example.com` | `http` | `api` | `3001` | Public API + health + SMSC callback |
 
-3. Enable SSL (Let's Encrypt) on both hosts.
-4. Always pass / preserve:
+Enable SSL (Let's Encrypt) on both hosts. Always pass / preserve:
 
 - `X-Forwarded-For`
 - `X-Forwarded-Proto`
 - `X-Forwarded-Host` / `Host`
 
-API must run with `TRUST_PROXY=true` so `req.ip` and rate limits see the client IP.
+В стеке уже `TRUST_PROXY=true`, чтобы `req.ip` и rate limits видели IP клиента.
 
 ```text
-Internet → NPM (TLS) ──hlr_net──► web:3000
-                     └──────────► api:3001
+Internet → NPM (TLS) ──proxy──► web:3000
+                    └─────────► api:3001
 ```
 
-### Fallback: host ports (NPM not on `hlr_net`)
+### Fallback: host ports
 
-If NPM cannot join `hlr_net` but runs on the **same Docker host**, forward to:
-
-| Domain | Forward to |
-|--------|------------|
-| `app.example.com` | `127.0.0.1` : `3000` (or host gateway IP if NPM is containerized without host network) |
-| `api.example.com` | `127.0.0.1` : `3001` |
-
-Portainer stack publishes API/Web only on `127.0.0.1` by default (not the public interface).
+Если NPM по какой-то причине не в сети `proxy`, на том же хосте можно слать на `127.0.0.1:3000` / `127.0.0.1:3001` (порты стека слушаются только на localhost).
 
 ### SMSC callback
 
