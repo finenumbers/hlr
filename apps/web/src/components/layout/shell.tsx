@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useTheme } from 'next-themes';
 import type { ReactNode } from 'react';
 
 import { BrandLogo } from '@/components/layout/brand-logo';
@@ -37,7 +36,6 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const { user, logout, can, tenantId, selectTenant } = useAuth();
-  const { theme, setTheme } = useTheme();
   const t = useT();
 
   const items = nav.filter((item) => !item.permission || can(item.permission));
@@ -103,14 +101,6 @@ export function AppShell({
               </select>
             ) : null}
             <LocaleSwitcher />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            >
-              {t('common.theme')}
-            </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => void logout()}>
               {t('common.logout')}
             </Button>

@@ -6,7 +6,6 @@ type DeepString<T> = {
 
 const enMessages = {
   common: {
-    theme: 'Theme',
     language: 'Language',
     logout: 'Log out',
     close: 'Close',

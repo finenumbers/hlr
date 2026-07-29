@@ -1,7 +1,5 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
@@ -24,28 +22,10 @@
   --color-ok: #027a48;
 }
 
-.dark {
-  --color-ink: #e8edf5;
-  --color-ink-muted: #9aa6b8;
-  --color-panel: #0f1520;
-  --color-panel-elevated: #171e2b;
-  --color-line: #2a3445;
-  --color-accent: #fee801;
-  --color-accent-bright: #fae74e;
-  --color-accent-soft: #3a3208;
-  --color-on-accent: #211f20;
-  --color-nav: #211f20;
-  --color-nav-ink: #ffffff;
-  --color-nav-ink-muted: #ffffff;
-  --color-nav-line: #3a3839;
-  --color-danger: #f97066;
-  --color-warn: #fdb022;
-  --color-ok: #6ce9a6;
-}
-
 html,
 body {
   min-height: 100%;
+  color-scheme: light;
 }
 
 body {
@@ -55,12 +35,6 @@ body {
     radial-gradient(1200px 600px at 0% -10%, color-mix(in oklab, var(--color-accent) 12%, transparent), transparent 55%),
     linear-gradient(180deg, var(--color-panel), color-mix(in oklab, var(--color-panel) 88%, #cfd8e6));
   font-family: var(--font-sans);
-}
-
-.dark body {
-  background:
-    radial-gradient(1000px 500px at 10% -20%, color-mix(in oklab, var(--color-accent) 18%, transparent), transparent 50%),
-    linear-gradient(180deg, #0b1018, var(--color-panel));
 }
 
 a {

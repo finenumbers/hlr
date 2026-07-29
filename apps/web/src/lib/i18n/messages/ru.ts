@@ -2,7 +2,6 @@ import type { EnMessages } from './en';
 
 export const ru: EnMessages = {
   common: {
-    theme: 'Тема',
     language: 'Язык',
     logout: 'Выйти',
     close: 'Закрыть',

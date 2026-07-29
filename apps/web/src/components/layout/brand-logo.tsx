@@ -1,8 +1,6 @@
 'use client';
 
 import Image from 'next/image';
-import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -11,31 +9,19 @@ const LIGHT_SRC = '/branding/logo-horizontal.png?v=20260730';
 const DARK_SRC = '/branding/logo-horizontal-dark.png?v=20260730';
 
 /**
- * Light theme → current horizontal logo.
- * Dark theme / always-on-dark surfaces (sidebar) → yellow mark + white wordmark on transparent canvas.
+ * `light` — horizontal logo for light surfaces (login).
+ * `dark` — yellow mark + white wordmark for the always-dark sidebar.
  */
 export function BrandLogo({
-  variant = 'theme',
+  variant = 'light',
   className = 'h-[2.4rem] w-auto',
   priority = false,
 }: {
-  /** `theme` follows next-themes; `dark` always uses the on-dark asset. */
-  variant?: 'theme' | 'dark' | 'light';
+  variant?: 'dark' | 'light';
   className?: string;
   priority?: boolean;
 }) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  let src = LIGHT_SRC;
-  if (variant === 'dark') {
-    src = DARK_SRC;
-  } else if (variant === 'light') {
-    src = LIGHT_SRC;
-  } else if (mounted && resolvedTheme === 'dark') {
-    src = DARK_SRC;
-  }
+  const src = variant === 'dark' ? DARK_SRC : LIGHT_SRC;
 
   return (
     <Image
