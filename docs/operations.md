@@ -4,7 +4,7 @@
 
 **Production docs (E16/E17):**
 
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — Compose, NPM, migrations, safe deploy  
+- [DEPLOYMENT.md](./DEPLOYMENT.md) — Portainer, GHCR, external NPM, migrations, safe deploy  
 - [MONITORING.md](./MONITORING.md) — metrics, Grafana, alerts, logs  
 - [BACKUP_RESTORE.md](./BACKUP_RESTORE.md) — Postgres logical + WAL/PITR, Redis AOF/RDB, restore drills  
 - [RUNBOOK.md](./RUNBOOK.md) — incidents & pilot checklist  
@@ -34,15 +34,21 @@ SMSC credentials **никогда** не редактируются из UI.
 
 ## Docker
 
+Production: Portainer stack [`docker-compose.portainer.yml`](../docker-compose.portainer.yml) + external NPM on network `hlr_net` — see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ```bash
-# App
+# App (local build)
 docker compose up -d --build
 
+# App (pull GHCR)
+IMAGE_TAG=latest docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+IMAGE_TAG=latest docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
 # App + observability
-docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
 
 # Production-oriented binds + secrets
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 Services: `postgres`, `redis` (AOF), `api`, `worker`, `web`.  
@@ -54,12 +60,12 @@ Obs overlay: `prometheus`, `loki`, `promtail`, `grafana`.
 
 NPM **не** входит в compose. См. [DEPLOYMENT.md](./DEPLOYMENT.md).
 
-| Host | Upstream |
-|------|----------|
-| `app.example.com` | `127.0.0.1:3000` (web) |
-| `api.example.com` | `127.0.0.1:3001` (api) |
+| Host | Upstream (preferred: network `hlr_net`) | Fallback (same host) |
+|------|------------------------------------------|----------------------|
+| `app.example.com` | `http://web:3000` | `127.0.0.1:3000` |
+| `api.example.com` | `http://api:3001` | `127.0.0.1:3001` |
 
-Обязательно: TLS, `X-Forwarded-*`, `TRUST_PROXY=true` на API.
+Обязательно: TLS, `X-Forwarded-*`, `TRUST_PROXY=true` на API. Подключить контейнер NPM к Docker-сети `hlr_net`.
 
 ### SMSC callback
 

@@ -6,13 +6,13 @@ import { RequireAuth } from '@/components/auth/require-permission';
 import { AppShell, type NavItem } from '@/components/layout/shell';
 
 const nav: NavItem[] = [
-  { href: '/app', label: 'Dashboard', permission: 'cabinet.access' },
-  { href: '/app/submit', label: 'Submit', permission: 'cabinet.jobs.submit' },
-  { href: '/app/jobs', label: 'Jobs', permission: 'cabinet.jobs.read' },
-  { href: '/app/billing', label: 'Billing', permission: 'cabinet.billing.read' },
-  { href: '/app/api-keys', label: 'API keys', permission: 'cabinet.access' },
-  { href: '/app/webhooks', label: 'Webhooks', permission: 'cabinet.access' },
-  { href: '/app/settings', label: 'Settings', permission: 'cabinet.access' },
+  { href: '/app', labelKey: 'nav.dashboard', permission: 'cabinet.access' },
+  { href: '/app/submit', labelKey: 'nav.submit', permission: 'cabinet.jobs.submit' },
+  { href: '/app/jobs', labelKey: 'nav.jobs', permission: 'cabinet.jobs.read' },
+  { href: '/app/billing', labelKey: 'nav.billing', permission: 'cabinet.billing.read' },
+  { href: '/app/api-keys', labelKey: 'nav.apiKeys', permission: 'cabinet.access' },
+  { href: '/app/webhooks', labelKey: 'nav.webhooks', permission: 'cabinet.access' },
+  { href: '/app/settings', labelKey: 'nav.settings', permission: 'cabinet.access' },
 ];
 
 export default function CabinetPanelLayout({ children }: { children: ReactNode }) {

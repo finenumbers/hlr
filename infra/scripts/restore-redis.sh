@@ -34,7 +34,7 @@ echo "[redis-restore] copying snapshot from ${SNAPSHOT_DIR}"
 # We copy into the container filesystem while redis is stopped using a helper:
 # docker compose stop redis; docker cp into the volume via a temp container.
 
-COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-finenumbers}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-hlr}"
 VOLUME_NAME="${REDIS_VOLUME:-${COMPOSE_PROJECT}_redis_data}"
 
 echo "[redis-restore] using volume ${VOLUME_NAME}"

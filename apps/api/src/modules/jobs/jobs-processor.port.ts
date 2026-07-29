@@ -1,4 +1,5 @@
 import type {
+  CsvParsePayload,
   FinalizeJobPayload,
   JobsQueuePublisher,
   PollItemPayload,
@@ -18,6 +19,8 @@ export abstract class JobsProcessorPort implements JobsQueuePublisher {
   abstract enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void>;
 
   abstract enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;
+
+  abstract enqueueCsvParse(payload: CsvParsePayload): Promise<void>;
 
   /** @deprecated Use enqueuePollItem — kept for older call sites. */
   enqueuePollCheck(jobItemId: string, tenantId: string): Promise<void> {

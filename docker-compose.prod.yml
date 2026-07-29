@@ -1,7 +1,17 @@
-# Production-oriented overrides (bind data ports to localhost, enable proxy trust, AOF, uploads).
+# Production-oriented overrides (bind data ports to localhost, enable proxy trust, uploads).
+#
+# Preferred (pull GHCR images published by CI):
+#   export IMAGE_TAG=latest   # or sha-XXXX / semver
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Local build fallback:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Portainer + external NPM: use docker-compose.portainer.yml (see docs/DEPLOYMENT.md).
+#
 # Optional obs:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.obs.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.obs.yml up -d
 #
 # Backups:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile backup run --rm postgres-backup

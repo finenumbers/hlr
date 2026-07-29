@@ -161,7 +161,11 @@ export class PrismaJobsStore implements JobsStore {
       this.prisma.platformSettings.findUnique({ where: { id: 'default' } }),
       this.prisma.tenant.findUnique({
         where: { id: tenantId },
-        select: { maxBatchPhones: true },
+        select: {
+          maxBatchPhones: true,
+          maxCsvRows: true,
+          maxCsvBytes: true,
+        },
       }),
     ]);
 
@@ -170,6 +174,14 @@ export class PrismaJobsStore implements JobsStore {
         tenant?.maxBatchPhones ??
         platform?.maxBatchPhones ??
         DEFAULT_JOB_RUNTIME_SETTINGS.maxBatchPhones,
+      maxCsvRows:
+        tenant?.maxCsvRows ??
+        platform?.maxCsvRows ??
+        DEFAULT_JOB_RUNTIME_SETTINGS.maxCsvRows,
+      maxCsvBytes:
+        tenant?.maxCsvBytes ??
+        platform?.maxCsvBytes ??
+        DEFAULT_JOB_RUNTIME_SETTINGS.maxCsvBytes,
       checkTimeoutSec:
         platform?.checkTimeoutSec ?? DEFAULT_JOB_RUNTIME_SETTINGS.checkTimeoutSec,
       pollIntervalSec:
@@ -238,6 +250,80 @@ export class PrismaJobsStore implements JobsStore {
       job: mapJob(created),
       items: created.items.map(mapItem),
     };
+  }
+
+  async createJobShell(input: {
+    tenantId: string;
+    checkType: JobRecord['checkType'];
+    source: JobRecord['source'];
+    idempotencyKey: string | null;
+    createdByUserId: string | null;
+    apiKeyId: string | null;
+    originalFilename: string | null;
+    currency: string;
+    metadata: Record<string, unknown> | null;
+  }): Promise<JobRecord> {
+    const created = await this.prisma.job.create({
+      data: {
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        source: input.source,
+        status: 'QUEUED',
+        itemCount: 0,
+        currency: input.currency,
+        originalFilename: input.originalFilename,
+        idempotencyKey: input.idempotencyKey,
+        createdByUserId: input.createdByUserId,
+        apiKeyId: input.apiKeyId,
+        metadata: toJson(input.metadata),
+      },
+    });
+    return mapJob(created);
+  }
+
+  async attachItemsToJob(input: {
+    jobId: string;
+    tenantId: string;
+    checkType: JobRecord['checkType'];
+    phones: string[];
+    currency: string;
+  }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
+    const CHUNK = 1_000;
+    const allItems: JobItemRecord[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (let i = 0; i < input.phones.length; i += CHUNK) {
+        const slice = input.phones.slice(i, i + CHUNK);
+        await tx.jobItem.createMany({
+          data: slice.map((phoneE164) => ({
+            jobId: input.jobId,
+            tenantId: input.tenantId,
+            checkType: input.checkType,
+            status: 'QUEUED' as const,
+            phoneE164,
+            currency: input.currency,
+          })),
+        });
+      }
+      await tx.job.update({
+        where: { id: input.jobId },
+        data: {
+          itemCount: input.phones.length,
+          status: 'QUEUED',
+        },
+      });
+    });
+
+    const rows = await this.prisma.jobItem.findMany({
+      where: { jobId: input.jobId },
+      orderBy: { createdAt: 'asc' },
+    });
+    allItems.push(...rows.map(mapItem));
+    const job = await this.findJobById(input.jobId);
+    if (!job) {
+      throw new Error(`Job ${input.jobId} missing after attachItemsToJob`);
+    }
+    return { job, items: allItems };
   }
 
   async listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]> {

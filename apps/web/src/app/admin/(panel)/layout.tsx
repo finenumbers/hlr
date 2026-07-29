@@ -6,12 +6,14 @@ import { RequireAuth } from '@/components/auth/require-permission';
 import { AppShell, type NavItem } from '@/components/layout/shell';
 
 const nav: NavItem[] = [
-  { href: '/admin', label: 'Dashboard', permission: 'admin.access' },
-  { href: '/admin/tenants', label: 'Tenants', permission: 'admin.tenants.read' },
-  { href: '/admin/jobs', label: 'Jobs', permission: 'admin.jobs.read' },
-  { href: '/admin/billing', label: 'Billing', permission: 'admin.billing.read' },
-  { href: '/admin/monitoring', label: 'Monitoring', permission: 'admin.monitoring.read' },
-  { href: '/admin/audit', label: 'Audit', permission: 'admin.audit.read' },
+  { href: '/admin', labelKey: 'nav.dashboard', permission: 'admin.access' },
+  { href: '/admin/tenants', labelKey: 'nav.tenants', permission: 'admin.tenants.read' },
+  { href: '/admin/tariffs', labelKey: 'nav.tariffs', permission: 'admin.billing.read' },
+  { href: '/admin/jobs', labelKey: 'nav.jobs', permission: 'admin.jobs.read' },
+  { href: '/admin/billing', labelKey: 'nav.billing', permission: 'admin.billing.read' },
+  { href: '/admin/monitoring', labelKey: 'nav.monitoring', permission: 'admin.monitoring.read' },
+  { href: '/admin/audit', labelKey: 'nav.audit', permission: 'admin.audit.read' },
+  { href: '/admin/settings', labelKey: 'nav.settings', permission: 'admin.settings.read' },
 ];
 
 export default function AdminPanelLayout({ children }: { children: ReactNode }) {

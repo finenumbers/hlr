@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export function Dialog({
@@ -18,12 +19,13 @@ export function Dialog({
   children: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
-        aria-label="Close dialog backdrop"
+        aria-label={t('common.closeDialogBackdrop')}
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
@@ -36,7 +38,7 @@ export function Dialog({
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">{title}</h2>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-            Close
+            {t('common.close')}
           </Button>
         </div>
         {children}
@@ -51,7 +53,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   danger,
   loading,
 }: {
@@ -64,12 +66,13 @@ export function ConfirmDialog({
   danger?: boolean;
   loading?: boolean;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onClose={onClose} title={title}>
       <p className="mb-5 text-sm text-[var(--color-ink-muted)]">{description}</p>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           type="button"
@@ -77,7 +80,7 @@ export function ConfirmDialog({
           onClick={onConfirm}
           disabled={loading}
         >
-          {loading ? 'Working…' : confirmLabel}
+          {loading ? t('common.working') : (confirmLabel ?? t('common.confirm'))}
         </Button>
       </div>
     </Dialog>

@@ -12,19 +12,22 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { ApiError, api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatMoney } from '@/lib/utils';
 
 const schema = z.object({
   checkType: z.enum(['HLR', 'PING']),
-  phonesText: z.string().min(3),
+  phonesText: z.string(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export default function SubmitPage() {
+  const t = useT();
   const router = useRouter();
   const [estimate, setEstimate] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { checkType: 'HLR', phonesText: '' },
@@ -47,7 +50,7 @@ export default function SubmitPage() {
         unitCount: Math.max(phones.length, 1),
       }),
     onSuccess: (data) => setEstimate(data),
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Estimate failed'),
+    onError: (err) => setError(err instanceof ApiError ? err.message : t('cabinetSubmit.estimateFailed')),
   });
 
   const submitMut = useMutation({
@@ -63,44 +66,92 @@ export default function SubmitPage() {
       return api.cabinet.submitJob({ checkType: values.checkType, phones: list });
     },
     onSuccess: (job) => {
-      const id = (job as { id?: string }).id;
+      const id =
+        (job as { job?: { id?: string }; id?: string }).job?.id ??
+        (job as { id?: string }).id;
       if (id) router.push(`/app/jobs/${id}`);
     },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Submit failed'),
+    onError: (err) => setError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
+  });
+
+  const csvMut = useMutation({
+    mutationFn: async () => {
+      if (!csvFile) throw new Error('No file');
+      return api.cabinet.submitJobCsv(form.getValues('checkType'), csvFile);
+    },
+    onSuccess: (job) => {
+      const id =
+        (job as { job?: { id?: string }; id?: string }).job?.id ??
+        (job as { id?: string }).id;
+      if (id) router.push(`/app/jobs/${id}`);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
   });
 
   return (
     <div>
       <PageHeader
-        title="Submit"
-        description="Single HLR/Ping or bulk paste. Pre-check estimated price before send."
+        title={t('cabinetSubmit.title')}
+        description={t('cabinetSubmit.description')}
       />
       <Card className="max-w-2xl space-y-4">
         <div>
-          <Label>Check type</Label>
+          <Label>{t('cabinetSubmit.checkType')}</Label>
           <select
             className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
             {...form.register('checkType')}
           >
-            <option value="HLR">HLR</option>
-            <option value="PING">Ping-SMS</option>
+            <option value="HLR">{t('cabinetSubmit.optionHlr')}</option>
+            <option value="PING">{t('cabinetSubmit.optionPing')}</option>
           </select>
         </div>
+
         <div>
-          <Label>Phone numbers (E.164, one per line or comma-separated)</Label>
+          <Label>{t('cabinetSubmit.csvFile')}</Label>
+          <input
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            className="mt-1 block w-full text-sm"
+            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+          />
+          <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{t('cabinetSubmit.csvHint')}</p>
+          <div className="mt-2">
+            <Button
+              type="button"
+              disabled={!csvFile || csvMut.isPending}
+              onClick={() => {
+                setError(null);
+                csvMut.mutate();
+              }}
+            >
+              {csvMut.isPending ? t('cabinetSubmit.submitting') : t('cabinetSubmit.submitCsv')}
+            </Button>
+          </div>
+        </div>
+
+        <p className="text-center text-xs uppercase tracking-wide text-[var(--color-ink-muted)]">
+          {t('cabinetSubmit.orPaste')}
+        </p>
+
+        <div>
+          <Label>{t('cabinetSubmit.phones')}</Label>
           <textarea
             className="min-h-40 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-3 py-2 text-sm"
             {...form.register('phonesText')}
-            placeholder="+79991234567"
+            placeholder={t('cabinetSubmit.phonesPlaceholder')}
           />
-          <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{phones.length} numbers</p>
+          <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+            {t('cabinetSubmit.numbersCount', { count: phones.length })}
+          </p>
         </div>
         {estimate ? (
           <p className="text-sm">
-            Estimated:{' '}
-            <strong>
-              {formatMoney(String(estimate.totalAmount ?? estimate.amount ?? '0'), String(estimate.currency ?? 'RUB'))}
-            </strong>
+            {t('cabinetSubmit.estimated', {
+              amount: formatMoney(
+                String(estimate.totalAmount ?? estimate.amount ?? '0'),
+                String(estimate.currency ?? 'RUB'),
+              ),
+            })}
           </p>
         ) : null}
         {error ? <p className="text-sm text-[var(--color-danger)]">{error}</p> : null}
@@ -114,7 +165,7 @@ export default function SubmitPage() {
               estimateMut.mutate();
             }}
           >
-            Estimate price
+            {t('cabinetSubmit.estimatePrice')}
           </Button>
           <Button
             type="button"
@@ -124,7 +175,7 @@ export default function SubmitPage() {
               submitMut.mutate();
             }}
           >
-            {submitMut.isPending ? 'Submitting…' : 'Submit'}
+            {submitMut.isPending ? t('cabinetSubmit.submitting') : t('cabinetSubmit.submit')}
           </Button>
         </div>
       </Card>

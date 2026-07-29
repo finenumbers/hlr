@@ -68,10 +68,19 @@ export type JobProgress = {
 
 export type JobRuntimeSettings = {
   maxBatchPhones: number;
+  maxCsvRows: number;
+  maxCsvBytes: number;
   checkTimeoutSec: number;
   pollIntervalSec: number;
   pollMaxAttempts: number;
   submitBatchSize: number;
+};
+
+export type CsvParsePayload = {
+  jobId: string;
+  tenantId: string;
+  filePath: string;
+  requestId?: string;
 };
 
 export type CreateJobInput = {

@@ -49,6 +49,27 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
+async function parseApiResponse<T>(res: Response): Promise<T> {
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
+  const text = await res.text();
+  const data = text ? (JSON.parse(text) as unknown) : null;
+
+  if (!res.ok) {
+    const err = data as { error?: { message?: string; code?: string; details?: unknown } } | null;
+    throw new ApiError(
+      err?.error?.message ?? `Request failed (${res.status})`,
+      res.status,
+      err?.error?.code,
+      err?.error?.details,
+    );
+  }
+
+  return data as T;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -70,24 +91,33 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     signal: options.signal,
   });
 
-  if (res.status === 204) {
-    return undefined as T;
+  return parseApiResponse<T>(res);
+}
+
+/** Multipart upload (do not set Content-Type — browser sets boundary). */
+export async function apiFormRequest<T>(
+  path: string,
+  form: FormData,
+  options: Omit<RequestOptions, 'body'> = {},
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+  if (options.auth !== false) {
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
   }
+  const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
+  if (tenantId) headers['X-Tenant-Id'] = tenantId;
 
-  const text = await res.text();
-  const data = text ? (JSON.parse(text) as unknown) : null;
+  const res = await fetch(`${API_URL}${path}`, {
+    method: options.method ?? 'POST',
+    headers,
+    body: form,
+    signal: options.signal,
+  });
 
-  if (!res.ok) {
-    const err = data as { error?: { message?: string; code?: string; details?: unknown } } | null;
-    throw new ApiError(
-      err?.error?.message ?? `Request failed (${res.status})`,
-      res.status,
-      err?.error?.code,
-      err?.error?.details,
-    );
-  }
-
-  return data as T;
+  return parseApiResponse<T>(res);
 }
 
 export type LoginResponse = {
@@ -117,8 +147,42 @@ export const api = {
     dashboard: () => apiRequest<Record<string, unknown>>('/admin/dashboard'),
     tenants: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/admin/tenants?${q}`),
     tenant: (id: string) => apiRequest<Record<string, unknown>>(`/admin/tenants/${id}`),
+    createTenant: (body: {
+      slug: string;
+      name: string;
+      rateLimitRpm?: number;
+      maxCsvRows?: number;
+      maxCsvBytes?: number;
+      maxBatchPhones?: number;
+      owner?: {
+        email: string;
+        password: string;
+        name?: string;
+        role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+      };
+    }) => apiRequest<Record<string, unknown>>('/admin/tenants', { method: 'POST', body }),
     updateTenantStatus: (id: string, status: string) =>
       apiRequest(`/admin/tenants/${id}`, { method: 'PATCH', body: { status } }),
+    updateTenantLimits: (
+      id: string,
+      body: {
+        rateLimitRpm?: number | null;
+        maxCsvRows?: number | null;
+        maxCsvBytes?: number | null;
+        maxBatchPhones?: number | null;
+      },
+    ) => apiRequest(`/admin/tenants/${id}/limits`, { method: 'PATCH', body }),
+    tenantUsers: (id: string) =>
+      apiRequest<{ items: Array<Record<string, unknown>> }>(`/admin/tenants/${id}/users`),
+    createTenantUser: (
+      id: string,
+      body: {
+        email: string;
+        password: string;
+        name?: string;
+        role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+      },
+    ) => apiRequest(`/admin/tenants/${id}/users`, { method: 'POST', body }),
     assignTariff: (id: string, body: { tariffPlanId: string }) =>
       apiRequest(`/admin/tenants/${id}/tariff`, { method: 'POST', body }),
     jobs: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/admin/jobs?${q}`),
@@ -143,8 +207,65 @@ export const api = {
       description?: string;
     }) => apiRequest('/admin/billing/adjust', { method: 'POST', body }),
     monitoring: () => apiRequest<Record<string, unknown>>('/admin/monitoring'),
+    estimateSmscCost: (body: { checkType: 'HLR' | 'PING'; phone: string }) =>
+      apiRequest<{
+        providerCode: string;
+        checkType: string;
+        phoneE164: string;
+        cost: string;
+        currency: string | null;
+        parts: number | null;
+      }>('/admin/provider/smsc/estimate-cost', { method: 'POST', body }),
+    smscBalance: () =>
+      apiRequest<{
+        providerCode: string;
+        balance: string;
+        currency: string | null;
+      }>('/admin/provider/smsc/balance'),
     audit: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/admin/audit?${q}`),
-    tariffs: () => apiRequest<Paginated<Record<string, unknown>>>('/admin/tariffs?pageSize=100'),
+    tariffs: (q = 'pageSize=100') =>
+      apiRequest<Paginated<Record<string, unknown>>>(`/admin/tariffs?${q}`),
+    createTariff: (body: {
+      code: string;
+      name: string;
+      currency?: string;
+      hlrPrice: string;
+      pingPrice: string;
+      hlrProviderCost?: string;
+      pingProviderCost?: string;
+      isDefault?: boolean;
+      isActive?: boolean;
+      description?: string;
+    }) => apiRequest<Record<string, unknown>>('/admin/tariffs', { method: 'POST', body }),
+    updateTariff: (
+      id: string,
+      body: {
+        name?: string;
+        currency?: string;
+        hlrPrice?: string;
+        pingPrice?: string;
+        hlrProviderCost?: string;
+        pingProviderCost?: string;
+        isDefault?: boolean;
+        isActive?: boolean;
+        description?: string | null;
+      },
+    ) => apiRequest<Record<string, unknown>>(`/admin/tariffs/${id}`, { method: 'PATCH', body }),
+    settings: () => apiRequest<Record<string, unknown>>('/admin/settings'),
+    updateSettings: (body: {
+      currency?: string;
+      defaultRateLimitRpm?: number;
+      maxCsvRows?: number;
+      maxCsvBytes?: number;
+      maxBatchPhones?: number;
+      checkTimeoutSec?: number;
+      pollIntervalSec?: number;
+      webhookMaxAttempts?: number;
+      webhookTimeoutMs?: number;
+      retentionDays?: number;
+      smscBaseUrl?: string | null;
+      extras?: Record<string, unknown> | null;
+    }) => apiRequest<Record<string, unknown>>('/admin/settings', { method: 'PATCH', body }),
   },
 
   cabinet: {
@@ -155,6 +276,12 @@ export const api = {
       apiRequest('/cabinet/checks', { method: 'POST', body }),
     submitJob: (body: { checkType: 'HLR' | 'PING'; phones: string[] }) =>
       apiRequest('/cabinet/jobs', { method: 'POST', body }),
+    submitJobCsv: (checkType: 'HLR' | 'PING', file: File) => {
+      const form = new FormData();
+      form.set('checkType', checkType);
+      form.set('file', file);
+      return apiFormRequest('/cabinet/jobs/csv', form);
+    },
     jobs: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/jobs?${q}`),
     job: (id: string) => apiRequest<Record<string, unknown>>(`/cabinet/jobs/${id}`),
     jobItems: (id: string, q: string) =>

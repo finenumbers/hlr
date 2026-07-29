@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
 const EVENTS = ['check.completed', 'check.failed', 'job.completed'] as const;
@@ -29,6 +30,7 @@ const schema = z.object({
 });
 
 export default function WebhooksPage() {
+  const t = useT();
   const { tenantId, can } = useAuth();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -98,51 +100,61 @@ export default function WebhooksPage() {
   return (
     <div>
       <PageHeader
-        title="Webhooks"
-        description="Endpoint configs, signing secrets, and recent delivery status."
+        title={t('cabinetWebhooks.title')}
+        description={t('cabinetWebhooks.description')}
         actions={
           <Can permission="cabinet.webhooks.manage">
             <Button type="button" onClick={() => setCreateOpen(true)}>
-              Add endpoint
+              {t('cabinetWebhooks.addEndpoint')}
             </Button>
           </Can>
         }
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Succeeded (7d)" value={counts.SUCCEEDED ?? 0} tone="ok" />
-        <MetricCard label="Failed (7d)" value={counts.FAILED ?? 0} tone="warn" />
-        <MetricCard label="Dead (7d)" value={counts.DEAD ?? 0} tone="danger" />
-        <MetricCard label="Pending (7d)" value={(counts.PENDING ?? 0) + (counts.DELIVERING ?? 0)} />
+        <MetricCard label={t('cabinetWebhooks.succeeded')} value={counts.SUCCEEDED ?? 0} tone="ok" />
+        <MetricCard label={t('cabinetWebhooks.failed')} value={counts.FAILED ?? 0} tone="warn" />
+        <MetricCard label={t('cabinetWebhooks.dead')} value={counts.DEAD ?? 0} tone="danger" />
+        <MetricCard
+          label={t('cabinetWebhooks.pending')}
+          value={(counts.PENDING ?? 0) + (counts.DELIVERING ?? 0)}
+        />
       </div>
 
-      <h2 className="mb-3 font-semibold">Endpoints</h2>
+      <h2 className="mb-3 font-semibold">{t('cabinetWebhooks.endpoints')}</h2>
       <QueryState
         isLoading={endpoints.isLoading}
         isError={endpoints.isError}
         error={endpoints.error}
         isEmpty={!endpoints.data?.items.length}
-        emptyTitle="No webhook endpoints"
+        emptyTitle={t('cabinetWebhooks.emptyEndpoints')}
         onRetry={() => void endpoints.refetch()}
       >
         <DataTable
           columns={[
-            { key: 'url', header: 'URL', cell: (r) => <span className="break-all">{String(r.url)}</span> },
+            {
+              key: 'url',
+              header: t('cabinetWebhooks.colUrl'),
+              cell: (r) => <span className="break-all">{String(r.url)}</span>,
+            },
             {
               key: 'events',
-              header: 'Events',
-              cell: (r) => ((r.events as string[] | undefined) ?? []).join(', ') || 'all',
+              header: t('cabinetWebhooks.colEvents'),
+              cell: (r) =>
+                ((r.events as string[] | undefined) ?? []).join(', ') || t('cabinetWebhooks.eventsAll'),
             },
             {
               key: 'enabled',
-              header: 'Enabled',
+              header: t('cabinetWebhooks.colEnabled'),
               cell: (r) => (
-                <Badge tone={r.enabled ? 'ok' : 'warn'}>{r.enabled ? 'yes' : 'disabled'}</Badge>
+                <Badge tone={r.enabled ? 'ok' : 'warn'}>
+                  {r.enabled ? t('cabinetWebhooks.enabledYes') : t('cabinetWebhooks.enabledDisabled')}
+                </Badge>
               ),
             },
             {
               key: 'failures',
-              header: 'Failures',
+              header: t('cabinetWebhooks.colFailures'),
               cell: (r) => String(r.consecutiveFailures ?? 0),
             },
             {
@@ -152,10 +164,10 @@ export default function WebhooksPage() {
                 can('cabinet.webhooks.manage') ? (
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="secondary" onClick={() => setRotateId(String(r.id))}>
-                      Rotate secret
+                      {t('cabinetWebhooks.rotateSecret')}
                     </Button>
                     <Button type="button" size="sm" variant="danger" onClick={() => setDeleteId(String(r.id))}>
-                      Delete
+                      {t('cabinetWebhooks.delete')}
                     </Button>
                   </div>
                 ) : null,
@@ -171,7 +183,7 @@ export default function WebhooksPage() {
       </QueryState>
 
       <div className="mt-8 mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-semibold">Recent deliveries</h2>
+        <h2 className="font-semibold">{t('cabinetWebhooks.deliveries')}</h2>
         <select
           className="h-9 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
           value={statusFilter}
@@ -180,7 +192,7 @@ export default function WebhooksPage() {
             setStatusFilter(e.target.value);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">{t('cabinetWebhooks.allStatuses')}</option>
           {['PENDING', 'DELIVERING', 'SUCCEEDED', 'FAILED', 'DEAD'].map((s) => (
             <option key={s} value={s}>
               {s}
@@ -193,15 +205,19 @@ export default function WebhooksPage() {
         isError={deliveries.isError}
         error={deliveries.error}
         isEmpty={!deliveries.data?.items.length}
-        emptyTitle="No deliveries yet"
+        emptyTitle={t('cabinetWebhooks.emptyDeliveries')}
       >
         <DataTable
           columns={[
-            { key: 'when', header: 'When', cell: (r) => formatDate(String(r.createdAt)) },
-            { key: 'event', header: 'Event', cell: (r) => String(r.eventType) },
+            {
+              key: 'when',
+              header: t('cabinetWebhooks.colWhen'),
+              cell: (r) => formatDate(String(r.createdAt)),
+            },
+            { key: 'event', header: t('cabinetWebhooks.colEvent'), cell: (r) => String(r.eventType) },
             {
               key: 'status',
-              header: 'Status',
+              header: t('cabinetWebhooks.colStatus'),
               cell: (r) => (
                 <Badge
                   tone={
@@ -218,13 +234,13 @@ export default function WebhooksPage() {
             },
             {
               key: 'attempts',
-              header: 'Attempts',
-              cell: (r) => `${r.attemptCount ?? 0}/${r.maxAttempts ?? '—'}`,
+              header: t('cabinetWebhooks.colAttempts'),
+              cell: (r) => `${r.attemptCount ?? 0}/${r.maxAttempts ?? t('common.dash')}`,
             },
             {
               key: 'code',
-              header: 'HTTP',
-              cell: (r) => String(r.lastResponseCode ?? '—'),
+              header: t('cabinetWebhooks.colHttp'),
+              cell: (r) => String(r.lastResponseCode ?? t('common.dash')),
             },
           ]}
           rows={(deliveries.data?.items ?? []) as Array<Record<string, unknown>>}
@@ -236,21 +252,21 @@ export default function WebhooksPage() {
         />
       </QueryState>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title="Add webhook endpoint">
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title={t('cabinetWebhooks.createTitle')}>
         <form
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => createMut.mutate(values))}
         >
           <div>
-            <Label htmlFor="url">URL</Label>
-            <Input id="url" {...form.register('url')} placeholder="https://example.com/hooks" />
+            <Label htmlFor="url">{t('cabinetWebhooks.url')}</Label>
+            <Input id="url" {...form.register('url')} placeholder={t('cabinetWebhooks.urlPlaceholder')} />
           </div>
           <div>
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{t('cabinetWebhooks.descriptionLabel')}</Label>
             <Input id="description" {...form.register('description')} />
           </div>
           <fieldset className="space-y-2">
-            <Label>Events</Label>
+            <Label>{t('cabinetWebhooks.events')}</Label>
             {EVENTS.map((event) => (
               <label key={event} className="flex items-center gap-2 text-sm">
                 <input
@@ -272,15 +288,13 @@ export default function WebhooksPage() {
             ))}
           </fieldset>
           <Button type="submit" disabled={createMut.isPending}>
-            {createMut.isPending ? 'Creating…' : 'Create'}
+            {createMut.isPending ? t('cabinetWebhooks.creating') : t('cabinetWebhooks.create')}
           </Button>
         </form>
       </Dialog>
 
-      <Dialog open={Boolean(secret)} onClose={() => setSecret(null)} title="Signing secret (once)">
-        <p className="mb-3 text-sm text-[var(--color-warn)]">
-          Store this signing secret now. It will not be shown again.
-        </p>
+      <Dialog open={Boolean(secret)} onClose={() => setSecret(null)} title={t('cabinetWebhooks.secretTitle')}>
+        <p className="mb-3 text-sm text-[var(--color-warn)]">{t('cabinetWebhooks.secretWarn')}</p>
         <code className="block break-all rounded-md bg-[var(--color-panel)] p-3 text-xs">{secret}</code>
         <Button
           type="button"
@@ -289,25 +303,25 @@ export default function WebhooksPage() {
             if (secret) void navigator.clipboard.writeText(secret);
           }}
         >
-          Copy
+          {t('cabinetWebhooks.copy')}
         </Button>
       </Dialog>
 
       <ConfirmDialog
         open={Boolean(rotateId)}
         onClose={() => setRotateId(null)}
-        title="Rotate signing secret?"
-        description="Existing verifiers must be updated. New secret is shown once."
-        confirmLabel="Rotate"
+        title={t('cabinetWebhooks.rotateTitle')}
+        description={t('cabinetWebhooks.rotateDesc')}
+        confirmLabel={t('cabinetWebhooks.rotateSecret')}
         loading={rotateMut.isPending}
         onConfirm={() => rotateId && rotateMut.mutate(rotateId)}
       />
       <ConfirmDialog
         open={Boolean(deleteId)}
         onClose={() => setDeleteId(null)}
-        title="Delete webhook endpoint?"
-        description="Deliveries for this endpoint will stop."
-        confirmLabel="Delete"
+        title={t('cabinetWebhooks.deleteTitle')}
+        description={t('cabinetWebhooks.deleteDesc')}
+        confirmLabel={t('cabinetWebhooks.delete')}
         danger
         loading={deleteMut.isPending}
         onConfirm={() => deleteId && deleteMut.mutate(deleteId)}

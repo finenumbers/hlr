@@ -142,6 +142,72 @@ export class InMemoryJobsStore implements JobsStore {
     return { job: cloneJob(job), items };
   }
 
+  async createJobShell(input: {
+    tenantId: string;
+    checkType: JobRecord['checkType'];
+    source: JobRecord['source'];
+    idempotencyKey: string | null;
+    createdByUserId: string | null;
+    apiKeyId: string | null;
+    originalFilename: string | null;
+    currency: string;
+    metadata: Record<string, unknown> | null;
+  }): Promise<JobRecord> {
+    const result = await this.createJobWithItems({ ...input, phones: [] });
+    return result.job;
+  }
+
+  async attachItemsToJob(input: {
+    jobId: string;
+    tenantId: string;
+    checkType: JobRecord['checkType'];
+    phones: string[];
+    currency: string;
+  }): Promise<{ job: JobRecord; items: JobItemRecord[] }> {
+    const job = this.jobs.get(input.jobId);
+    if (!job) {
+      throw new Error(`Job ${input.jobId} not found`);
+    }
+    const now = new Date();
+    const items: JobItemRecord[] = input.phones.map((phoneE164) => {
+      const item: JobItemRecord = {
+        id: randomUUID(),
+        jobId: job.id,
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        status: 'QUEUED',
+        phoneE164,
+        providerCode: 'smsc',
+        providerMessageId: null,
+        estimatedCost: null,
+        actualCost: null,
+        currency: input.currency,
+        resultStatus: null,
+        isReachable: null,
+        imsi: null,
+        mcc: null,
+        mnc: null,
+        operatorName: null,
+        countryCode: null,
+        ported: null,
+        roaming: null,
+        normalizedResult: null,
+        errorCode: null,
+        errorMessage: null,
+        sentAt: null,
+        completedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.items.set(item.id, item);
+      return cloneItem(item);
+    });
+    job.itemCount = input.phones.length;
+    job.updatedAt = now;
+    this.jobs.set(job.id, job);
+    return { job: cloneJob(job), items };
+  }
+
   async listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]> {
     return itemIds
       .map((id) => this.items.get(id))

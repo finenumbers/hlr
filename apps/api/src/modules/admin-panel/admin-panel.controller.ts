@@ -10,8 +10,20 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { IsIn, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type, Transform } from 'class-transformer';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,12 +31,143 @@ import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuditListQueryDto } from '../audit/dto/audit-list-query.dto';
 import { AuditService } from '../audit/audit.service';
+import { UpdatePlatformSettingsDto } from '../settings/dto/update-platform-settings.dto';
+import { SettingsService } from '../settings/settings.service';
+import { CreateTariffPlanDto } from '../tariffs/dto/create-tariff-plan.dto';
+import { UpdateTariffPlanDto } from '../tariffs/dto/update-tariff-plan.dto';
 import { AdminPanelService } from './admin-panel.service';
 
 class UpdateTenantStatusDto {
   @ApiProperty({ enum: ['ACTIVE', 'SUSPENDED', 'ARCHIVED'] })
   @IsIn(['ACTIVE', 'SUSPENDED', 'ARCHIVED'])
   status!: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+}
+
+class CreateTenantOwnerDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ enum: ['OWNER', 'ADMIN', 'MEMBER'], default: 'OWNER' })
+  @IsOptional()
+  @IsIn(['OWNER', 'ADMIN', 'MEMBER'])
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
+class CreateTenantDto {
+  @ApiProperty({ example: 'acme' })
+  @IsString()
+  @MinLength(2)
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/i)
+  slug!: string;
+
+  @ApiProperty({ example: 'Acme Corp' })
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rateLimitRpm?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxCsvRows?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxCsvBytes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxBatchPhones?: number;
+
+  @ApiPropertyOptional({ type: CreateTenantOwnerDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateTenantOwnerDto)
+  owner?: CreateTenantOwnerDto;
+}
+
+class CreateTenantUserDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({ minLength: 8 })
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ enum: ['OWNER', 'ADMIN', 'MEMBER'], default: 'MEMBER' })
+  @IsOptional()
+  @IsIn(['OWNER', 'ADMIN', 'MEMBER'])
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+}
+
+class UpdateTenantLimitsDto {
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? null : value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  rateLimitRpm?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? null : value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxCsvRows?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? null : value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxCsvBytes?: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? null : value))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxBatchPhones?: number | null;
 }
 
 class AssignTariffDto {
@@ -118,6 +261,17 @@ class AdminTenantsQueryDto extends PaginationQueryDto {
   status?: string;
 }
 
+class EstimateSmscCostDto {
+  @ApiProperty({ enum: ['HLR', 'PING'] })
+  @IsIn(['HLR', 'PING'])
+  checkType!: 'HLR' | 'PING';
+
+  @ApiProperty({ example: '+79991234567' })
+  @IsString()
+  @MinLength(8)
+  phone!: string;
+}
+
 @ApiTags('admin')
 @ApiBearerAuth()
 @Roles('SUPERADMIN', 'SUPPORT')
@@ -126,6 +280,7 @@ export class AdminPanelController {
   constructor(
     private readonly admin: AdminPanelService,
     private readonly audit: AuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   @Get('dashboard')
@@ -137,6 +292,20 @@ export class AdminPanelController {
   @Get('tenants')
   listTenants(@Query() query: AdminTenantsQueryDto) {
     return this.admin.listTenants(query.page, query.pageSize, query.status);
+  }
+
+  @Post('tenants')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Create tenant (+ optional owner user)' })
+  createTenant(
+    @Body() dto: CreateTenantDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.admin.createTenant(dto, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
   }
 
   @Get('tenants/:id')
@@ -153,6 +322,42 @@ export class AdminPanelController {
     @Req() req: Request,
   ) {
     return this.admin.updateTenantStatus(id, dto.status, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Patch('tenants/:id/limits')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Update per-tenant limit overrides (null clears)' })
+  updateTenantLimits(
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantLimitsDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.admin.updateTenantLimits(id, dto, user.userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Get('tenants/:id/users')
+  @ApiOperation({ summary: 'List tenant members' })
+  listTenantUsers(@Param('id') id: string) {
+    return this.admin.listTenantMembers(id);
+  }
+
+  @Post('tenants/:id/users')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Create user + membership in tenant' })
+  createTenantUser(
+    @Param('id') id: string,
+    @Body() dto: CreateTenantUserDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.admin.createTenantUser(id, dto, user.userId, {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -228,13 +433,83 @@ export class AdminPanelController {
     return this.admin.monitoring();
   }
 
+  @Post('provider/smsc/estimate-cost')
+  @ApiOperation({
+    summary: 'Live SMSC cost for HLR/Ping (provider price, not client tariff)',
+  })
+  estimateSmscCost(
+    @Body() dto: EstimateSmscCostDto,
+    @Req() req: Request,
+  ) {
+    return this.admin.estimateSmscCost({
+      checkType: dto.checkType,
+      phone: dto.phone,
+      correlationId:
+        typeof req.headers['x-request-id'] === 'string'
+          ? req.headers['x-request-id']
+          : undefined,
+    });
+  }
+
+  @Get('provider/smsc/balance')
+  @ApiOperation({ summary: 'Live SMSC account balance' })
+  getSmscBalance(@Req() req: Request) {
+    return this.admin.getSmscBalance(
+      typeof req.headers['x-request-id'] === 'string'
+        ? req.headers['x-request-id']
+        : undefined,
+    );
+  }
+
   @Get('audit')
   listAudit(@Query() query: AuditListQueryDto) {
     return this.audit.search(query);
   }
 
   @Get('tariffs')
+  @ApiOperation({ summary: 'List tariff plans' })
   listTariffs(@Query() query: PaginationQueryDto) {
     return this.admin.listTariffs(query.page, query.pageSize);
+  }
+
+  @Post('tariffs')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Create tariff plan' })
+  createTariff(
+    @Body() dto: CreateTariffPlanDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.createTariff(dto, user.userId);
+  }
+
+  @Patch('tariffs/:id')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Update tariff plan' })
+  updateTariff(
+    @Param('id') id: string,
+    @Body() dto: UpdateTariffPlanDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.admin.updateTariff(id, dto, user.userId);
+  }
+
+  @Get('settings')
+  @ApiOperation({ summary: 'Get platform runtime settings' })
+  getSettings() {
+    return this.settings.get();
+  }
+
+  @Patch('settings')
+  @Roles('SUPERADMIN')
+  @ApiOperation({ summary: 'Update platform runtime settings (no SMSC secrets)' })
+  updateSettings(
+    @Body() dto: UpdatePlatformSettingsDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    return this.settings.update(dto, user.userId, {
+      ip: req.ip,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    });
   }
 }

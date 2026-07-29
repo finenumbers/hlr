@@ -5,6 +5,7 @@ import type {
   ApplyProviderUpdateResult,
   CreateJobInput,
   CreateJobResult,
+  CsvParsePayload,
   FinalizeJobPayload,
   JobItemRecord,
   JobRecord,
@@ -46,6 +47,28 @@ export interface JobsStore {
     originalFilename: string | null;
     currency: string;
     metadata: Record<string, unknown> | null;
+  }): Promise<{ job: JobRecord; items: JobItemRecord[] }>;
+
+  /** Create job shell for async CSV parse (itemCount=0 until parse completes). */
+  createJobShell(input: {
+    tenantId: string;
+    checkType: CreateJobInput['checkType'];
+    source: CreateJobInput['source'];
+    idempotencyKey: string | null;
+    createdByUserId: string | null;
+    apiKeyId: string | null;
+    originalFilename: string | null;
+    currency: string;
+    metadata: Record<string, unknown> | null;
+  }): Promise<JobRecord>;
+
+  /** Attach parsed phones as JobItems and set itemCount. */
+  attachItemsToJob(input: {
+    jobId: string;
+    tenantId: string;
+    checkType: CreateJobInput['checkType'];
+    phones: string[];
+    currency: string;
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }>;
 
   listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]>;
@@ -150,6 +173,7 @@ export interface JobsQueuePublisher {
   enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void>;
   enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void>;
   enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;
+  enqueueCsvParse(payload: CsvParsePayload): Promise<void>;
 }
 
 /**

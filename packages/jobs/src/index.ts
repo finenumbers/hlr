@@ -35,6 +35,7 @@ export type {
   JobRuntimeSettings,
   CreateJobInput,
   CreateJobResult,
+  CsvParsePayload,
   SubmitBatchPayload,
   PollItemPayload,
   FinalizeJobPayload,
@@ -65,6 +66,12 @@ export type {
 
 export { createNoopBillingHooks, createNoopWebhookHooks } from './hooks.js';
 export { CreateJobService } from './create-job.service.js';
+export {
+  CsvParseService,
+  streamParsePhoneFile,
+  assertCsvByteLimit,
+} from './csv-parse.service.js';
+export type { CsvParseResult } from './csv-parse.service.js';
 export { JobLifecycleService } from './lifecycle.service.js';
 export { PrismaJobsStore } from './prisma-store.js';
 export { InMemoryJobsStore } from './memory-store.js';

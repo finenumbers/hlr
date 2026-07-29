@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function CabinetDashboardPage() {
+  const t = useT();
   const { tenantId } = useAuth();
   const q = useQuery({
     queryKey: ['cabinet', 'dashboard', tenantId],
@@ -34,11 +36,11 @@ export default function CabinetDashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Balance, recent jobs, and usage — no chart noise."
+        title={t('cabinetDashboard.title')}
+        description={t('cabinetDashboard.description')}
         actions={
           <Link href="/app/submit">
-            <Button type="button">Submit check</Button>
+            <Button type="button">{t('cabinetDashboard.submitCheck')}</Button>
           </Link>
         }
       />
@@ -50,27 +52,29 @@ export default function CabinetDashboardPage() {
       >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            label="Available balance"
+            label={t('cabinetDashboard.available')}
             value={formatMoney(d?.balance?.availableBalance ?? '0', d?.balance?.currency ?? 'RUB')}
-            hint={`Held ${formatMoney(d?.balance?.heldBalance ?? '0', d?.balance?.currency ?? 'RUB')}`}
+            hint={t('cabinetDashboard.held', {
+              amount: formatMoney(d?.balance?.heldBalance ?? '0', d?.balance?.currency ?? 'RUB'),
+            })}
             href="/app/billing"
           />
-          <MetricCard label="Jobs (30d)" value={d?.usage?.jobs ?? 0} href="/app/jobs" />
+          <MetricCard label={t('cabinetDashboard.jobs30d')} value={d?.usage?.jobs ?? 0} href="/app/jobs" />
           <MetricCard
-            label="HLR / Ping"
+            label={t('cabinetDashboard.hlrPing')}
             value={`${d?.usage?.hlrCount ?? 0} / ${d?.usage?.pingCount ?? 0}`}
           />
           <MetricCard
-            label="Success / failure"
+            label={t('cabinetDashboard.successFailure')}
             value={`${d?.usage?.successCount ?? 0} / ${d?.usage?.failureCount ?? 0}`}
             tone={(d?.usage?.failureCount ?? 0) > 0 ? 'warn' : 'ok'}
           />
         </div>
         <Card className="mt-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Recent jobs</h2>
+            <h2 className="font-semibold">{t('cabinetDashboard.recentJobs')}</h2>
             <Link href="/app/jobs" className="text-xs text-[var(--color-accent)]">
-              View all
+              {t('cabinetDashboard.viewAll')}
             </Link>
           </div>
           <ul className="space-y-2">
@@ -83,7 +87,7 @@ export default function CabinetDashboardPage() {
               </li>
             ))}
             {!d?.recentJobs?.length ? (
-              <li className="text-sm text-[var(--color-ink-muted)]">No jobs yet.</li>
+              <li className="text-sm text-[var(--color-ink-muted)]">{t('cabinetDashboard.emptyJobs')}</li>
             ) : null}
           </ul>
         </Card>

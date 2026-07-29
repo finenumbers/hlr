@@ -1,8 +1,12 @@
 import {
+  CsvParseService,
   QUEUE_JOB_NAMES,
   QUEUE_NAMES,
+  type CsvParsePayload,
   type FinalizeJobPayload,
   type JobLifecycleService,
+  type JobsQueuePublisher,
+  type JobsStore,
   type PollItemPayload,
   type ReconcileStalePayload,
   type SubmitBatchPayload,
@@ -21,16 +25,24 @@ export type JobsWorkers = {
   finalize: Worker;
   reconciliation: Worker;
   retention: Worker;
+  csvParse: Worker;
 };
 
 export function createJobsWorkers(input: {
   connection: IORedis;
   concurrency: number;
   lifecycle: JobLifecycleService;
+  store: JobsStore;
+  queue: JobsQueuePublisher;
   metrics?: WorkerMetrics;
   onRetention?: () => Promise<unknown>;
 }): JobsWorkers {
-  const { connection, concurrency, lifecycle, metrics, onRetention } = input;
+  const { connection, concurrency, lifecycle, store, queue, metrics, onRetention } = input;
+  const csvParseService = new CsvParseService({
+    store,
+    queue,
+    logger: workerLogger,
+  });
 
   const submit = new BullWorker(
     QUEUE_NAMES.JOBS_SUBMIT,
@@ -227,7 +239,40 @@ export function createJobsWorkers(input: {
     { connection, concurrency: 1 },
   );
 
-  for (const worker of [submit, poll, finalize, reconciliation, retention]) {
+  const csvParse = new BullWorker(
+    QUEUE_NAMES.JOBS_CSV_PARSE,
+    async (job: Job<CsvParsePayload>) => {
+      if (job.name !== QUEUE_JOB_NAMES.CSV_PARSE) {
+        throw new UnrecoverableError(`Unknown job name ${job.name}`);
+      }
+      const started = process.hrtime.bigint();
+      workerLogger.info('jobs.worker.csv_parse.start', {
+        bullJobId: job.id,
+        jobId: job.data.jobId,
+        tenantId: job.data.tenantId,
+        ...(job.data.requestId ? { requestId: job.data.requestId } : {}),
+      });
+      try {
+        const result = await csvParseService.process(job.data);
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_CSV_PARSE,
+          status: 'completed',
+          started,
+        });
+        return result;
+      } catch (error) {
+        observeWorkerJob(metrics, {
+          queue: QUEUE_NAMES.JOBS_CSV_PARSE,
+          status: 'failed',
+          started,
+        });
+        throw error;
+      }
+    },
+    { connection, concurrency: Math.max(1, Math.floor(concurrency / 2)) },
+  );
+
+  for (const worker of [submit, poll, finalize, reconciliation, retention, csvParse]) {
     worker.on('ready', () => {
       workerLogger.info('jobs.worker.ready', { queue: worker.name });
     });
@@ -253,7 +298,7 @@ export function createJobsWorkers(input: {
     });
   }
 
-  return { submit, poll, finalize, reconciliation, retention };
+  return { submit, poll, finalize, reconciliation, retention, csvParse };
 }
 
 function recordProviderThrow(

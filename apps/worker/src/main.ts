@@ -133,6 +133,8 @@ async function bootstrap(): Promise<void> {
     connection,
     concurrency: env.WORKER_CONCURRENCY,
     lifecycle,
+    store,
+    queue,
     metrics,
     onRetention: () => runRetentionSweep(prisma),
   });
@@ -171,6 +173,7 @@ async function bootstrap(): Promise<void> {
     new Queue(QUEUE_NAMES.JOBS_FINALIZE, { connection }),
     new Queue(QUEUE_NAMES.JOBS_RECONCILIATION, { connection }),
     new Queue(QUEUE_NAMES.JOBS_RETENTION, { connection }),
+    new Queue(QUEUE_NAMES.JOBS_CSV_PARSE, { connection }),
     new Queue(WEBHOOK_QUEUE_NAMES.WEBHOOKS_DELIVER, { connection }),
   ];
 
@@ -245,6 +248,7 @@ async function bootstrap(): Promise<void> {
       workers.finalize.close(),
       workers.reconciliation.close(),
       workers.retention.close(),
+      workers.csvParse.close(),
       webhookWorker.close(),
     ]);
     await Promise.all(metricQueues.map((q) => q.close()));

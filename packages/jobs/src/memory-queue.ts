@@ -1,5 +1,6 @@
 import type { JobsQueuePublisher } from './ports.js';
 import type {
+  CsvParsePayload,
   FinalizeJobPayload,
   PollItemPayload,
   ReconcileStalePayload,
@@ -10,7 +11,8 @@ export type QueuedMessage =
   | { queue: 'submit'; payload: SubmitBatchPayload; delayMs?: number }
   | { queue: 'poll'; payload: PollItemPayload; delayMs?: number }
   | { queue: 'finalize'; payload: FinalizeJobPayload; delayMs?: number }
-  | { queue: 'reconciliation'; payload: ReconcileStalePayload; delayMs?: number };
+  | { queue: 'reconciliation'; payload: ReconcileStalePayload; delayMs?: number }
+  | { queue: 'csv-parse'; payload: CsvParsePayload; delayMs?: number };
 
 /** In-memory queue publisher for unit tests. */
 export class InMemoryJobsQueue implements JobsQueuePublisher {
@@ -30,6 +32,10 @@ export class InMemoryJobsQueue implements JobsQueuePublisher {
 
   async enqueueReconciliation(payload: ReconcileStalePayload = {}): Promise<void> {
     this.messages.push({ queue: 'reconciliation', payload });
+  }
+
+  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
+    this.messages.push({ queue: 'csv-parse', payload });
   }
 
   clear(): void {

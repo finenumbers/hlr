@@ -5,6 +5,7 @@ import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { ProviderSmscModule } from '../provider-smsc/provider-smsc.module';
+import { SettingsModule } from '../settings/settings.module';
 import { TariffsModule } from '../tariffs/tariffs.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { WalletsModule } from '../wallets/wallets.module';
@@ -23,6 +24,7 @@ import { AdminPanelService } from './admin-panel.service';
     ProviderSmscModule,
     WebhooksModule,
     ApiKeysModule,
+    SettingsModule,
   ],
   controllers: [AdminPanelController],
   providers: [AdminPanelService],

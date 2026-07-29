@@ -7,6 +7,7 @@ import {
   QUEUE_DEFAULT_JOB_OPTIONS,
   QUEUE_JOB_NAMES,
   QUEUE_NAMES,
+  type CsvParsePayload,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
   type PollItemPayload,
@@ -34,6 +35,7 @@ export class BullMqJobsPublisher
   private pollQueue: Queue | null = null;
   private finalizeQueue: Queue | null = null;
   private reconciliationQueue: Queue | null = null;
+  private csvParseQueue: Queue | null = null;
 
   constructor(
     private readonly config: AppConfigService,
@@ -63,6 +65,10 @@ export class BullMqJobsPublisher
       connection: this.connection,
       defaultJobOptions: QUEUE_DEFAULT_JOB_OPTIONS.reconciliation,
     });
+    this.csvParseQueue = new Queue(QUEUE_NAMES.JOBS_CSV_PARSE, {
+      connection: this.connection,
+      defaultJobOptions: QUEUE_DEFAULT_JOB_OPTIONS.csvParse,
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -71,6 +77,7 @@ export class BullMqJobsPublisher
       this.pollQueue?.close(),
       this.finalizeQueue?.close(),
       this.reconciliationQueue?.close(),
+      this.csvParseQueue?.close(),
     ]);
     if (this.connection && this.connection.status !== 'end') {
       await this.connection.quit();
@@ -119,6 +126,21 @@ export class BullMqJobsPublisher
       QUEUE_NAMES.JOBS_RECONCILIATION,
     );
     await queue.add(QUEUE_JOB_NAMES.RECONCILE_STALE, payload);
+  }
+
+  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
+    const queue = this.requireQueue(this.csvParseQueue, QUEUE_NAMES.JOBS_CSV_PARSE);
+    await queue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, {
+      jobId: `csv-parse:${payload.jobId}`,
+    });
+    this.logger.log(
+      {
+        message: 'jobs.queue.enqueue_csv_parse',
+        jobId: payload.jobId,
+        tenantId: payload.tenantId,
+      },
+      'JobsQueue',
+    );
   }
 
   private requireQueue<T>(queue: Queue<T> | null, name: string): Queue<T> {

@@ -1,9 +1,14 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import type { TenantStatus } from '@finenumbers/db';
+import type { MembershipRole, TenantStatus } from '@finenumbers/db';
+import { normalizePhoneE164, JobsValidationError } from '@finenumbers/jobs';
+import { isProviderError } from '@finenumbers/provider-core';
+import { hash } from 'bcryptjs';
 
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -16,6 +21,8 @@ import { TenantsService } from '../tenants/tenants.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { ApiKeysService } from '../api-keys/api-keys.service';
+
+const BCRYPT_COST = 12;
 
 @Injectable()
 export class AdminPanelService {
@@ -293,6 +300,284 @@ export class AdminPanelService {
     };
   }
 
+  async createTenant(
+    input: {
+      slug: string;
+      name: string;
+      rateLimitRpm?: number | null;
+      maxCsvRows?: number | null;
+      maxCsvBytes?: number | null;
+      maxBatchPhones?: number | null;
+      owner?: {
+        email: string;
+        password: string;
+        name?: string;
+        role?: MembershipRole;
+      };
+    },
+    actorUserId: string,
+    meta?: { ip?: string | null; userAgent?: string | null },
+  ) {
+    const slug = normalizeSlug(input.slug);
+    const name = input.name.trim();
+    if (!slug || !name) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'slug and name are required',
+      });
+    }
+
+    const existing = await this.prisma.tenant.findUnique({ where: { slug } });
+    if (existing) {
+      throw new ConflictException({
+        errorCode: ErrorCodes.CONFLICT,
+        message: `Tenant slug "${slug}" already exists`,
+      });
+    }
+
+    if (input.owner) {
+      const email = normalizeEmail(input.owner.email);
+      const existingUser = await this.prisma.user.findUnique({ where: { email } });
+      if (existingUser) {
+        throw new ConflictException({
+          errorCode: ErrorCodes.CONFLICT,
+          message: `User email "${email}" already exists`,
+        });
+      }
+      if (!input.owner.password || input.owner.password.length < 8) {
+        throw new BadRequestException({
+          errorCode: ErrorCodes.VALIDATION_FAILED,
+          message: 'Owner password must be at least 8 characters',
+        });
+      }
+    }
+
+    const tenant = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.tenant.create({
+        data: {
+          slug,
+          name,
+          status: 'ACTIVE',
+          rateLimitRpm: input.rateLimitRpm ?? null,
+          maxCsvRows: input.maxCsvRows ?? null,
+          maxCsvBytes: input.maxCsvBytes ?? null,
+          maxBatchPhones: input.maxBatchPhones ?? null,
+        },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          status: true,
+          createdAt: true,
+          rateLimitRpm: true,
+          maxCsvRows: true,
+          maxCsvBytes: true,
+          maxBatchPhones: true,
+        },
+      });
+
+      let owner: {
+        id: string;
+        email: string;
+        name: string | null;
+        role: MembershipRole;
+      } | null = null;
+
+      if (input.owner) {
+        const email = normalizeEmail(input.owner.email);
+        const passwordHash = await hash(input.owner.password, BCRYPT_COST);
+        const role: MembershipRole = input.owner.role ?? 'OWNER';
+        const user = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            name: input.owner.name?.trim() || null,
+            isActive: true,
+          },
+          select: { id: true, email: true, name: true },
+        });
+        await tx.tenantMembership.create({
+          data: {
+            tenantId: created.id,
+            userId: user.id,
+            role,
+          },
+        });
+        owner = { ...user, role };
+      }
+
+      return { ...created, owner };
+    });
+
+    await this.billing.ensureWallet(tenant.id, 'RUB');
+
+    await this.audit.write({
+      tenantId: tenant.id,
+      actorType: 'USER',
+      actorUserId,
+      action: 'admin.tenant.create',
+      targetType: 'Tenant',
+      targetId: tenant.id,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+      metadata: {
+        slug: tenant.slug,
+        ownerEmail: tenant.owner?.email ?? null,
+        ownerRole: tenant.owner?.role ?? null,
+      },
+    });
+
+    return tenant;
+  }
+
+  async createTenantUser(
+    tenantId: string,
+    input: {
+      email: string;
+      password: string;
+      name?: string;
+      role?: MembershipRole;
+    },
+    actorUserId: string,
+    meta?: { ip?: string | null; userAgent?: string | null },
+  ) {
+    await this.tenants.getById(tenantId);
+
+    const email = normalizeEmail(input.email);
+    if (!input.password || input.password.length < 8) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'Password must be at least 8 characters',
+      });
+    }
+    const role: MembershipRole = input.role ?? 'MEMBER';
+    if (!['OWNER', 'ADMIN', 'MEMBER'].includes(role)) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'Invalid membership role',
+      });
+    }
+
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      const existingMembership = await this.prisma.tenantMembership.findUnique({
+        where: {
+          tenantId_userId: { tenantId, userId: existingUser.id },
+        },
+      });
+      if (existingMembership) {
+        throw new ConflictException({
+          errorCode: ErrorCodes.CONFLICT,
+          message: 'User is already a member of this tenant',
+        });
+      }
+      throw new ConflictException({
+        errorCode: ErrorCodes.CONFLICT,
+        message: `User email "${email}" already exists`,
+      });
+    }
+
+    const passwordHash = await hash(input.password, BCRYPT_COST);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          name: input.name?.trim() || null,
+          isActive: true,
+        },
+        select: { id: true, email: true, name: true, isActive: true, createdAt: true },
+      });
+      const membership = await tx.tenantMembership.create({
+        data: { tenantId, userId: user.id, role },
+        select: { id: true, role: true, createdAt: true },
+      });
+      return { user, membership };
+    });
+
+    await this.audit.write({
+      tenantId,
+      actorType: 'USER',
+      actorUserId,
+      action: 'admin.user.create',
+      targetType: 'User',
+      targetId: result.user.id,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+      metadata: { email, role, membershipId: result.membership.id },
+    });
+
+    return result;
+  }
+
+  async listTenantMembers(tenantId: string) {
+    await this.tenants.getById(tenantId);
+    const items = await this.prisma.tenantMembership.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        role: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            isActive: true,
+            lastLoginAt: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    return { items };
+  }
+
+  async updateTenantLimits(
+    id: string,
+    input: {
+      rateLimitRpm?: number | null;
+      maxCsvRows?: number | null;
+      maxCsvBytes?: number | null;
+      maxBatchPhones?: number | null;
+    },
+    actorUserId: string,
+    meta?: { ip?: string | null; userAgent?: string | null },
+  ) {
+    await this.tenants.getById(id);
+    const updated = await this.prisma.tenant.update({
+      where: { id },
+      data: {
+        ...(input.rateLimitRpm !== undefined ? { rateLimitRpm: input.rateLimitRpm } : {}),
+        ...(input.maxCsvRows !== undefined ? { maxCsvRows: input.maxCsvRows } : {}),
+        ...(input.maxCsvBytes !== undefined ? { maxCsvBytes: input.maxCsvBytes } : {}),
+        ...(input.maxBatchPhones !== undefined ? { maxBatchPhones: input.maxBatchPhones } : {}),
+      },
+      select: {
+        id: true,
+        slug: true,
+        rateLimitRpm: true,
+        maxCsvRows: true,
+        maxCsvBytes: true,
+        maxBatchPhones: true,
+        updatedAt: true,
+      },
+    });
+    await this.audit.write({
+      tenantId: id,
+      actorType: 'USER',
+      actorUserId,
+      action: 'admin.tenant.limits_update',
+      targetType: 'Tenant',
+      targetId: id,
+      ip: meta?.ip,
+      userAgent: meta?.userAgent,
+      metadata: { ...input },
+    });
+    return updated;
+  }
+
   async updateTenantStatus(
     id: string,
     status: TenantStatus,
@@ -504,4 +789,130 @@ export class AdminPanelService {
   listTariffs(page: number, pageSize: number) {
     return this.tariffs.list(page, pageSize);
   }
+
+  createTariff(
+    dto: Parameters<TariffsService['create']>[0],
+    actorUserId: string,
+  ) {
+    return this.tariffs.create(dto, actorUserId);
+  }
+
+  updateTariff(
+    id: string,
+    dto: Parameters<TariffsService['update']>[1],
+    actorUserId: string,
+  ) {
+    return this.tariffs.update(id, dto, actorUserId);
+  }
+
+  /**
+   * Live SMSC cost probe (provider sell-to-us price), not client tariff.
+   * Does not return raw provider payload to the admin UI.
+   */
+  async estimateSmscCost(input: {
+    checkType: 'HLR' | 'PING';
+    phone: string;
+    correlationId?: string;
+  }) {
+    let phoneE164: string;
+    try {
+      phoneE164 = normalizePhoneE164(input.phone);
+    } catch (error) {
+      if (error instanceof JobsValidationError) {
+        throw new BadRequestException({
+          errorCode: ErrorCodes.VALIDATION_FAILED,
+          message: error.message,
+          details: error.details,
+        });
+      }
+      throw error;
+    }
+
+    try {
+      const estimate =
+        input.checkType === 'HLR'
+          ? await this.provider.estimateHlrCost({
+              phoneE164,
+              correlationId: input.correlationId,
+              tenantId: 'system',
+            })
+          : await this.provider.estimatePingCost({
+              phoneE164,
+              correlationId: input.correlationId,
+              tenantId: 'system',
+            });
+
+      return {
+        providerCode: estimate.providerCode,
+        checkType: estimate.checkType,
+        phoneE164: estimate.phoneE164,
+        cost: estimate.cost,
+        currency: estimate.currency,
+        parts: estimate.parts,
+      };
+    } catch (error) {
+      throw mapProviderHttpError(error);
+    }
+  }
+
+  async getSmscBalance(correlationId?: string) {
+    try {
+      const balance = await this.provider.getBalance(correlationId);
+      return {
+        providerCode: balance.providerCode,
+        balance: balance.balance,
+        currency: balance.currency,
+      };
+    } catch (error) {
+      throw mapProviderHttpError(error);
+    }
+  }
+}
+
+function mapProviderHttpError(error: unknown): never {
+  if (error instanceof ServiceUnavailableException) {
+    throw error;
+  }
+  if (isProviderError(error)) {
+    if (error.kind === 'auth') {
+      throw new ServiceUnavailableException({
+        errorCode: ErrorCodes.SERVICE_UNAVAILABLE,
+        message: error.message,
+      });
+    }
+    if (error.kind === 'validation') {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: error.message,
+      });
+    }
+    if (error.kind === 'rate_limit') {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.RATE_LIMITED,
+        message: error.message,
+      });
+    }
+    throw new BadRequestException({
+      errorCode: ErrorCodes.VALIDATION_FAILED,
+      message: error.message || 'SMSC provider request failed',
+      details: {
+        kind: error.kind,
+        providerErrorCode: error.providerErrorCode,
+      },
+    });
+  }
+  throw error;
+}
+
+function normalizeSlug(slug: string): string {
+  return slug
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }

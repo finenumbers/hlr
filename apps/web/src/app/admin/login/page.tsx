@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import { can } from '@/lib/auth/permissions';
+import { useT } from '@/lib/i18n';
 
 const schema = z.object({
   email: z.string().email(),
@@ -25,6 +27,7 @@ type FormValues = z.infer<typeof schema>;
 export default function AdminLoginPage() {
   const { login } = useAuth();
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -36,43 +39,44 @@ export default function AdminLoginPage() {
     try {
       const user = await login(values.email, values.password);
       if (!can(user, 'admin.access')) {
-        setError('This account is not a platform operator.');
+        setError(t('auth.notOperator'));
         return;
       }
       router.replace('/admin');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Login failed');
+      setError(err instanceof ApiError ? err.message : t('auth.loginFailed'));
     }
   });
 
   return (
     <div className="grid min-h-screen place-items-center px-4 py-10">
       <Card className="w-full max-w-md">
-        <Image
-          src="/branding/logo-horizontal.png"
-          alt="Finenumbers"
-          width={180}
-          height={40}
-          className="mb-4 h-9 w-auto"
-        />
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <Image
+            src="/branding/logo-horizontal.png"
+            alt="Finenumbers"
+            width={180}
+            height={40}
+            className="h-9 w-auto"
+          />
+          <LocaleSwitcher />
+        </div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Admin sign in
+          {t('auth.adminTitle')}
         </h1>
-        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-          Internal operators only (SUPERADMIN / SUPPORT).
-        </p>
+        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{t('auth.adminSubtitle')}</p>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t('auth.email')}</Label>
             <Input id="email" type="email" {...form.register('email')} />
           </div>
           <div>
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t('auth.password')}</Label>
             <Input id="password" type="password" {...form.register('password')} />
           </div>
           {error ? <p className="text-sm text-[var(--color-danger)]">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
+            {form.formState.isSubmitting ? t('auth.signingIn') : t('auth.signIn')}
           </Button>
         </form>
       </Card>

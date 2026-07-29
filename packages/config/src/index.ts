@@ -107,6 +107,8 @@ export const apiEnvSchema = baseEnvSchema
     OPENAPI_ENABLED: booleanish.optional(),
     /** Prometheus metrics endpoint. */
     METRICS_ENABLED: booleanish.default(true),
+    /** Directory for CSV bulk uploads (api writes, worker reads). */
+    UPLOAD_DIR: nonempty.default('./data/uploads'),
   })
   .superRefine((env, ctx) => {
     if (
@@ -134,6 +136,8 @@ export const workerEnvSchema = baseEnvSchema
     QUEUE_METRICS_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
     /** How often to poll SMSC balance for metrics (ms). 0 disables. */
     PROVIDER_BALANCE_POLL_MS: z.coerce.number().int().min(0).default(300_000),
+    /** Directory for CSV bulk uploads (must match api UPLOAD_DIR). */
+    UPLOAD_DIR: nonempty.default('./data/uploads'),
   });
 
 export const webEnvSchema = baseEnvSchema.extend({

@@ -12,9 +12,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const { tenantId } = useAuth();
   const [page, setPage] = useState(1);
@@ -60,44 +62,48 @@ export default function CabinetJobDetailPage() {
   return (
     <div>
       <PageHeader
-        title={`Job ${id.slice(0, 12)}…`}
-        description="Live progress and item results."
+        title={t('cabinetJobs.detailTitle', { id: `${id.slice(0, 12)}…` })}
+        description={t('cabinetJobs.detailDescription')}
         actions={
           <Button type="button" variant="secondary" size="sm" onClick={exportCsv}>
-            Export CSV
+            {t('cabinetJobs.exportCsv')}
           </Button>
         }
       />
       <QueryState isLoading={job.isLoading} isError={job.isError} error={job.error}>
         <div className="mb-4 grid gap-4 sm:grid-cols-4">
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Status</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.status')}</p>
             <Badge className="mt-2">{String(job.data?.status)}</Badge>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Type</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.type')}</p>
             <p className="mt-2 font-medium">{String(job.data?.checkType)}</p>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Progress</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.progress')}</p>
             <p className="mt-2 font-medium">
               {String(job.data?.successCount)}/{String(job.data?.itemCount)}
             </p>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Created</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.created')}</p>
             <p className="mt-2 font-medium">{formatDate(String(job.data?.createdAt))}</p>
           </Card>
         </div>
         <DataTable
           columns={[
-            { key: 'phone', header: 'Phone', cell: (r) => String(r.phoneE164) },
-            { key: 'status', header: 'Status', cell: (r) => String(r.status) },
-            { key: 'result', header: 'Result', cell: (r) => String(r.resultStatus ?? '—') },
+            { key: 'phone', header: t('cabinetJobs.colPhone'), cell: (r) => String(r.phoneE164) },
+            { key: 'status', header: t('cabinetJobs.colStatus'), cell: (r) => String(r.status) },
+            {
+              key: 'result',
+              header: t('cabinetJobs.colResult'),
+              cell: (r) => String(r.resultStatus ?? t('common.dash')),
+            },
             {
               key: 'reachable',
-              header: 'Reachable',
-              cell: (r) => (r.isReachable == null ? '—' : String(r.isReachable)),
+              header: t('cabinetJobs.colReachable'),
+              cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
             },
           ]}
           rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,8 +10,17 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import {
   ArrayMaxSize,
@@ -28,8 +38,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { TenantId } from '../../common/decorators/tenant-id.decorator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { ErrorCodes } from '../../common/errors/error-codes';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { CreateApiKeyDto } from '../api-keys/dto/create-api-key.dto';
+import { csvUploadInterceptor } from '../jobs/csv-upload.interceptor';
 import { CreateWebhookDto } from '../webhooks/dto/create-webhook.dto';
 import { UpdateWebhookDto } from '../webhooks/dto/update-webhook.dto';
 import { CabinetService } from './cabinet.service';
@@ -147,6 +159,53 @@ export class CabinetController {
       source: dto.phones.length === 1 ? 'SINGLE' : 'BULK',
       createdByUserId: user.userId,
       idempotencyKey: dto.idempotencyKey,
+    });
+  }
+
+  @Post('jobs/csv')
+  @UseInterceptors(csvUploadInterceptor())
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'checkType'],
+      properties: {
+        checkType: { type: 'string', enum: ['HLR', 'PING'] },
+        file: { type: 'string', format: 'binary' },
+        idempotencyKey: { type: 'string' },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Submit bulk job from CSV/TXT (async parse queue)' })
+  submitCsv(
+    @TenantId() tenantId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('checkType') checkType: string,
+    @Body('idempotencyKey') idempotencyKey: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file?.path) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'file is required (multipart field "file")',
+      });
+    }
+    if (checkType !== 'HLR' && checkType !== 'PING') {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'checkType must be HLR or PING',
+      });
+    }
+    return this.cabinet.createJobFromCsv({
+      tenantId,
+      checkType,
+      file: {
+        path: file.path,
+        originalname: file.originalname,
+        size: file.size,
+      },
+      createdByUserId: user.userId,
+      idempotencyKey: idempotencyKey?.trim() || undefined,
     });
   }
 

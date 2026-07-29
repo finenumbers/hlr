@@ -7,6 +7,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth/auth-context';
 import type { Permission } from '@/lib/auth/permissions';
+import { useT } from '@/lib/i18n';
 
 export function RequireAuth({
   area,
@@ -17,6 +18,7 @@ export function RequireAuth({
 }) {
   const { user, loading, can } = useAuth();
   const router = useRouter();
+  const t = useT();
   const loginPath = area === 'admin' ? '/admin/login' : '/app/login';
   const accessPerm: Permission = area === 'admin' ? 'admin.access' : 'cabinet.access';
 
@@ -27,7 +29,9 @@ export function RequireAuth({
   }, [loading, user, router, loginPath]);
 
   if (loading) {
-    return <div className="p-8 text-sm text-[var(--color-ink-muted)]">Checking session…</div>;
+    return (
+      <div className="p-8 text-sm text-[var(--color-ink-muted)]">{t('common.checkingSession')}</div>
+    );
   }
   if (!user) return null;
 
@@ -35,23 +39,23 @@ export function RequireAuth({
     return (
       <div className="mx-auto max-w-lg p-10">
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Access denied
+          {t('common.accessDeniedTitle')}
         </h1>
         <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
-          Your account does not have access to this area.
+          {t('common.accessDeniedDescription')}
         </p>
         <div className="mt-4 flex gap-2">
           <Button type="button" variant="secondary" onClick={() => router.push(loginPath)}>
-            Back to login
+            {t('common.backToLogin')}
           </Button>
           {can('admin.access') ? (
             <Link href="/admin">
-              <Button type="button">Go to admin</Button>
+              <Button type="button">{t('common.goAdmin')}</Button>
             </Link>
           ) : null}
           {can('cabinet.access') ? (
             <Link href="/app">
-              <Button type="button">Go to cabinet</Button>
+              <Button type="button">{t('common.goCabinet')}</Button>
             </Link>
           ) : null}
         </div>
@@ -72,13 +76,14 @@ export function RequirePermission({
   fallback?: ReactNode;
 }) {
   const { can } = useAuth();
+  const t = useT();
   if (!can(permission)) {
     return (
       fallback ?? (
         <div className="rounded-xl border border-[var(--color-line)] p-8">
-          <h2 className="text-lg font-semibold">Forbidden</h2>
+          <h2 className="text-lg font-semibold">{t('common.forbiddenTitle')}</h2>
           <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-            You do not have permission: {permission}
+            {t('common.forbiddenDescription', { permission })}
           </p>
         </div>
       )

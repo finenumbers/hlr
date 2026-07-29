@@ -7,9 +7,11 @@ import { QueryState } from '@/components/data/query-state';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatMoney } from '@/lib/utils';
 
 export default function CabinetBillingPage() {
+  const t = useT();
   const { tenantId } = useAuth();
   const balance = useQuery({
     queryKey: ['cabinet', 'balance', tenantId],
@@ -29,36 +31,48 @@ export default function CabinetBillingPage() {
 
   return (
     <div>
-      <PageHeader title="Billing" description="Balance, tariff, and transaction history." />
+      <PageHeader title={t('cabinetBilling.title')} description={t('cabinetBilling.description')} />
       <QueryState isLoading={balance.isLoading} isError={balance.isError} error={balance.error}>
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">Available</p>
+            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('cabinetBilling.available')}</p>
             <p className="mt-2 text-3xl font-semibold">
               {formatMoney(String(balance.data?.availableBalance ?? '0'), String(balance.data?.currency ?? 'RUB'))}
             </p>
             <p className="text-sm text-[var(--color-ink-muted)]">
-              Held{' '}
-              {formatMoney(String(balance.data?.heldBalance ?? '0'), String(balance.data?.currency ?? 'RUB'))}
+              {t('cabinetBilling.held', {
+                amount: formatMoney(
+                  String(balance.data?.heldBalance ?? '0'),
+                  String(balance.data?.currency ?? 'RUB'),
+                ),
+              })}
             </p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">Tariff</p>
+            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('cabinetBilling.tariff')}</p>
             {tariff.data ? (
               <div className="mt-2 space-y-1 text-sm">
                 <p className="font-medium">
                   {String(tariff.data.code)} — {String(tariff.data.name)}
                 </p>
-                <p>HLR: {formatMoney(String(tariff.data.hlrPrice), String(tariff.data.currency ?? 'RUB'))}</p>
-                <p>Ping: {formatMoney(String(tariff.data.pingPrice), String(tariff.data.currency ?? 'RUB'))}</p>
+                <p>
+                  {t('cabinetBilling.hlrPrice', {
+                    amount: formatMoney(String(tariff.data.hlrPrice), String(tariff.data.currency ?? 'RUB')),
+                  })}
+                </p>
+                <p>
+                  {t('cabinetBilling.pingPrice', {
+                    amount: formatMoney(String(tariff.data.pingPrice), String(tariff.data.currency ?? 'RUB')),
+                  })}
+                </p>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-[var(--color-ink-muted)]">No tariff assigned yet.</p>
+              <p className="mt-2 text-sm text-[var(--color-ink-muted)]">{t('cabinetBilling.noTariff')}</p>
             )}
           </Card>
         </div>
         <Card className="mt-4">
-          <h2 className="mb-3 font-semibold">Transaction history</h2>
+          <h2 className="mb-3 font-semibold">{t('cabinetBilling.transactions')}</h2>
           <ul className="space-y-2 text-sm">
             {((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])
               .slice()
@@ -73,7 +87,7 @@ export default function CabinetBillingPage() {
                 </li>
               ))}
             {!ledger.data?.length ? (
-              <li className="text-[var(--color-ink-muted)]">No transactions yet.</li>
+              <li className="text-[var(--color-ink-muted)]">{t('cabinetBilling.noTransactions')}</li>
             ) : null}
           </ul>
         </Card>

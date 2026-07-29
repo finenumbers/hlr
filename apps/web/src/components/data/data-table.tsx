@@ -1,6 +1,9 @@
+'use client';
+
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useT } from '@/lib/i18n';
 
 export type Column<T> = {
   key: string;
@@ -26,6 +29,7 @@ export function DataTable<T>({
   total: number;
   onPageChange: (page: number) => void;
 }) {
+  const t = useT();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
@@ -60,9 +64,7 @@ export function DataTable<T>({
         </table>
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-[var(--color-line)] px-4 py-3 text-xs text-[var(--color-ink-muted)]">
-        <span>
-          {total} total · page {page} / {totalPages}
-        </span>
+        <span>{t('common.tableFooter', { total, page, totalPages })}</span>
         <div className="flex gap-2">
           <Button
             type="button"
@@ -71,7 +73,7 @@ export function DataTable<T>({
             disabled={page <= 1}
             onClick={() => onPageChange(page - 1)}
           >
-            Prev
+            {t('common.prev')}
           </Button>
           <Button
             type="button"
@@ -80,7 +82,7 @@ export function DataTable<T>({
             disabled={page >= totalPages}
             onClick={() => onPageChange(page + 1)}
           >
-            Next
+            {t('common.next')}
           </Button>
         </div>
       </div>

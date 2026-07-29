@@ -3,11 +3,20 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/hlr
 
 jobs:
   quality:
@@ -46,10 +55,21 @@ jobs:
         run: pnpm build
 
   docker:
-    name: docker build (api/worker/web)
+    name: docker build / publish
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: quality
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            file: infra/docker/Dockerfile.api
+          - name: worker
+            file: infra/docker/Dockerfile.worker
+          - name: web
+            file: infra/docker/Dockerfile.web
 
     steps:
       - name: Checkout
@@ -58,26 +78,32 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build API image
-        uses: docker/build-push-action@v6
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
         with:
-          context: .
-          file: infra/docker/Dockerfile.api
-          push: false
-          tags: finenumbers-api:ci
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Worker image
-        uses: docker/build-push-action@v6
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: .
-          file: infra/docker/Dockerfile.worker
-          push: false
-          tags: finenumbers-worker:ci
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Build Web image
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: infra/docker/Dockerfile.web
-          push: false
-          tags: finenumbers-web:ci
+          file: ${{ matrix.file }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

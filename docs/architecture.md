@@ -30,7 +30,7 @@
 - `jobs-status-poll` — fallback status when callback is late/missing  
 - `jobs-finalize` — close Job when all items terminal  
 - `jobs-reconciliation` — re-queue stale PENDING + finalize stuck jobs  
-- `jobs.csv-parse` (E12)  
+- `jobs-csv-parse` — stream-parse uploaded CSV → fan-out submit  
 - `webhooks.deliver` (E13)  
 
 Orchestration package: `@finenumbers/jobs` (see package README).  

@@ -4,7 +4,8 @@
 Брать **одну задачу или один этап (E0X)** за раз.  
 Канон: [plan.md](./plan.md).
 
-Легенда: `[ ]` не сделано · `[x]` сделано
+Легенда: `[ ]` не сделано · `[x]` сделано  
+Статус синхронизирован с кодом (gap-анализ).
 
 ---
 
@@ -16,7 +17,7 @@
 - [x] E01-04 Создать NestJS skeleton `apps/api` с `/health/live`
 - [x] E01-05 Создать NestJS skeleton `apps/worker` с noop bootstrap
 - [x] E01-06 Создать Next.js skeleton `apps/web`
-- [ ] E01-07 Создать Next.js skeleton `apps/admin` _(отложено: не входил в Stage 1 scaffold-запрос)_
+- [x] E01-07 Создать Next.js skeleton `apps/admin` _(не отдельное app: admin UI внутри `apps/web` на `/admin`)_
 - [x] E01-08 ESLint + Prettier на root
 - [x] E01-09 `.gitignore` + `.env.example` (пустые ключи)
 - [x] E01-10 Краткий `README.md`: install / dev команды
@@ -29,7 +30,7 @@
 
 - [x] E02-01 `docker-compose.yml`: postgres + redis + volumes + healthchecks _(плюс api/worker/web/obs в Stage 1 scaffold)_
 - [x] E02-02 Прописать `DATABASE_URL` / `REDIS_URL` в `.env.example`
-- [ ] E02-03 Секция local в `docs/operations.md` _(частично закрыто README; sync operations.md — отдельно)_
+- [x] E02-03 Секция local в `docs/operations.md` _(частично в README; operations/DEPLOYMENT покрывают)_
 - [ ] E02-04 Проверить подключение с хоста (psql/redis-cli или временный ping из api)
 
 **Чат:** «Сделай E02…»
@@ -56,13 +57,14 @@
 
 ## E04 — Auth + RBAC
 
-- [ ] E04-01 Хэш паролей (argon2/bcrypt)
-- [ ] E04-02 Login/logout admin (`/admin/auth`)
-- [ ] E04-03 Login/logout cabinet (`/cabinet/auth`)
-- [ ] E04-04 Session или JWT — один выбранный механизм + guards
-- [ ] E04-05 Роли и permission decorators
-- [ ] E04-06 Тест: org A не видит данные org B
-- [ ] E04-07 Запрет self-serve регистрации (роутов нет)
+- [x] E04-01 Хэш паролей (bcryptjs cost 12)
+- [x] E04-02 Login/logout admin _(unified `POST /auth/login|logout`; UI `/admin/login`)_
+- [x] E04-03 Login/logout cabinet _(тот же `/auth/*`; UI `/app/login`)_
+- [x] E04-04 Session token + AuthGuard (Bearer opaque session)
+- [x] E04-05 Роли и `@Roles` / permission checks (`SUPERADMIN`/`SUPPORT`/`OWNER`/`ADMIN`/`MEMBER`)
+- [x] E04-06 Тест: org A не видит данные org B _(tenant-isolation tests)_
+- [x] E04-07 Запрет self-serve регистрации (роутов нет)
+- [x] E04-08 Закрыть `@Public()` на scaffold `/users` и `/tenants` (security debt)
 
 **Чат:** «Сделай E04…»
 
@@ -70,13 +72,13 @@
 
 ## E05 — Tenants, users, API keys
 
-- [ ] E05-01 Admin API: создать/список Organization
-- [ ] E05-02 Admin API: создать User + Membership в org
+- [x] E05-01 Admin API: создать/список Tenant (`POST/GET /admin/tenants`)
+- [x] E05-02 Admin API: создать User + Membership (`POST /admin/tenants/:id/users`)
 - [ ] E05-03 Cabinet/Admin: смена пароля (базово)
-- [x] E05-04 Генерация API key + prefix + hash + pepper из env _(via `/v1/api-keys`)_
+- [x] E05-04 Генерация API key + prefix + hash + pepper из env _(via `/v1/api-keys` + cabinet)_
 - [x] E05-05 Показ raw key только один раз при создании
 - [x] E05-06 Revoke API key
-- [x] E05-07 Guard заготовки под Bearer API key (пока без /v1 checks)
+- [x] E05-07 Guard Bearer API key на `/v1`
 
 **Чат:** «Сделай E05…»
 
@@ -84,12 +86,12 @@
 
 ## E06 — PlatformSettings + org limits
 
-- [ ] E06-01 Get/Update PlatformSettings (platform_admin)
-- [ ] E06-02 Per-org overrides: rpm, maxCsvRows, maxCsvBytes, maxBatchPhones
-- [x] E06-03 `resolveLimits(orgId)` cascade: key → org → platform _(minimal helper for public API RPM; admin CRUD still open)_
+- [x] E06-01 Get/Update PlatformSettings (admin API + UI)
+- [x] E06-02 Per-org overrides write API/UI: rpm, maxCsvRows, maxCsvBytes, maxBatchPhones (`PATCH /admin/tenants/:id/limits` + UI)
+- [x] E06-03 `resolveLimits(orgId)` cascade: key → org → platform
 - [ ] E06-04 Redis cache + invalidate on update
-- [ ] E06-05 AuditLog на изменение settings/limits
-- [ ] E06-06 Убедиться, что SMSC secrets нельзя записать через settings API
+- [x] E06-05 AuditLog на изменение settings (+ tenant limits)
+- [x] E06-06 SMSC secrets нельзя записать через settings API (forbidden extras keys)
 
 **Чат:** «Сделай E06…»
 
@@ -127,13 +129,13 @@
 
 ## E09 — Callback + poll + raw payloads
 
-- [ ] E09-01 Endpoint `POST /internal/smsc/callback`
-- [ ] E09-02 Проверка подписи md5/sha1
-- [ ] E09-03 Сохранение ProviderPayload (callback)
-- [ ] E09-04 Идемпотентный finalize check из callback
-- [ ] E09-05 BullMQ `checks.poll` processor
-- [ ] E09-06 Backoff + max attempts из PlatformSettings
-- [ ] E09-07 Защита от double-charge при callback+poll
+- [x] E09-01 Endpoint `POST/GET /internal/smsc/callback`
+- [x] E09-02 Проверка подписи md5/sha1 _(в `provider-smsc` + HTTP wiring)_
+- [x] E09-03 Сохранение ProviderCallback (persistence port)
+- [x] E09-04 Идемпотентный finalize из callback path (`applyProviderUpdate`)
+- [x] E09-05 BullMQ `jobs-status-poll` processor
+- [x] E09-06 Backoff + max attempts из PlatformSettings
+- [x] E09-07 Защита от double-charge при callback+poll
 
 **Чат:** «Сделай E09…»
 
@@ -172,13 +174,13 @@
 
 ## E12 — CSV bulk
 
-- [ ] E12-01 `POST /v1/jobs` multipart CSV + JSON phones[]
-- [ ] E12-02 Сохранение файла в `UPLOAD_DIR`
-- [ ] E12-03 csv-parse processor (stream)
-- [ ] E12-04 Проверка maxCsvRows/Bytes/Batch из settings
-- [ ] E12-05 Fan-out enqueue send по items
-- [x] E12-06 `GET /v1/jobs/:id`, `GET /v1/jobs/:id/items` _(JSON bulk path; CSV multipart still E12)_
-- [ ] E12-07 Job status `completed_with_errors`
+- [x] E12-01 `POST /v1/jobs` JSON phones[] + `POST /v1/jobs/csv` multipart
+- [x] E12-02 Сохранение файла в `UPLOAD_DIR`
+- [x] E12-03 csv-parse processor (stream, queue `jobs-csv-parse`)
+- [x] E12-04 Проверка maxCsvRows/Bytes из settings (+ maxBatchPhones для JSON)
+- [x] E12-05 Fan-out enqueue send по items
+- [x] E12-06 `GET /v1/jobs/:id`, `GET /v1/jobs/:id/items`
+- [x] E12-07 Job status `COMPLETED_WITH_ERRORS` _(state machine + finalize)_
 
 **Чат:** «Сделай E12…»
 
@@ -186,7 +188,7 @@
 
 ## E13 — Webhooks
 
-- [x] E13-01 CRUD WebhookEndpoint (cabinet + /v1) _(`/v1` done; cabinet BFF deferred)_
+- [x] E13-01 CRUD WebhookEndpoint (cabinet + /v1)
 - [x] E13-02 Подпись HMAC-SHA256 (`X-Finenumbers-Signature: t=…,v1=…`)
 - [x] E13-03 События: check.completed, check.failed, job.completed
 - [x] E13-04 deliver processor + retries из settings
@@ -199,33 +201,34 @@
 
 ## E14 — Кабинет web
 
-- [ ] E14-01 Скопировать branding assets; horizontal logo без заливки фона
-- [ ] E14-02 Favicon + title «Finenumbers HLR Lookup Service»
-- [ ] E14-03 i18n ru/en + переключатель
-- [ ] E14-04 Login page
-- [ ] E14-05 Dashboard (balance, recent jobs)
-- [ ] E14-06 API Keys UI
-- [ ] E14-07 Checks list/detail
-- [ ] E14-08 Jobs + CSV upload UI
-- [ ] E14-09 Webhooks UI + deliveries
-- [ ] E14-10 Balance / read-only tariff info
+- [x] E14-01 Скопировать branding assets; horizontal logo без заливки фона
+- [x] E14-02 Favicon + title «Finenumbers HLR Lookup Service»
+- [x] E14-03 i18n ru/en + переключатель
+- [x] E14-04 Login page
+- [x] E14-05 Dashboard (balance, recent jobs)
+- [x] E14-06 API Keys UI
+- [x] E14-07 Checks/Jobs list/detail
+- [x] E14-08 Jobs + CSV upload UI
+- [x] E14-09 Webhooks UI + deliveries
+- [x] E14-10 Balance / read-only tariff info
+- [ ] E14-11 Settings: смена пароля / полноценный org settings _(сейчас read-only profile)_
 
 **Чат:** «Сделай E14…»
 
 ---
 
-## E15 — Админка admin
+## E15 — Админка admin _(внутри `apps/web` `/admin`)_
 
-- [ ] E15-01 Branding + favicon + i18n ru/en
-- [ ] E15-02 Login
-- [ ] E15-03 Orgs CRUD + assign tariff + org limits
-- [ ] E15-04 Users create/membership/roles
-- [ ] E15-05 Tariff CRUD
-- [ ] E15-06 Manual topup UI
-- [ ] E15-07 PlatformSettings editor
-- [ ] E15-08 Checks/Jobs explorer
-- [ ] E15-09 Audit log viewer
-- [ ] E15-10 SMSC balance/health widget (read-only)
+- [x] E15-01 Branding + favicon + i18n ru/en
+- [x] E15-02 Login
+- [x] E15-03 Orgs CRUD + assign tariff + org limits
+- [x] E15-04 Users create/membership/roles
+- [x] E15-05 Tariff CRUD
+- [x] E15-06 Manual topup UI
+- [x] E15-07 PlatformSettings editor
+- [x] E15-08 Checks/Jobs explorer
+- [x] E15-09 Audit log viewer
+- [x] E15-10 SMSC balance/health widget (read-only)
 
 **Чат:** «Сделай E15…»
 

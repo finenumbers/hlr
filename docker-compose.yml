@@ -1,4 +1,4 @@
-name: finenumbers
+name: hlr
 
 services:
   postgres:
@@ -48,6 +48,7 @@ services:
       retries: 10
 
   api:
+    image: ghcr.io/finenumbers/hlr-api:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.api
@@ -60,8 +61,10 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       API_PORT: 3001
-      DATABASE_URL: ${DATABASE_URL:-postgresql://finenumbers:finenumbers@postgres:5432/finenumbers?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # Host .env often uses localhost; containers must use service DNS names.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-finenumbers}:${POSTGRES_PASSWORD:-finenumbers}@postgres:5432/${POSTGRES_DB:-finenumbers}?schema=public
+      REDIS_URL: redis://redis:6379
+      UPLOAD_DIR: ${UPLOAD_DIR:-/tmp/uploads}
       PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3001}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3000}
       API_KEY_PEPPER: ${API_KEY_PEPPER:-dev-only-api-key-pepper-change-me}
@@ -95,6 +98,7 @@ services:
       start_period: 20s
 
   worker:
+    image: ghcr.io/finenumbers/hlr-worker:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.worker
@@ -106,8 +110,9 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://finenumbers:finenumbers@postgres:5432/finenumbers?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-finenumbers}:${POSTGRES_PASSWORD:-finenumbers}@postgres:5432/${POSTGRES_DB:-finenumbers}?schema=public
+      REDIS_URL: redis://redis:6379
+      UPLOAD_DIR: ${UPLOAD_DIR:-/tmp/uploads}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
       WORKER_METRICS_PORT: 9091
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
@@ -120,6 +125,7 @@ services:
       - "9091"
 
   web:
+    image: ghcr.io/finenumbers/hlr-web:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: infra/docker/Dockerfile.web

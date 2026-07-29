@@ -15,10 +15,14 @@ export function formatMoney(amount: string | number, currency = 'RUB'): string {
   }).format(n);
 }
 
-export function formatDate(value: string | Date | null | undefined): string {
+export function formatDate(
+  value: string | Date | null | undefined,
+  locale: string = 'en-GB',
+): string {
   if (!value) return '—';
   const d = typeof value === 'string' ? new Date(value) : value;
-  return new Intl.DateTimeFormat('en-GB', {
+  const tag = locale.startsWith('ru') ? 'ru-RU' : 'en-GB';
+  return new Intl.DateTimeFormat(tag, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(d);

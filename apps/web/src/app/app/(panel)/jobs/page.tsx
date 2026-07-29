@@ -10,9 +10,11 @@ import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobsPage() {
+  const t = useT();
   const { tenantId } = useAuth();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -28,7 +30,7 @@ export default function CabinetJobsPage() {
 
   return (
     <div>
-      <PageHeader title="Jobs" description="Your tenant job history and progress." />
+      <PageHeader title={t('cabinetJobs.title')} description={t('cabinetJobs.description')} />
       <div className="mb-4">
         <select
           className="h-10 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
@@ -38,7 +40,7 @@ export default function CabinetJobsPage() {
             setStatus(e.target.value);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">{t('cabinetJobs.allStatuses')}</option>
           {['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].map((s) => (
             <option key={s} value={s}>
               {s}
@@ -51,33 +53,37 @@ export default function CabinetJobsPage() {
         isError={q.isError}
         error={q.error}
         isEmpty={!q.data?.items.length}
-        emptyTitle="No jobs yet"
-        emptyDescription="Submit a single check or bulk list to get started."
+        emptyTitle={t('cabinetJobs.emptyTitle')}
+        emptyDescription={t('cabinetJobs.emptyDescription')}
         onRetry={() => void q.refetch()}
       >
         <DataTable
           columns={[
             {
               key: 'id',
-              header: 'Job',
+              header: t('cabinetJobs.colJob'),
               cell: (row) => (
                 <Link href={`/app/jobs/${row.id}`} className="font-medium hover:underline">
                   {String(row.id).slice(0, 12)}…
                 </Link>
               ),
             },
-            { key: 'type', header: 'Type', cell: (row) => String(row.checkType) },
+            { key: 'type', header: t('cabinetJobs.colType'), cell: (row) => String(row.checkType) },
             {
               key: 'status',
-              header: 'Status',
+              header: t('cabinetJobs.colStatus'),
               cell: (row) => <Badge>{String(row.status)}</Badge>,
             },
             {
               key: 'progress',
-              header: 'Progress',
+              header: t('cabinetJobs.colProgress'),
               cell: (row) => `${row.successCount ?? 0}/${row.itemCount ?? 0}`,
             },
-            { key: 'created', header: 'Created', cell: (row) => formatDate(String(row.createdAt)) },
+            {
+              key: 'created',
+              header: t('cabinetJobs.colCreated'),
+              cell: (row) => formatDate(String(row.createdAt)),
+            },
           ]}
           rows={(q.data?.items ?? []) as Array<Record<string, unknown>>}
           rowKey={(row) => String(row.id)}

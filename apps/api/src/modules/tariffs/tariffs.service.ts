@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import type { AssignTenantTariffDto } from './dto/assign-tenant-tariff.dto';
 import type { CreateTariffPlanDto } from './dto/create-tariff-plan.dto';
 import type { TariffPlanResponseDto } from './dto/tariff-plan-response.dto';
+import type { UpdateTariffPlanDto } from './dto/update-tariff-plan.dto';
 
 @Injectable()
 export class TariffsService {
@@ -92,6 +93,76 @@ export class TariffsService {
       targetType: 'TariffPlan',
       targetId: plan.id,
       metadata: { code: plan.code, isDefault: plan.isDefault },
+    });
+
+    return mapTariff(plan);
+  }
+
+  async update(
+    id: string,
+    dto: UpdateTariffPlanDto,
+    actorUserId?: string,
+  ): Promise<TariffPlanResponseDto> {
+    const existing = await this.prisma.tariffPlan.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException({
+        errorCode: ErrorCodes.NOT_FOUND,
+        message: `Tariff plan ${id} not found`,
+      });
+    }
+
+    const nextPrices = {
+      hlrPrice: dto.hlrPrice ?? existing.hlrPrice.toString(),
+      pingPrice: dto.pingPrice ?? existing.pingPrice.toString(),
+      hlrProviderCost: dto.hlrProviderCost ?? existing.hlrProviderCost.toString(),
+      pingProviderCost: dto.pingProviderCost ?? existing.pingProviderCost.toString(),
+    };
+
+    let prices;
+    try {
+      prices = TariffResolver.validatePlanPrices(nextPrices);
+    } catch (error) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.INVALID_TARIFF,
+        message: error instanceof Error ? error.message : 'Invalid tariff prices',
+      });
+    }
+
+    const plan = await this.prisma.$transaction(async (tx) => {
+      if (dto.isDefault === true) {
+        await tx.tariffPlan.updateMany({
+          where: { isDefault: true, NOT: { id } },
+          data: { isDefault: false },
+        });
+      }
+      return tx.tariffPlan.update({
+        where: { id },
+        data: {
+          name: dto.name ?? undefined,
+          currency: dto.currency ?? undefined,
+          hlrPrice: prices.hlrPrice,
+          pingPrice: prices.pingPrice,
+          hlrProviderCost: prices.hlrProviderCost,
+          pingProviderCost: prices.pingProviderCost,
+          isDefault: dto.isDefault ?? undefined,
+          isActive: dto.isActive ?? undefined,
+          description:
+            dto.description === undefined ? undefined : dto.description,
+        },
+      });
+    });
+
+    await this.audit.write({
+      actorType: 'USER',
+      actorUserId: actorUserId ?? null,
+      action: 'billing.tariff.update',
+      targetType: 'TariffPlan',
+      targetId: plan.id,
+      metadata: {
+        code: plan.code,
+        isDefault: plan.isDefault,
+        isActive: plan.isActive,
+      },
     });
 
     return mapTariff(plan);

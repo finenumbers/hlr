@@ -127,6 +127,10 @@ export class AppConfigService {
     return this.env.REDIS_URL;
   }
 
+  get uploadDir(): string {
+    return this.env.UPLOAD_DIR;
+  }
+
   get smscBaseUrl(): string {
     return this.env.SMSC_BASE_URL;
   }

@@ -3,8 +3,10 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import {
+  assertCsvByteLimit,
   computeProgress,
   CreateJobService,
   JobLifecycleService,
@@ -15,15 +17,21 @@ import {
   type ApplyProviderUpdateResult,
   type CreateJobResult,
   type JobProgress,
+  type JobRecord,
 } from '@finenumbers/jobs';
 import { createJobsWebhookHooks } from '@finenumbers/webhooks';
 import type { NormalizedResult } from '@finenumbers/provider-core';
+import { mkdir, rename } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
+import { AppConfigService } from '../../common/config/app-config.service';
 import type { PaginatedResult } from '../../common/dto/pagination-query.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NestBillingService } from '../billing/billing.service';
+import { resolveLimits } from '../settings/resolve-limits';
 import { PROVIDER_SMSC } from '../provider-smsc/provider-adapter.port';
 import type { ProviderSmscService } from '../provider-smsc/provider-smsc.service';
 import { NestWebhookDeliveryService } from '../webhooks/nest-webhook-delivery.service';
@@ -40,6 +48,7 @@ export class JobsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly logger: AppLogger,
+    private readonly config: AppConfigService,
     private readonly billing: NestBillingService,
     private readonly webhookDelivery: NestWebhookDeliveryService,
     @Inject(JOBS_PROCESSOR) private readonly processor: JobsProcessorPort,
@@ -376,6 +385,87 @@ export class JobsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Accept a CSV upload: size-check → persist file → job shell → enqueue csv-parse.
+   * HTTP handler does not parse rows synchronously.
+   */
+  async createFromCsvUpload(input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    file: { path: string; originalname: string; size: number };
+    idempotencyKey?: string | null;
+    createdByUserId?: string | null;
+    apiKeyId?: string | null;
+    requestId?: string | null;
+  }): Promise<{ job: JobRecord; progress: JobProgress }> {
+    const limits = await resolveLimits(this.prisma, { tenantId: input.tenantId });
+
+    try {
+      assertCsvByteLimit(input.file.size, limits.maxCsvBytes);
+    } catch (error) {
+      if (error instanceof JobsValidationError) {
+        throw new PayloadTooLargeException({
+          errorCode: ErrorCodes.PAYLOAD_TOO_LARGE,
+          message: error.message,
+          details: error.details,
+        });
+      }
+      throw error;
+    }
+
+    if (input.idempotencyKey) {
+      const existing = await this.store.findJobByIdempotencyKey(
+        input.tenantId,
+        input.idempotencyKey,
+      );
+      if (existing) {
+        return { job: existing, progress: computeProgress(existing) };
+      }
+    }
+
+    const tenantDir = join(this.config.uploadDir, input.tenantId);
+    await mkdir(tenantDir, { recursive: true });
+    const storedName = `${randomUUID()}.csv`;
+    const destPath = join(tenantDir, storedName);
+    await rename(input.file.path, destPath);
+
+    const job = await this.store.createJobShell({
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      source: 'BULK',
+      idempotencyKey: input.idempotencyKey ?? null,
+      createdByUserId: input.createdByUserId ?? null,
+      apiKeyId: input.apiKeyId ?? null,
+      originalFilename: input.file.originalname,
+      currency: 'RUB',
+      metadata: {
+        csvPending: true,
+        csvFilePath: destPath,
+        csvMaxRows: limits.maxCsvRows,
+      },
+    });
+
+    await this.processor.enqueueCsvParse({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      filePath: destPath,
+      ...(input.requestId ? { requestId: input.requestId } : {}),
+    });
+
+    this.logger.log(
+      {
+        message: 'jobs.csv_upload.accepted',
+        jobId: job.id,
+        tenantId: job.tenantId,
+        originalFilename: input.file.originalname,
+        fileSize: input.file.size,
+      },
+      'Jobs',
+    );
+
+    return { job, progress: computeProgress(job) };
   }
 
   /**

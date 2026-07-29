@@ -10,9 +10,11 @@ import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const [page, setPage] = useState(1);
   const job = useQuery({
@@ -28,7 +30,10 @@ export default function AdminJobDetailPage() {
 
   return (
     <div>
-      <PageHeader title={`Job ${id.slice(0, 12)}…`} description="Results preview and progress." />
+      <PageHeader
+        title={t('adminJobs.detailTitle', { id: `${id.slice(0, 12)}…` })}
+        description={t('adminJobs.detailDescription')}
+      />
       <QueryState
         isLoading={job.isLoading}
         isError={job.isError}
@@ -37,23 +42,27 @@ export default function AdminJobDetailPage() {
       >
         <div className="mb-4 grid gap-4 sm:grid-cols-4">
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Status</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.status')}</p>
             <Badge className="mt-2">{String(j?.status)}</Badge>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Type / source</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.typeSource')}</p>
             <p className="mt-2 font-medium">
               {String(j?.checkType)} · {String(j?.source)}
             </p>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Progress</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.progress')}</p>
             <p className="mt-2 font-medium">
-              {String(j?.successCount)}/{String(j?.itemCount)} · fail {String(j?.failureCount)}
+              {t('adminJobs.progressCell', {
+                ok: String(j?.successCount),
+                total: String(j?.itemCount),
+                fail: String(j?.failureCount),
+              })}
             </p>
           </Card>
           <Card>
-            <p className="text-xs text-[var(--color-ink-muted)]">Created</p>
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.created')}</p>
             <p className="mt-2 font-medium">{formatDate(String(j?.createdAt))}</p>
           </Card>
         </div>
@@ -62,19 +71,27 @@ export default function AdminJobDetailPage() {
           isError={items.isError}
           error={items.error}
           isEmpty={!items.data?.items.length}
-          emptyTitle="No items"
+          emptyTitle={t('adminJobs.emptyItems')}
         >
           <DataTable
             columns={[
-              { key: 'phone', header: 'Phone', cell: (r) => String(r.phoneE164) },
-              { key: 'status', header: 'Status', cell: (r) => String(r.status) },
-              { key: 'result', header: 'Result', cell: (r) => String(r.resultStatus ?? '—') },
+              { key: 'phone', header: t('adminJobs.colPhone'), cell: (r) => String(r.phoneE164) },
+              { key: 'status', header: t('adminJobs.colStatus'), cell: (r) => String(r.status) },
+              {
+                key: 'result',
+                header: t('adminJobs.colResult'),
+                cell: (r) => String(r.resultStatus ?? t('common.dash')),
+              },
               {
                 key: 'reachable',
-                header: 'Reachable',
-                cell: (r) => (r.isReachable == null ? '—' : String(r.isReachable)),
+                header: t('adminJobs.colReachable'),
+                cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
               },
-              { key: 'error', header: 'Error', cell: (r) => String(r.errorMessage ?? '—') },
+              {
+                key: 'error',
+                header: t('adminJobs.colError'),
+                cell: (r) => String(r.errorMessage ?? t('common.dash')),
+              },
             ]}
             rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
             rowKey={(r) => String(r.id)}

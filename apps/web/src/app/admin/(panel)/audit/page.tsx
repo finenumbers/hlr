@@ -11,9 +11,16 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
+function LoadingFallback() {
+  const t = useT();
+  return <div className="p-8 text-sm text-[var(--color-ink-muted)]">{t('common.loading')}</div>;
+}
+
 function AdminAuditPage() {
+  const t = useT();
   const search = useSearchParams();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState(search.get('action') ?? '');
@@ -34,13 +41,10 @@ function AdminAuditPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Audit log"
-        description="Who did what, when, and to which target — especially money and admin mutations."
-      />
+      <PageHeader title={t('adminAudit.title')} description={t('adminAudit.description')} />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Input
-          placeholder="Action (e.g. billing.wallet.topup)"
+          placeholder={t('adminAudit.filterAction')}
           value={action}
           onChange={(e) => {
             setPage(1);
@@ -48,7 +52,7 @@ function AdminAuditPage() {
           }}
         />
         <Input
-          placeholder="Tenant id"
+          placeholder={t('adminAudit.filterTenantId')}
           value={tenantId}
           onChange={(e) => {
             setPage(1);
@@ -61,58 +65,58 @@ function AdminAuditPage() {
         isError={q.isError}
         error={q.error}
         isEmpty={!q.data?.items.length}
-        emptyTitle="No audit entries"
+        emptyTitle={t('adminAudit.empty')}
         onRetry={() => void q.refetch()}
       >
         <DataTable
           columns={[
             {
               key: 'when',
-              header: 'When',
+              header: t('adminAudit.colWhen'),
               cell: (row) => formatDate(String(row.createdAt)),
             },
             {
               key: 'actor',
-              header: 'Actor',
+              header: t('adminAudit.colActor'),
               cell: (row) => {
                 const actor = row.actor as { email?: string; type?: string; name?: string };
                 return (
                   <div>
-                    <p className="font-medium">{actor?.email ?? actor?.type ?? '—'}</p>
+                    <p className="font-medium">{actor?.email ?? actor?.type ?? t('common.dash')}</p>
                     <p className="text-xs text-[var(--color-ink-muted)]">{actor?.type}</p>
                   </div>
                 );
               },
             },
-            { key: 'action', header: 'Action', cell: (row) => String(row.action) },
+            { key: 'action', header: t('adminAudit.colAction'), cell: (row) => String(row.action) },
             {
               key: 'target',
-              header: 'Target',
+              header: t('adminAudit.colTarget'),
               cell: (row) => {
-                const t = row.target as { type?: string; id?: string };
-                return `${t?.type ?? '—'} ${t?.id ? String(t.id).slice(0, 10) + '…' : ''}`;
+                const target = row.target as { type?: string; id?: string };
+                return `${target?.type ?? t('common.dash')} ${target?.id ? String(target.id).slice(0, 10) + '…' : ''}`;
               },
             },
             {
               key: 'tenant',
-              header: 'Tenant',
+              header: t('adminAudit.colTenant'),
               cell: (row) => {
-                const t = row.tenant as { slug?: string; name?: string } | null;
-                return t?.slug ?? '—';
+                const tenant = row.tenant as { slug?: string; name?: string } | null;
+                return tenant?.slug ?? t('common.dash');
               },
             },
             {
               key: 'meta',
-              header: 'Summary',
+              header: t('adminAudit.colSummary'),
               cell: (row) => {
                 const meta = row.metadata as Record<string, unknown> | null;
-                if (!meta) return '—';
+                if (!meta) return t('common.dash');
                 if (meta.amount != null) {
                   return `${meta.direction ? String(meta.direction) + ' ' : ''}${String(meta.amount)} ${meta.currency ?? ''}`.trim();
                 }
                 return (
                   <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(row)}>
-                    Details
+                    {t('adminAudit.details')}
                   </Button>
                 );
               },
@@ -130,7 +134,7 @@ function AdminAuditPage() {
       <Dialog
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
-        title="Audit entry"
+        title={t('adminAudit.dialogTitle')}
         className="max-w-2xl"
       >
         <pre className="max-h-96 overflow-auto rounded-md bg-[var(--color-panel)] p-3 text-xs">
@@ -144,7 +148,7 @@ function AdminAuditPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-[var(--color-ink-muted)]">Loading…</div>}>
+    <Suspense fallback={<LoadingFallback />}>
       <AdminAuditPage />
     </Suspense>
   );

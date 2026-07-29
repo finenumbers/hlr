@@ -17,11 +17,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
 const createSchema = z.object({ name: z.string().min(1).max(120) });
 
 export default function ApiKeysPage() {
+  const t = useT();
   const { tenantId, can } = useAuth();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -69,48 +71,56 @@ export default function ApiKeysPage() {
   return (
     <div>
       <PageHeader
-        title="API keys"
-        description="Manage public API credentials. Secrets are shown once."
+        title={t('cabinetApiKeys.title')}
+        description={t('cabinetApiKeys.description')}
         actions={
           <Can permission="cabinet.keys.manage">
             <Button type="button" onClick={() => setCreateOpen(true)}>
-              Create key
+              {t('cabinetApiKeys.createKey')}
             </Button>
           </Can>
         }
       />
       <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
-        Quickstart: use{' '}
-        <code className="rounded bg-[var(--color-panel)] px-1">Authorization: Bearer fnk_live_…</code>{' '}
-        against <code className="rounded bg-[var(--color-panel)] px-1">/v1/*</code>. See API docs at{' '}
-        <a className="text-[var(--color-accent)] underline" href="http://localhost:3001/docs" target="_blank" rel="noreferrer">
-          /docs
-        </a>
-        .
+        {t('cabinetApiKeys.quickstart', {
+          authHeader: 'Authorization: Bearer fnk_live_…',
+          path: '/v1/*',
+          docs: '/docs',
+        })}
       </p>
       <QueryState
         isLoading={q.isLoading}
         isError={q.isError}
         error={q.error}
         isEmpty={!q.data?.items.length}
-        emptyTitle="No API keys"
-        emptyDescription={can('cabinet.keys.manage') ? 'Create a key for your backend integration.' : 'Ask an owner/admin to create a key.'}
+        emptyTitle={t('cabinetApiKeys.emptyTitle')}
+        emptyDescription={
+          can('cabinet.keys.manage')
+            ? t('cabinetApiKeys.emptyCanManage')
+            : t('cabinetApiKeys.emptyCannotManage')
+        }
         onRetry={() => void q.refetch()}
       >
         <DataTable
           columns={[
-            { key: 'name', header: 'Name', cell: (r) => String(r.name) },
-            { key: 'prefix', header: 'Prefix', cell: (r) => String(r.masked ?? r.prefix) },
+            { key: 'name', header: t('cabinetApiKeys.colName'), cell: (r) => String(r.name) },
+            {
+              key: 'prefix',
+              header: t('cabinetApiKeys.colPrefix'),
+              cell: (r) => String(r.masked ?? r.prefix),
+            },
             {
               key: 'status',
-              header: 'Status',
+              header: t('cabinetApiKeys.colStatus'),
               cell: (r) => (
-                <Badge tone={r.revokedAt ? 'danger' : 'ok'}>{r.revokedAt ? 'revoked' : 'active'}</Badge>
+                <Badge tone={r.revokedAt ? 'danger' : 'ok'}>
+                  {r.revokedAt ? t('cabinetApiKeys.revoked') : t('cabinetApiKeys.active')}
+                </Badge>
               ),
             },
             {
               key: 'lastUsed',
-              header: 'Last used',
+              header: t('cabinetApiKeys.colLastUsed'),
               cell: (r) => formatDate(r.lastUsedAt ? String(r.lastUsedAt) : null),
             },
             {
@@ -120,10 +130,10 @@ export default function ApiKeysPage() {
                 can('cabinet.keys.manage') && !r.revokedAt ? (
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="secondary" onClick={() => setRotateId(String(r.id))}>
-                      Rotate
+                      {t('cabinetApiKeys.rotate')}
                     </Button>
                     <Button type="button" size="sm" variant="danger" onClick={() => setRevokeId(String(r.id))}>
-                      Revoke
+                      {t('cabinetApiKeys.revoke')}
                     </Button>
                   </div>
                 ) : null,
@@ -138,25 +148,23 @@ export default function ApiKeysPage() {
         />
       </QueryState>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title="Create API key">
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} title={t('cabinetApiKeys.createTitle')}>
         <form
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => createMut.mutate(values.name))}
         >
           <div>
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" {...form.register('name')} placeholder="Production backend" />
+            <Label htmlFor="name">{t('cabinetApiKeys.name')}</Label>
+            <Input id="name" {...form.register('name')} placeholder={t('cabinetApiKeys.namePlaceholder')} />
           </div>
           <Button type="submit" disabled={createMut.isPending}>
-            {createMut.isPending ? 'Creating…' : 'Create'}
+            {createMut.isPending ? t('cabinetApiKeys.creating') : t('cabinetApiKeys.create')}
           </Button>
         </form>
       </Dialog>
 
-      <Dialog open={Boolean(secret)} onClose={() => setSecret(null)} title="Copy secret now">
-        <p className="mb-3 text-sm text-[var(--color-warn)]">
-          This secret is shown once. Store it securely — it cannot be retrieved again.
-        </p>
+      <Dialog open={Boolean(secret)} onClose={() => setSecret(null)} title={t('cabinetApiKeys.secretTitle')}>
+        <p className="mb-3 text-sm text-[var(--color-warn)]">{t('cabinetApiKeys.secretWarn')}</p>
         <code className="block break-all rounded-md bg-[var(--color-panel)] p-3 text-xs">{secret}</code>
         <Button
           type="button"
@@ -165,25 +173,25 @@ export default function ApiKeysPage() {
             if (secret) void navigator.clipboard.writeText(secret);
           }}
         >
-          Copy to clipboard
+          {t('cabinetApiKeys.copy')}
         </Button>
       </Dialog>
 
       <ConfirmDialog
         open={Boolean(rotateId)}
         onClose={() => setRotateId(null)}
-        title="Rotate API key?"
-        description="The previous secret will stop working immediately. A new secret is shown once."
-        confirmLabel="Rotate"
+        title={t('cabinetApiKeys.rotateTitle')}
+        description={t('cabinetApiKeys.rotateDesc')}
+        confirmLabel={t('cabinetApiKeys.rotate')}
         loading={rotateMut.isPending}
         onConfirm={() => rotateId && rotateMut.mutate(rotateId)}
       />
       <ConfirmDialog
         open={Boolean(revokeId)}
         onClose={() => setRevokeId(null)}
-        title="Revoke API key?"
-        description="This key will no longer authenticate. This cannot be undone."
-        confirmLabel="Revoke"
+        title={t('cabinetApiKeys.revokeTitle')}
+        description={t('cabinetApiKeys.revokeDesc')}
+        confirmLabel={t('cabinetApiKeys.revoke')}
         danger
         loading={revokeMut.isPending}
         onConfirm={() => revokeId && revokeMut.mutate(revokeId)}

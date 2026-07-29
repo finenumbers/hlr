@@ -20,6 +20,7 @@ Create: header `Idempotency-Key` (рекомендуется)
 | GET | `/v1/checks/:id` | статус + items/result |
 | GET | `/v1/checks` | список (page + filter/sort) |
 | POST | `/v1/jobs` | `{ type, phones[] }` → 202 |
+| POST | `/v1/jobs/csv` | multipart `file` + `type=hlr\|ping` → 202 (async parse) |
 | GET | `/v1/jobs` | список |
 | GET | `/v1/jobs/:id` | прогресс |
 | GET | `/v1/jobs/:id/items` | элементы |
@@ -50,7 +51,9 @@ Platform roles. Orgs, users, tariffs, topup, settings, limits, audit, health. _(
 
 | Method | Path | Назначение |
 |--------|------|------------|
-| POST | `/internal/smsc/callback` | статусы SMSC (подпись) — E09 |
+| POST/GET | `/internal/smsc/callback` | статусы SMSC (подпись md5/sha1); 401 при невалидной подписи |
+| POST | `/admin/provider/smsc/estimate-cost` | live cost HLR/Ping у SMSC (admin; не тариф клиента) |
+| GET | `/admin/provider/smsc/balance` | live баланс SMSC (admin) |
 | GET | `/health/live` | liveness |
 | GET | `/health/ready` | db+redis |
 | GET | `/metrics` | Prometheus — E16 |

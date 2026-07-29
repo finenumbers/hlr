@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes';
 import { useState, type ReactNode } from 'react';
 
 import { AuthProvider } from '@/lib/auth/auth-context';
+import { I18nProvider } from '@/lib/i18n';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -22,9 +23,11 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <QueryClientProvider client={client}>
-        <AuthProvider>{children}</AuthProvider>
-      </QueryClientProvider>
+      <I18nProvider>
+        <QueryClientProvider client={client}>
+          <AuthProvider>{children}</AuthProvider>
+        </QueryClientProvider>
+      </I18nProvider>
     </ThemeProvider>
   );
 }

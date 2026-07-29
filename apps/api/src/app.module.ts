@@ -17,6 +17,7 @@ import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { ProviderSmscModule } from './modules/provider-smsc/provider-smsc.module';
+import { SmscCallbackModule } from './modules/smsc-callback/smsc-callback.module';
 import { TariffsModule } from './modules/tariffs/tariffs.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
@@ -38,6 +39,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     TariffsModule,
     JobsModule,
     ProviderSmscModule,
+    SmscCallbackModule,
     WebhooksModule,
     AuditModule,
     PublicApiModule,

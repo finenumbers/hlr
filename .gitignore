@@ -39,4 +39,6 @@ apps/api/prisma/*.db-journal
 
 # uploads / runtime
 uploads
+data/uploads
+data/
 tmp

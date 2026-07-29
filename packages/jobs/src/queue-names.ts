@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   JOBS_FINALIZE: 'jobs-finalize',
   JOBS_RECONCILIATION: 'jobs-reconciliation',
   JOBS_RETENTION: 'jobs-retention',
+  JOBS_CSV_PARSE: 'jobs-csv-parse',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -19,6 +20,7 @@ export const QUEUE_JOB_NAMES = {
   FINALIZE_JOB: 'finalize-job',
   RECONCILE_STALE: 'reconcile-stale',
   RETENTION_SWEEP: 'retention-sweep',
+  CSV_PARSE: 'csv-parse',
 } as const;
 
 export type QueueJobName = (typeof QUEUE_JOB_NAMES)[keyof typeof QUEUE_JOB_NAMES];
@@ -56,6 +58,12 @@ export const QUEUE_DEFAULT_JOB_OPTIONS = {
     removeOnComplete: { count: 50 },
     removeOnFail: { count: 100 },
   },
+  csvParse: {
+    attempts: 2,
+    backoff: { type: 'exponential' as const, delay: 5_000 },
+    removeOnComplete: { count: 500 },
+    removeOnFail: { count: 1_000 },
+  },
 } as const;
 
 /** How often the reconciliation worker should run (ms). */
@@ -70,6 +78,8 @@ export const DEFAULT_SUBMIT_BATCH_SIZE = 50;
 /** Fallback platform settings when DB row is unavailable (tests / degraded). */
 export const DEFAULT_JOB_RUNTIME_SETTINGS = {
   maxBatchPhones: 1_000,
+  maxCsvRows: 100_000,
+  maxCsvBytes: 52_428_800,
   checkTimeoutSec: 3_600,
   pollIntervalSec: 30,
   /** Soft cap on poll attempts before timeout path wins. */

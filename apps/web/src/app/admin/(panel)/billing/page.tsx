@@ -13,9 +13,11 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatMoney } from '@/lib/utils';
 
 export default function AdminBillingPage() {
+  const t = useT();
   const [tenantId, setTenantId] = useState('');
   const [amount, setAmount] = useState('100');
   const [direction, setDirection] = useState<'credit' | 'debit'>('credit');
@@ -62,36 +64,37 @@ export default function AdminBillingPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Billing ops"
-        description="Wallet overview, manual top-up and adjustments. All money actions are audited."
-      />
+      <PageHeader title={t('adminBilling.title')} description={t('adminBilling.description')} />
       <Card className="mb-4 max-w-xl space-y-3">
         <div>
-          <Label>Tenant id</Label>
-          <Input value={tenantId} onChange={(e) => setTenantId(e.target.value)} placeholder="cuid…" />
+          <Label>{t('adminBilling.tenantId')}</Label>
+          <Input
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            placeholder={t('adminBilling.tenantIdPlaceholder')}
+          />
         </div>
         <Can permission="admin.billing.mutate">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>Amount</Label>
+              <Label>{t('adminBilling.amount')}</Label>
               <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div>
-              <Label>Adjust direction</Label>
+              <Label>{t('adminBilling.adjustDirection')}</Label>
               <select
                 className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
                 value={direction}
                 onChange={(e) => setDirection(e.target.value as 'credit' | 'debit')}
               >
-                <option value="credit">credit</option>
-                <option value="debit">debit</option>
+                <option value="credit">{t('adminBilling.credit')}</option>
+                <option value="debit">{t('adminBilling.debit')}</option>
               </select>
             </div>
           </div>
           <div className="flex gap-2">
             <Button type="button" disabled={!tenantId} onClick={() => setConfirm('topup')}>
-              Top up
+              {t('adminBilling.topup')}
             </Button>
             <Button
               type="button"
@@ -99,7 +102,7 @@ export default function AdminBillingPage() {
               disabled={!tenantId}
               onClick={() => setConfirm('adjust')}
             >
-              Adjust
+              {t('adminBilling.adjust')}
             </Button>
           </div>
         </Can>
@@ -110,28 +113,30 @@ export default function AdminBillingPage() {
         isError={wallet.isError}
         error={wallet.error}
         isEmpty={!tenantId}
-        emptyTitle="Enter a tenant id"
-        emptyDescription="Load wallet and ledger for billing operations."
+        emptyTitle={t('adminBilling.emptyTitle')}
+        emptyDescription={t('adminBilling.emptyDescription')}
       >
         {wallet.data ? (
           <div className="space-y-4">
             <Card>
-              <p className="text-sm text-[var(--color-ink-muted)]">Available</p>
+              <p className="text-sm text-[var(--color-ink-muted)]">{t('adminBilling.available')}</p>
               <p className="text-3xl font-semibold">
                 {formatMoney(String(wallet.data.availableBalance), String(wallet.data.currency))}
               </p>
               <p className="text-sm text-[var(--color-ink-muted)]">
-                Held {formatMoney(String(wallet.data.heldBalance), String(wallet.data.currency))}
+                {t('adminBilling.held', {
+                  amount: formatMoney(String(wallet.data.heldBalance), String(wallet.data.currency)),
+                })}
               </p>
               <Link
                 href={`/admin/tenants/${tenantId}`}
                 className="mt-2 inline-block text-xs text-[var(--color-accent)]"
               >
-                Open tenant
+                {t('adminBilling.openTenant')}
               </Link>
             </Card>
             <Card>
-              <h2 className="mb-3 font-semibold">Recent ledger</h2>
+              <h2 className="mb-3 font-semibold">{t('adminBilling.recentLedger')}</h2>
               <ul className="space-y-2 text-sm">
                 {((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])
                   .slice()
@@ -154,16 +159,17 @@ export default function AdminBillingPage() {
       <ConfirmDialog
         open={confirm === 'topup'}
         onClose={() => setConfirm(null)}
-        title="Confirm top-up"
-        description={`Credit ${amount} to tenant ${tenantId}?`}
+        title={t('adminBilling.confirmTopupTitle')}
+        description={t('adminBilling.confirmTopupDesc', { amount, tenantId })}
+        confirmLabel={t('adminBilling.topup')}
         loading={topup.isPending}
         onConfirm={() => topup.mutate()}
       />
       <ConfirmDialog
         open={confirm === 'adjust'}
         onClose={() => setConfirm(null)}
-        title="Confirm adjustment"
-        description={`${direction} ${amount} on tenant ${tenantId}?`}
+        title={t('adminBilling.confirmAdjustTitle')}
+        description={t('adminBilling.confirmAdjustDesc', { direction, amount, tenantId })}
         danger={direction === 'debit'}
         loading={adjust.isPending}
         onConfirm={() => adjust.mutate()}

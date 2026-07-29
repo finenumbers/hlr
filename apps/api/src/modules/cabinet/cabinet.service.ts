@@ -78,6 +78,23 @@ export class CabinetService {
     });
   }
 
+  createJobFromCsv(input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    file: { path: string; originalname: string; size: number };
+    createdByUserId: string;
+    idempotencyKey?: string;
+  }) {
+    return this.jobs.createFromCsvUpload({
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      file: input.file,
+      createdByUserId: input.createdByUserId,
+      idempotencyKey: input.idempotencyKey,
+      requestId: this.requestContext.requestId,
+    });
+  }
+
   listJobs(
     tenantId: string,
     page: number,

@@ -1,0 +1,41 @@
+.git
+.github
+.cursor
+.vscode
+.idea
+
+# Secrets and local env (keep examples out of context noise via explicit ignores)
+.env
+.env.*
+!.env.example
+!infra/docker/.env.example
+
+# Dependencies and build outputs
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.turbo
+
+# Runtime / local data
+data
+uploads
+*.pem
+*.log
+
+# Docs and non-runtime assets (Dockerfiles copy only what stages need)
+docs
+**/*.md
+!packages/**/README.md
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+
+# Misc
+.DS_Store
+*.swp
+agent-transcripts

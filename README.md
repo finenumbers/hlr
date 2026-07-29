@@ -1,15 +1,18 @@
 # Finenumbers HLR Lookup Service
 
-B2B SaaS for phone number checks (HLR + Ping-SMS) on top of SMSC.ru.
+B2B SaaS for phone number checks (HLR + Ping-SMS) on top of [SMSC.ru](https://smsc.ru).
 
-This repository is a **pnpm + Turborepo monorepo**. Stage 1 delivers a production-oriented infrastructure scaffold only — no product domain logic yet.
+[![CI](https://github.com/finenumbers/hlr/actions/workflows/ci.yml/badge.svg)](https://github.com/finenumbers/hlr/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+This repository is a **pnpm + Turborepo monorepo** with NestJS API, BullMQ worker, and Next.js cabinet/admin UI.
 
 ## Structure
 
 ```text
 apps/
-  api/       NestJS HTTP API (+ Prisma, health)
-  worker/    BullMQ worker bootstrap
+  api/       NestJS HTTP API (+ Prisma, health, public /v1)
+  worker/    BullMQ processors
   web/       Next.js admin (/admin) + client cabinet (/app)
 packages/
   db/             Prisma schema, migrations, seed, client
@@ -25,14 +28,14 @@ packages/
 infra/
   docker/    Dockerfiles + compose env template
   monitoring/Prometheus, Grafana, Loki configs
-docs/        Product/implementation docs
+docs/        Product and operations docs
 ```
 
 ## Prerequisites
 
 - Node.js >= 20
 - [pnpm](https://pnpm.io/) 9.x (`corepack enable` recommended)
-- Docker + Docker Compose (for infra / full stack)
+- Docker + Docker Compose (local data plane / full stack)
 
 ## Quick start (local apps)
 
@@ -80,45 +83,42 @@ pnpm --filter @finenumbers/web dev
 - `GET /docs` — Swagger UI (disabled in production)
 - Public client API: `/v1/*` (API key auth) — see [docs/public-api.md](docs/public-api.md)
 
-## Production / ops
+## Production deploy
 
-- Deploy: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- Monitoring: [docs/MONITORING.md](docs/MONITORING.md)
-- Backup/restore: [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md)
-- Runbook: [docs/RUNBOOK.md](docs/RUNBOOK.md)
+Canonical guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
+Recommended path:
+
+1. CI publishes images to GHCR: `ghcr.io/finenumbers/hlr-{api,worker,web}`
+2. Deploy stack in **Portainer** from [`docker-compose.portainer.yml`](docker-compose.portainer.yml)
+3. Terminate TLS with **external Nginx Proxy Manager** (join Docker network `hlr_net`, proxy to `web:3000` / `api:3001`)
+
+Also: [MONITORING.md](docs/MONITORING.md) · [BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) · [RUNBOOK.md](docs/RUNBOOK.md)
 
 ```bash
-# full stack
+# local full stack (build)
 docker compose up -d --build
 
-# + observability
-docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
-
-# production-oriented binds/secrets
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# production-oriented CLI pull from GHCR
+export IMAGE_TAG=latest
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
-- Session panels: `/auth`, `/admin/*`, `/cabinet/*` — UI in [apps/web/README.md](apps/web/README.md)
-  - Admin UI: `http://localhost:3000/admin`
-  - Cabinet UI: `http://localhost:3000/app`
+
+- Admin UI: `http://localhost:3000/admin`
+- Cabinet UI: `http://localhost:3000/app`
 
 Default API port: `3001`.
 
-## Docker Compose (full stack)
+## Docker Compose
 
 Templates:
 
 - root `.env.example` — local/dev
-- `infra/docker/.env.example` — compose-oriented defaults
+- `infra/docker/.env.example` — compose / Portainer env
+- `docker-compose.portainer.yml` — **Portainer + GHCR** (no build)
+- `docker-compose.prod.yml` — localhost binds, uploads, backup profile
 - `docker-compose.obs.yml` — Prometheus / Grafana / Loki / Promtail
-- `docker-compose.prod.yml` — localhost binds, uploads volume, backup profile
-
-```bash
-cp .env.example .env
-# adjust secrets, then:
-
-docker compose up -d --build
-docker compose -f docker-compose.yml -f docker-compose.obs.yml up -d
-```
 
 Services (app compose):
 
@@ -132,23 +132,21 @@ Services (app compose):
 
 Observability ports (obs overlay): Grafana `3002`, Prometheus `9090`, Loki `3100`.
 
-Infra-only:
-
-```bash
-docker compose up -d postgres redis
-```
-
 ## Documentation
 
 | File | Content |
 |------|---------|
-| [docs/plan.md](docs/plan.md) | Implementation stages |
-| [docs/todos.md](docs/todos.md) | Task checklist |
 | [docs/public-api.md](docs/public-api.md) | Public `/v1` + webhook verification |
 | [docs/api-outline.md](docs/api-outline.md) | API surface summary |
 | [docs/architecture.md](docs/architecture.md) | Architecture notes |
 | [docs/operations.md](docs/operations.md) | Ops index |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Prod deploy / NPM |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Portainer, GHCR, external NPM |
 | [docs/MONITORING.md](docs/MONITORING.md) | Metrics & alerts |
 | [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md) | Backup/restore |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Incidents |
+| [docs/plan.md](docs/plan.md) | Implementation stages |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+
+## License
+
+[MIT](LICENSE) © Finenumbers

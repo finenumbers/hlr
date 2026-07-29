@@ -7,6 +7,8 @@ export type Permission =
   | 'admin.jobs.read'
   | 'admin.monitoring.read'
   | 'admin.audit.read'
+  | 'admin.settings.read'
+  | 'admin.settings.write'
   | 'cabinet.access'
   | 'cabinet.jobs.read'
   | 'cabinet.jobs.submit'
@@ -44,6 +46,8 @@ const PLATFORM_PERMS: Record<'SUPERADMIN' | 'SUPPORT', Permission[]> = {
     'admin.jobs.read',
     'admin.monitoring.read',
     'admin.audit.read',
+    'admin.settings.read',
+    'admin.settings.write',
   ],
   SUPPORT: [
     'admin.access',
@@ -52,6 +56,7 @@ const PLATFORM_PERMS: Record<'SUPERADMIN' | 'SUPPORT', Permission[]> = {
     'admin.jobs.read',
     'admin.monitoring.read',
     'admin.audit.read',
+    'admin.settings.read',
   ],
 };
 

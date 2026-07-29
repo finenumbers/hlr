@@ -9,9 +9,11 @@ import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function AdminDashboardPage() {
+  const t = useT();
   const q = useQuery({
     queryKey: ['admin', 'dashboard'],
     queryFn: () => api.admin.dashboard(),
@@ -42,51 +44,56 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Operations"
-        description="Is the platform healthy, who is stuck, where are errors, and where is money — last 24h."
-      />
+      <PageHeader title={t('adminDashboard.title')} description={t('adminDashboard.description')} />
       <QueryState isLoading={q.isLoading} isError={q.isError} error={q.error} onRetry={() => void q.refetch()}>
         <div className="mb-4 flex flex-wrap gap-2">
           <Badge tone={d?.health?.providerConfigured ? 'ok' : 'warn'}>
-            Provider {d?.health?.providerConfigured ? 'ready' : 'unconfigured'}
+            {d?.health?.providerConfigured
+              ? t('adminDashboard.providerReady')
+              : t('adminDashboard.providerUnconfigured')}
           </Badge>
           <Badge tone={(d?.health?.stuckJobs ?? 0) > 0 ? 'warn' : 'ok'}>
-            Stuck jobs: {d?.health?.stuckJobs ?? 0}
+            {t('adminDashboard.stuckJobs', { count: d?.health?.stuckJobs ?? 0 })}
           </Badge>
           <Badge tone={(d?.health?.webhookDeadLetter24h ?? 0) > 0 ? 'danger' : 'ok'}>
-            Dead webhooks 24h: {d?.health?.webhookDeadLetter24h ?? 0}
+            {t('adminDashboard.deadWebhooks', { count: d?.health?.webhookDeadLetter24h ?? 0 })}
           </Badge>
           <Badge
             tone={(d?.problems?.providerErrorRatePct ?? 0) > 5 ? 'danger' : 'neutral'}
           >
-            Provider errors: {d?.problems?.providerErrorRatePct ?? 0}%
+            {t('adminDashboard.providerErrors', { pct: d?.problems?.providerErrorRatePct ?? 0 })}
           </Badge>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            label="Active tenants"
+            label={t('adminDashboard.activeTenants')}
             value={d?.volume?.tenantsActive ?? 0}
-            hint={`${d?.volume?.tenantsTotal ?? 0} total · ${d?.volume?.tenantsSuspended ?? 0} suspended`}
+            hint={t('adminDashboard.activeTenantsHint', {
+              total: d?.volume?.tenantsTotal ?? 0,
+              suspended: d?.volume?.tenantsSuspended ?? 0,
+            })}
             href="/admin/tenants?status=ACTIVE"
           />
           <MetricCard
-            label="Jobs 24h"
+            label={t('adminDashboard.jobs24h')}
             value={d?.volume?.jobs24h ?? 0}
-            hint={`HLR ${d?.volume?.hlrItems24h ?? 0} · Ping ${d?.volume?.pingItems24h ?? 0}`}
+            hint={t('adminDashboard.jobs24hHint', {
+              hlr: d?.volume?.hlrItems24h ?? 0,
+              ping: d?.volume?.pingItems24h ?? 0,
+            })}
             href="/admin/jobs"
           />
           <MetricCard
-            label="Captured debit 24h"
+            label={t('adminDashboard.capturedDebit')}
             value={formatMoney(d?.money?.capturedDebit24h ?? '0', d?.money?.currency ?? 'RUB')}
-            hint="Ledger DEBIT sum"
+            hint={t('adminDashboard.capturedDebitHint')}
             href="/admin/audit?action=billing.wallet."
           />
           <MetricCard
-            label="Failed / errored jobs"
+            label={t('adminDashboard.failedJobs')}
             value={(d?.problems?.failedJobs ?? []).length}
-            hint="Recent sample — open Jobs for full list"
+            hint={t('adminDashboard.failedJobsHint')}
             href="/admin/jobs?status=FAILED"
             tone={(d?.problems?.failedJobs ?? []).length ? 'danger' : 'ok'}
           />
@@ -95,18 +102,18 @@ export default function AdminDashboardPage() {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold">Stuck jobs</h2>
+              <h2 className="font-semibold">{t('adminDashboard.stuckJobsTitle')}</h2>
               <Link href="/admin/jobs?status=PROCESSING" className="text-xs text-[var(--color-accent)]">
-                View all
+                {t('adminDashboard.viewAll')}
               </Link>
             </div>
             <ProblemList rows={d?.problems?.stuckJobs ?? []} />
           </Card>
           <Card>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-semibold">Failed jobs (24h)</h2>
+              <h2 className="font-semibold">{t('adminDashboard.failedJobsTitle')}</h2>
               <Link href="/admin/jobs?status=FAILED" className="text-xs text-[var(--color-accent)]">
-                View all
+                {t('adminDashboard.viewAll')}
               </Link>
             </div>
             <ProblemList rows={d?.problems?.failedJobs ?? []} />
@@ -118,8 +125,9 @@ export default function AdminDashboardPage() {
 }
 
 function ProblemList({ rows }: { rows: Array<Record<string, unknown>> }) {
+  const t = useT();
   if (!rows.length) {
-    return <p className="text-sm text-[var(--color-ink-muted)]">No issues in this sample.</p>;
+    return <p className="text-sm text-[var(--color-ink-muted)]">{t('adminDashboard.emptySample')}</p>;
   }
   return (
     <ul className="space-y-2">

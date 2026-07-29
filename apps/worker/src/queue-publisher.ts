@@ -2,6 +2,7 @@ import {
   QUEUE_DEFAULT_JOB_OPTIONS,
   QUEUE_JOB_NAMES,
   QUEUE_NAMES,
+  type CsvParsePayload,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
   type PollItemPayload,
@@ -16,6 +17,7 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
   private readonly pollQueue: Queue;
   private readonly finalizeQueue: Queue;
   private readonly reconciliationQueue: Queue;
+  private readonly csvParseQueue: Queue;
 
   constructor(connection: IORedis) {
     this.submitQueue = new Queue(QUEUE_NAMES.JOBS_SUBMIT, {
@@ -33,6 +35,10 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
     this.reconciliationQueue = new Queue(QUEUE_NAMES.JOBS_RECONCILIATION, {
       connection,
       defaultJobOptions: QUEUE_DEFAULT_JOB_OPTIONS.reconciliation,
+    });
+    this.csvParseQueue = new Queue(QUEUE_NAMES.JOBS_CSV_PARSE, {
+      connection,
+      defaultJobOptions: QUEUE_DEFAULT_JOB_OPTIONS.csvParse,
     });
   }
 
@@ -59,12 +65,19 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
     await this.reconciliationQueue.add(QUEUE_JOB_NAMES.RECONCILE_STALE, payload);
   }
 
+  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
+    await this.csvParseQueue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, {
+      jobId: `csv-parse:${payload.jobId}`,
+    });
+  }
+
   async close(): Promise<void> {
     await Promise.all([
       this.submitQueue.close(),
       this.pollQueue.close(),
       this.finalizeQueue.close(),
       this.reconciliationQueue.close(),
+      this.csvParseQueue.close(),
     ]);
   }
 }

@@ -11,9 +11,16 @@ import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api/client';
+import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
+function LoadingFallback() {
+  const t = useT();
+  return <div className="p-8 text-sm text-[var(--color-ink-muted)]">{t('common.loading')}</div>;
+}
+
 function AdminJobsPage() {
+  const t = useT();
   const search = useSearchParams();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState(search.get('status') ?? '');
@@ -31,10 +38,10 @@ function AdminJobsPage() {
 
   return (
     <div>
-      <PageHeader title="Jobs" description="Cross-tenant job explorer with stuck/failed visibility." />
+      <PageHeader title={t('adminJobs.title')} description={t('adminJobs.description')} />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Input
-          placeholder="Filter tenant id"
+          placeholder={t('adminJobs.filterTenantId')}
           value={tenantId}
           onChange={(e) => {
             setPage(1);
@@ -49,7 +56,7 @@ function AdminJobsPage() {
             setStatus(e.target.value);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">{t('adminJobs.allStatuses')}</option>
           {['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'CANCELLED'].map(
             (s) => (
               <option key={s} value={s}>
@@ -64,14 +71,14 @@ function AdminJobsPage() {
         isError={q.isError}
         error={q.error}
         isEmpty={!q.data?.items.length}
-        emptyTitle="No jobs match"
+        emptyTitle={t('adminJobs.empty')}
         onRetry={() => void q.refetch()}
       >
         <DataTable
           columns={[
             {
               key: 'id',
-              header: 'Job',
+              header: t('adminJobs.colJob'),
               cell: (row) => (
                 <Link href={`/admin/jobs/${row.id}`} className="font-medium hover:underline">
                   {String(row.id).slice(0, 12)}…
@@ -80,20 +87,20 @@ function AdminJobsPage() {
             },
             {
               key: 'tenant',
-              header: 'Tenant',
+              header: t('adminJobs.colTenant'),
               cell: (row) => {
-                const t = row.tenant as { slug?: string } | undefined;
-                return t?.slug ?? String(row.tenantId);
+                const tenant = row.tenant as { slug?: string } | undefined;
+                return tenant?.slug ?? String(row.tenantId);
               },
             },
             {
               key: 'type',
-              header: 'Type',
+              header: t('adminJobs.colType'),
               cell: (row) => String(row.checkType),
             },
             {
               key: 'status',
-              header: 'Status',
+              header: t('adminJobs.colStatus'),
               cell: (row) => (
                 <Badge
                   tone={
@@ -110,13 +117,17 @@ function AdminJobsPage() {
             },
             {
               key: 'progress',
-              header: 'Items',
+              header: t('adminJobs.colItems'),
               cell: (row) =>
-                `${row.successCount ?? 0}/${row.itemCount ?? 0} ok · ${row.failureCount ?? 0} fail`,
+                t('adminJobs.itemsCell', {
+                  ok: Number(row.successCount ?? 0),
+                  total: Number(row.itemCount ?? 0),
+                  fail: Number(row.failureCount ?? 0),
+                }),
             },
             {
               key: 'created',
-              header: 'Created',
+              header: t('adminJobs.colCreated'),
               cell: (row) => formatDate(String(row.createdAt)),
             },
           ]}
@@ -135,7 +146,7 @@ function AdminJobsPage() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-[var(--color-ink-muted)]">Loading…</div>}>
+    <Suspense fallback={<LoadingFallback />}>
       <AdminJobsPage />
     </Suspense>
   );
