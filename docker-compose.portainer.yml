@@ -93,8 +93,6 @@ services:
       DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!}
-      SEED_DEMO_ADMIN_EMAIL: ${SEED_DEMO_ADMIN_EMAIL:-demo@finenumbers.local}
-      SEED_DEMO_ADMIN_PASSWORD: ${SEED_DEMO_ADMIN_PASSWORD:-ChangeMeNow!}
     working_dir: /app/packages/db
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]

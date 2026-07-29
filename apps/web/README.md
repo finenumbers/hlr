@@ -69,7 +69,7 @@ pnpm --filter @finenumbers/api dev
 pnpm --filter @finenumbers/web dev
 ```
 
-Seed logins (after `pnpm --filter @finenumbers/db seed`):
+Seed login (after `pnpm --filter @finenumbers/db seed` — no demo clients):
 
 - Admin: `admin@finenumbers.local` / `ChangeMeNow!` → `/admin/login`  
 - Cabinet: `demo@finenumbers.local` / `ChangeMeNow!` → `/app/login`

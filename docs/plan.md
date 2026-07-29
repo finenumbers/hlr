@@ -163,13 +163,13 @@ docker-compose.obs.yml
 - `packages/db/prisma/schema.prisma`  
 - `packages/db` client export (`@finenumbers/db`)  
 - первая migration (`init_domain`)  
-- seed: `PlatformSettings` + superadmin + demo tenant/admin (без тарифов)  
+- seed: `PlatformSettings` + superadmin only (без демо-клиентов и тарифов)  
 
 **Готово когда:**
 
 - `prisma migrate` на чистой БД ок  
 - все сущности из [domain-model.md](./domain-model.md) описаны  
-- seed поднимает settings + superadmin + demo tenant  
+- seed поднимает settings + superadmin (клиентов создаёте в админке)  
 
 **Риски:** слишком рано тащить все индексы — добавить минимально нужные, расширять по мере API.  
 **Статус:** сделано (Tenant вместо Organization; Check свёрнут в JobItem; ledger = WalletTransaction).

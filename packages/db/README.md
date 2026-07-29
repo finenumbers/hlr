@@ -46,13 +46,11 @@ pnpm --filter @finenumbers/db migrate:dev
 pnpm --filter @finenumbers/db seed
 ```
 
-Seed defaults (override via env):
+Seed creates **platform settings + superadmin only** (no demo tenants/clients). Override via env:
 
 | Env | Default |
 |-----|---------|
 | `SEED_SUPERADMIN_EMAIL` | `admin@finenumbers.local` |
 | `SEED_SUPERADMIN_PASSWORD` | `ChangeMeNow!` |
-| `SEED_DEMO_ADMIN_EMAIL` | `demo@finenumbers.local` |
-| `SEED_DEMO_ADMIN_PASSWORD` | `ChangeMeNow!` |
 
-Tariffs are **not** seeded (admin creates them later).
+Tariffs and clients are created later in the admin UI.

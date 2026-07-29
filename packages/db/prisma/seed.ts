@@ -1,13 +1,28 @@
 import { hashSync } from 'bcryptjs';
 
-import { MembershipRole, PlatformRole, PrismaClient, TenantStatus } from '@prisma/client';
+import { PlatformRole, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 const SUPERADMIN_EMAIL = process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@finenumbers.local';
 const SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMeNow!';
-const DEMO_ADMIN_EMAIL = process.env.SEED_DEMO_ADMIN_EMAIL ?? 'demo@finenumbers.local';
-const DEMO_ADMIN_PASSWORD = process.env.SEED_DEMO_ADMIN_PASSWORD ?? 'ChangeMeNow!';
+
+/** Legacy bootstrap demo org/user — remove if still present from older seeds. */
+async function removeLegacyDemo(): Promise<void> {
+  const demoTenant = await prisma.tenant.findUnique({ where: { slug: 'demo' } });
+  if (demoTenant) {
+    await prisma.tenant.delete({ where: { id: demoTenant.id } });
+    console.log('  removed legacy demo tenant');
+  }
+
+  const demoUser = await prisma.user.findUnique({
+    where: { email: 'demo@finenumbers.local' },
+  });
+  if (demoUser && demoUser.platformRole == null) {
+    await prisma.user.delete({ where: { id: demoUser.id } });
+    console.log('  removed legacy demo user');
+  }
+}
 
 async function main(): Promise<void> {
   await prisma.platformSettings.upsert({
@@ -45,68 +60,11 @@ async function main(): Promise<void> {
     },
   });
 
-  const demoTenant = await prisma.tenant.upsert({
-    where: { slug: 'demo' },
-    create: {
-      slug: 'demo',
-      name: 'Demo Tenant',
-      status: TenantStatus.ACTIVE,
-    },
-    update: {
-      name: 'Demo Tenant',
-      status: TenantStatus.ACTIVE,
-    },
-  });
+  await removeLegacyDemo();
 
-  await prisma.wallet.upsert({
-    where: { tenantId: demoTenant.id },
-    create: {
-      tenantId: demoTenant.id,
-      currency: 'RUB',
-      // Decimal strings — never JS float for money columns.
-      availableBalance: '0',
-      heldBalance: '0',
-    },
-    update: {},
-  });
-
-  const demoAdmin = await prisma.user.upsert({
-    where: { email: DEMO_ADMIN_EMAIL },
-    create: {
-      email: DEMO_ADMIN_EMAIL,
-      name: 'Demo Tenant Admin',
-      passwordHash: hashSync(DEMO_ADMIN_PASSWORD, 12),
-      isActive: true,
-    },
-    update: {
-      isActive: true,
-      name: 'Demo Tenant Admin',
-      passwordHash: hashSync(DEMO_ADMIN_PASSWORD, 12),
-    },
-  });
-
-  await prisma.tenantMembership.upsert({
-    where: {
-      tenantId_userId: {
-        tenantId: demoTenant.id,
-        userId: demoAdmin.id,
-      },
-    },
-    create: {
-      tenantId: demoTenant.id,
-      userId: demoAdmin.id,
-      role: MembershipRole.OWNER,
-    },
-    update: {
-      role: MembershipRole.OWNER,
-    },
-  });
-
-  console.log('Seed completed:');
+  console.log('Seed completed (empty tenants — create clients in admin):');
   console.log(`  platform settings: default`);
   console.log(`  superadmin: ${superadmin.email} (password from SEED_SUPERADMIN_PASSWORD or default)`);
-  console.log(`  demo tenant: ${demoTenant.slug} (${demoTenant.id})`);
-  console.log(`  demo admin: ${demoAdmin.email} (password from SEED_DEMO_ADMIN_PASSWORD or default)`);
 }
 
 main()
