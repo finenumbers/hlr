@@ -593,7 +593,8 @@ export class FakeBillingPrisma {
     tenantId: string,
     jobId = randomUUID(),
     snapshot?: {
-      unitSellPrice: string;
+      /** Omit to freeze from the current tenant assignment for checkType. */
+      unitSellPrice?: string;
       unitProviderCost?: string;
       tariffPlanId?: string;
       tariffPlanCode?: string;

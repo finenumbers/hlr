@@ -185,6 +185,7 @@ describe('JobLifecycleService', () => {
         unitProviderCost: '0.8',
         tariffPlanId: 'plan-ping',
         tariffPlanCode: 'ping-std',
+        currency: 'RUB',
       },
       metadata: null,
     });
@@ -249,6 +250,7 @@ describe('JobLifecycleService', () => {
         unitProviderCost: '0.8',
         tariffPlanId: 'plan-ping',
         tariffPlanCode: 'ping-std',
+        currency: 'RUB',
       },
       metadata: null,
     });
