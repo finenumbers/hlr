@@ -21,6 +21,9 @@ export class PrismaProviderPersistence implements ProviderPersistencePort {
 
   async saveRequest(record: ProviderRequestRecord): Promise<SaveRequestResult> {
     if (record.idempotencyKey && record.kind === 'SEND') {
+      if (!record.tenantId) {
+        throw new Error('SEND provider requests require tenantId');
+      }
       const latest = await this.findLatestSendByIdempotencyKey({
         providerCode: record.providerCode,
         tenantId: record.tenantId,
@@ -37,7 +40,7 @@ export class PrismaProviderPersistence implements ProviderPersistencePort {
     try {
       const created = await this.prisma.providerRequest.create({
         data: {
-          tenantId: record.tenantId,
+          tenantId: record.tenantId ?? null,
           jobItemId: record.jobItemId ?? null,
           providerCode: record.providerCode,
           kind: record.kind,
@@ -64,6 +67,9 @@ export class PrismaProviderPersistence implements ProviderPersistencePort {
         error.code === 'P2002' &&
         record.idempotencyKey
       ) {
+        if (!record.tenantId) {
+          throw new ProviderIdempotencyConflictError(record.idempotencyKey);
+        }
         const latest = await this.findLatestSendByIdempotencyKey({
           providerCode: record.providerCode,
           tenantId: record.tenantId,
@@ -210,7 +216,7 @@ export class PrismaProviderPersistence implements ProviderPersistencePort {
 function mapRequestRow(
   row: {
     id: string;
-    tenantId: string;
+    tenantId: string | null;
     jobItemId: string | null;
     providerCode: string;
     kind: ProviderRequestRecord['kind'];

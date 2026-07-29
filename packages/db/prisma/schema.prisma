@@ -420,7 +420,8 @@ model JobItem {
 
 model ProviderRequest {
   id                String                @id @default(cuid())
-  tenantId          String
+  /// Null for platform-level probes (BALANCE / admin COST) without a tenant.
+  tenantId          String?
   jobItemId         String?
   providerCode      String
   kind              ProviderRequestKind
@@ -441,7 +442,7 @@ model ProviderRequest {
   finishedAt        DateTime?
   createdAt         DateTime              @default(now())
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   jobItem JobItem? @relation(fields: [jobItemId], references: [id], onDelete: SetNull)
 
   @@index([jobItemId, createdAt])

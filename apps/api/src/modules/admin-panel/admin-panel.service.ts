@@ -838,12 +838,10 @@ export class AdminPanelService {
           ? await this.provider.estimateHlrCost({
               phoneE164,
               correlationId: input.correlationId,
-              tenantId: 'system',
             })
           : await this.provider.estimatePingCost({
               phoneE164,
               correlationId: input.correlationId,
-              tenantId: 'system',
             });
 
       return {

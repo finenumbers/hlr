@@ -14,7 +14,8 @@ export type ProviderRequestRecordStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED';
  */
 export type ProviderRequestRecord = {
   id?: string;
-  tenantId: string;
+  /** Null for platform-level probes (BALANCE / admin COST). */
+  tenantId: string | null;
   jobItemId?: string | null;
   providerCode: string;
   kind: ProviderRequestKind;
@@ -134,6 +135,9 @@ export class InMemoryProviderPersistence implements ProviderPersistencePort {
 
   async saveRequest(record: ProviderRequestRecord): Promise<SaveRequestResult> {
     if (record.idempotencyKey && record.kind === 'SEND') {
+      if (!record.tenantId) {
+        throw new Error('SEND provider requests require tenantId');
+      }
       const existing = await this.findLatestSendByIdempotencyKey({
         providerCode: record.providerCode,
         tenantId: record.tenantId,

@@ -97,7 +97,7 @@ export class SmscProvider implements NumberLookupProvider {
 
     const startedAt = new Date();
     const saved = await this.persistence?.saveRequest({
-      tenantId: input.tenantId ?? 'system',
+      tenantId: input.tenantId ?? null,
       jobItemId: input.jobItemId ?? null,
       providerCode: this.code,
       kind: 'STATUS',
@@ -261,7 +261,7 @@ export class SmscProvider implements NumberLookupProvider {
   async getBalance(correlationId?: string): Promise<ProviderBalance> {
     const requestPayload = redactSecrets({ path: '/sys/balance.php' });
     const saved = await this.persistence?.saveRequest({
-      tenantId: 'system',
+      tenantId: null,
       providerCode: this.code,
       kind: 'BALANCE',
       status: 'PENDING',
@@ -328,7 +328,7 @@ export class SmscProvider implements NumberLookupProvider {
     });
 
     const saved = await this.persistence?.saveRequest({
-      tenantId: input.tenantId ?? 'system',
+      tenantId: input.tenantId ?? null,
       jobItemId: input.jobItemId ?? null,
       providerCode: this.code,
       kind: 'COST',

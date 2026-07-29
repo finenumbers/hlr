@@ -8,8 +8,8 @@ export class ProviderRequestResponseDto {
   @ApiProperty()
   id!: string;
 
-  @ApiProperty()
-  tenantId!: string;
+  @ApiPropertyOptional({ nullable: true })
+  tenantId!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   jobItemId!: string | null;
