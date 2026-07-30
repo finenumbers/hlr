@@ -592,6 +592,8 @@ export class JobLifecycleService {
       throw new JobsNotFoundError(`Job ${payload.jobId} not found for tenant`);
     }
     if (isTerminalJobStatus(job.status)) {
+      // Idempotent settle/reconcile if a prior finalize committed status but billing failed.
+      await this.safeBillingOnJobFinalized(job);
       return job;
     }
 
@@ -619,16 +621,21 @@ export class JobLifecycleService {
       return this.deps.store.findJobById(job.id);
     }
 
-    await this.billing.onJobFinalized({
-      tenantId: finalized.tenantId,
-      jobId: finalized.id,
-      status: finalized.status,
-    });
-    await this.webhooks.onJobFinalized({
-      tenantId: finalized.tenantId,
-      jobId: finalized.id,
-      status: finalized.status,
-    });
+    await this.safeBillingOnJobFinalized(finalized);
+    try {
+      await this.webhooks.onJobFinalized({
+        tenantId: finalized.tenantId,
+        jobId: finalized.id,
+        status: finalized.status,
+      });
+    } catch (err) {
+      this.logger.error('jobs.finalize.webhooks_failed', {
+        jobId: finalized.id,
+        tenantId: finalized.tenantId,
+        reason: payload.reason,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     this.logger.info('jobs.finalize.done', {
       jobId: finalized.id,
@@ -640,6 +647,23 @@ export class JobLifecycleService {
     });
 
     return finalized;
+  }
+
+  private async safeBillingOnJobFinalized(job: JobRecord): Promise<void> {
+    try {
+      await this.billing.onJobFinalized({
+        tenantId: job.tenantId,
+        jobId: job.id,
+        status: job.status,
+      });
+    } catch (err) {
+      this.logger.error('jobs.finalize.billing_failed', {
+        jobId: job.id,
+        tenantId: job.tenantId,
+        status: job.status,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async processReconciliation(

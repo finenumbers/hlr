@@ -42,7 +42,11 @@ export async function enqueueFinalizeJobOnQueue(
     if (state === 'active') {
       return;
     }
-    await existing.remove();
+    try {
+      await existing.remove();
+    } catch {
+      // Locked/raced job — fall through and treat duplicate add as success.
+    }
   }
 
   try {

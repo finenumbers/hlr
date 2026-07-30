@@ -27,6 +27,7 @@ import { Type, Transform } from 'class-transformer';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { ListItemsQueryDto } from '../../common/dto/list-items-query.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
 import { AuditListQueryDto } from '../audit/dto/audit-list-query.dto';
@@ -399,10 +400,7 @@ export class AdminPanelController {
   }
 
   @Get('jobs/:id/items')
-  listJobItems(
-    @Param('id') id: string,
-    @Query() query: PaginationQueryDto & { status?: string },
-  ) {
+  listJobItems(@Param('id') id: string, @Query() query: ListItemsQueryDto) {
     return this.admin.listJobItems(id, query.page, query.pageSize, query.status);
   }
 

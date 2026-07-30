@@ -91,4 +91,21 @@ describe('enqueueFinalizeJobOnQueue', () => {
 
     await expect(enqueueFinalizeJobOnQueue(queue, payload)).resolves.toBeUndefined();
   });
+
+  it('still re-enqueues when remove of a completed job races/locks', async () => {
+    const add = vi.fn().mockResolvedValue({});
+    const queue: FinalizeQueueLike = {
+      getJob: vi.fn().mockResolvedValue({
+        getState: async () => 'completed',
+        remove: vi.fn().mockRejectedValue(new Error('Could not remove job finalize:job-1')),
+      }),
+      add,
+    };
+
+    await enqueueFinalizeJobOnQueue(queue, payload);
+
+    expect(add).toHaveBeenCalledWith(QUEUE_JOB_NAMES.FINALIZE_JOB, payload, {
+      jobId: finalizeBullJobId('job-1'),
+    });
+  });
 });

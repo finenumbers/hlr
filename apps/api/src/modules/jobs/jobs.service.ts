@@ -243,7 +243,9 @@ export class JobsService {
     }>
   > {
     await this.getByIdForTenant(input.tenantId, input.jobId);
-    const skip = (input.page - 1) * input.pageSize;
+    const page = Math.max(1, Number(input.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(input.pageSize) || 20));
+    const skip = (page - 1) * pageSize;
     const where = {
       tenantId: input.tenantId,
       jobId: input.jobId,
@@ -265,7 +267,7 @@ export class JobsService {
       this.prisma.jobItem.findMany({
         where,
         skip,
-        take: input.pageSize,
+        take: pageSize,
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
@@ -293,8 +295,8 @@ export class JobsService {
 
     return {
       items,
-      page: input.page,
-      pageSize: input.pageSize,
+      page,
+      pageSize,
       total,
     };
   }

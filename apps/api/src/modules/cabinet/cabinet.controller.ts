@@ -37,6 +37,7 @@ import { IsInt, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { TenantId } from '../../common/decorators/tenant-id.decorator';
+import { ListItemsQueryDto } from '../../common/dto/list-items-query.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import type { AuthenticatedUser } from '../../common/types/authenticated-user';
@@ -226,7 +227,7 @@ export class CabinetController {
   listItems(
     @TenantId() tenantId: string,
     @Param('id') id: string,
-    @Query() query: PaginationQueryDto & { status?: string },
+    @Query() query: ListItemsQueryDto,
   ) {
     return this.cabinet.listJobItems(
       tenantId,

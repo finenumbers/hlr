@@ -781,30 +781,39 @@ export class AdminPanelService {
       });
     }
 
-    // Ensure a fresh finalize is queued even if Redis still holds a stale jobId.
-    await this.jobs.getProcessor().enqueueFinalizeJob({
-      jobId: job.id,
-      tenantId: job.tenantId,
-      reason: 'admin-heal',
-    });
+    // Heal DB synchronously first — Redis/BullMQ must not block admin recovery.
     const finalized = await this.jobs.getLifecycle().processFinalizeJob({
       jobId: job.id,
       tenantId: job.tenantId,
       reason: 'admin-heal',
     });
 
-    await this.audit.write({
-      tenantId: job.tenantId,
-      actorType: 'USER',
-      actorUserId,
-      action: 'admin.job.finalize',
-      targetType: 'Job',
-      targetId: job.id,
-      metadata: {
-        beforeStatus: job.status,
-        afterStatus: finalized?.status ?? job.status,
-      },
-    });
+    try {
+      await this.jobs.getProcessor().enqueueFinalizeJob({
+        jobId: job.id,
+        tenantId: job.tenantId,
+        reason: 'admin-heal',
+      });
+    } catch {
+      // Worker may still pick it up later via reconciliation; DB heal already ran.
+    }
+
+    try {
+      await this.audit.write({
+        tenantId: job.tenantId,
+        actorType: 'USER',
+        actorUserId,
+        action: 'admin.job.finalize',
+        targetType: 'Job',
+        targetId: job.id,
+        metadata: {
+          beforeStatus: job.status,
+          afterStatus: finalized?.status ?? job.status,
+        },
+      });
+    } catch {
+      // Audit must not undo a successful heal.
+    }
 
     return this.getJob(jobId);
   }

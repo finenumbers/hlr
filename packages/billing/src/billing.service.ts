@@ -1175,16 +1175,25 @@ export class BillingService {
 
     let captured = 0;
     for (const item of items) {
-      const open = await this.ledger.findOpenHoldForJobItem(item.id);
-      if (!open) {
-        continue;
-      }
-      const result = await this.captureForJobItem({
-        tenantId: item.tenantId,
-        jobItemId: item.id,
-      });
-      if (result.created || (result.debit && result.chargedAmount !== '0')) {
-        captured += 1;
+      try {
+        const open = await this.ledger.findOpenHoldForJobItem(item.id);
+        if (!open) {
+          continue;
+        }
+        const result = await this.captureForJobItem({
+          tenantId: item.tenantId,
+          jobItemId: item.id,
+        });
+        if (result.created || (result.debit && result.chargedAmount !== '0')) {
+          captured += 1;
+        }
+      } catch (error) {
+        this.logger.error('billing.settle_holds.item_failed', {
+          jobId,
+          jobItemId: item.id,
+          tenantId: item.tenantId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return { attempted: items.length, captured };

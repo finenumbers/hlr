@@ -76,8 +76,8 @@ describe('JobsService tenant isolation', () => {
             return null;
           },
         ),
-        findMany: vi.fn(async () => []),
-        count: vi.fn(async () => 0),
+        findMany: vi.fn(async () => [itemA]),
+        count: vi.fn(async () => 1),
       },
       $transaction: vi.fn(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
     };
@@ -126,6 +126,27 @@ describe('JobsService tenant isolation', () => {
         pageSize: 20,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('listItemsForTenant coerces string page/pageSize (broken Query DTO metatype)', async () => {
+    const { service, prisma } = createService();
+    const result = await service.listItemsForTenant({
+      tenantId: 'tenant-a',
+      jobId: 'job-a',
+      // Query strings arrive as strings when ValidationPipe skips intersection types.
+      page: '1' as unknown as number,
+      pageSize: '20' as unknown as number,
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(20);
+    expect(prisma.jobItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 0,
+        take: 20,
+      }),
+    );
   });
 
   it('findJobIdForTenant returns null across tenants', async () => {
