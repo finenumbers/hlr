@@ -12,9 +12,12 @@ import { isProviderError } from '@finenumbers/provider-core';
 import { verifyCallbackSignature } from '@finenumbers/provider-smsc';
 import { hash } from 'bcryptjs';
 
+import { SMSC_BALANCE_REDIS_KEY } from '@finenumbers/config';
+
 import { AppConfigService } from '../../common/config/app-config.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { RedisService } from '../../common/redis/redis.service';
 import { AuditService } from '../audit/audit.service';
 import { NestBillingService } from '../billing/billing.service';
 import { JobsService } from '../jobs/jobs.service';
@@ -42,7 +45,41 @@ export class AdminPanelService {
     private readonly webhooks: WebhooksService,
     private readonly apiKeys: ApiKeysService,
     private readonly config: AppConfigService,
+    private readonly redis: RedisService,
   ) {}
+
+  private async readCachedSmscBalance(): Promise<{
+    balance: string;
+    currency: string;
+    checkedAt: string;
+  } | null> {
+    try {
+      if (this.redis.client.status !== 'ready') {
+        await this.redis.client.connect();
+      }
+      const raw = await this.redis.client.get(SMSC_BALANCE_REDIS_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        balance?: unknown;
+        currency?: unknown;
+        checkedAt?: unknown;
+      };
+      if (
+        typeof parsed.balance !== 'string' ||
+        typeof parsed.currency !== 'string' ||
+        typeof parsed.checkedAt !== 'string'
+      ) {
+        return null;
+      }
+      return {
+        balance: parsed.balance,
+        currency: parsed.currency,
+        checkedAt: parsed.checkedAt,
+      };
+    } catch {
+      return null;
+    }
+  }
 
   async dashboard() {
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -59,6 +96,7 @@ export class AdminPanelService {
       webhookDead,
       stuckJobs,
       failedJobs,
+      smscBalance,
     ] = await Promise.all([
       this.prisma.tenant.count(),
       this.prisma.tenant.count({ where: { status: 'ACTIVE' } }),
@@ -123,6 +161,7 @@ export class AdminPanelService {
           tenant: { select: { slug: true, name: true } },
         },
       }),
+      this.readCachedSmscBalance(),
     ]);
 
     const hlr = itemsByType.find((r) => r.checkType === 'HLR')?._count._all ?? 0;
@@ -152,6 +191,9 @@ export class AdminPanelService {
       money: {
         capturedDebit24h: debitSum._sum.amount?.toString() ?? '0',
         currency: 'RUB',
+      },
+      provider: {
+        smscBalance,
       },
       problems: {
         providerErrorRatePct: providerErrorRate,

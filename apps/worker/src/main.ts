@@ -1,5 +1,5 @@
 import { BillingService, createBillingJobsHooks } from '@finenumbers/billing';
-import { loadWorkerEnv } from '@finenumbers/config';
+import { loadWorkerEnv, SMSC_BALANCE_REDIS_KEY } from '@finenumbers/config';
 import { createPrismaClient } from '@finenumbers/db';
 import {
   JobLifecycleService,
@@ -210,16 +210,25 @@ async function bootstrap(): Promise<void> {
     const pollBalance = async (): Promise<void> => {
       try {
         const balance = await smscProvider!.getBalance('metrics');
+        const currency = balance.currency ?? env.SMSC_CURRENCY;
         const numeric = Number.parseFloat(balance.balance);
         if (Number.isFinite(numeric)) {
           metrics.providerBalance.set(
             {
               provider: 'smsc',
-              currency: balance.currency ?? env.SMSC_CURRENCY,
+              currency,
             },
             numeric,
           );
         }
+        await connection.set(
+          SMSC_BALANCE_REDIS_KEY,
+          JSON.stringify({
+            balance: balance.balance,
+            currency,
+            checkedAt: new Date().toISOString(),
+          }),
+        );
       } catch (error) {
         metrics.providerErrorsTotal.inc({
           provider: 'smsc',

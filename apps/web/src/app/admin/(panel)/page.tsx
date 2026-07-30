@@ -35,12 +35,17 @@ export default function AdminDashboardPage() {
       pingItems24h?: number;
     };
     money?: { capturedDebit24h?: string; currency?: string };
+    provider?: {
+      smscBalance?: { balance?: string; currency?: string; checkedAt?: string } | null;
+    };
     problems?: {
       providerErrorRatePct?: number;
       stuckJobs?: Array<Record<string, unknown>>;
       failedJobs?: Array<Record<string, unknown>>;
     };
   } | undefined;
+
+  const smsc = d?.provider?.smscBalance;
 
   return (
     <div>
@@ -91,11 +96,20 @@ export default function AdminDashboardPage() {
             href="/admin/audit?action=billing.wallet."
           />
           <MetricCard
-            label={t('adminDashboard.failedJobs')}
-            value={(d?.problems?.failedJobs ?? []).length}
-            hint={t('adminDashboard.failedJobsHint')}
-            href="/admin/jobs?status=FAILED"
-            tone={(d?.problems?.failedJobs ?? []).length ? 'danger' : 'ok'}
+            label={t('adminDashboard.smscBalance')}
+            value={
+              smsc?.balance != null
+                ? formatMoney(smsc.balance, smsc.currency ?? 'RUB')
+                : t('common.dash')
+            }
+            hint={
+              smsc?.checkedAt
+                ? t('adminDashboard.smscBalanceHint', {
+                    when: formatDate(smsc.checkedAt),
+                  })
+                : t('adminDashboard.smscBalanceEmpty')
+            }
+            href="/admin/monitoring"
           />
         </div>
 

@@ -61,11 +61,6 @@ export function AppShell({
         <div className="flex items-center gap-3 px-3 py-5">
           <BrandLogo variant="dark" priority className="h-[2.1rem] w-auto" />
         </div>
-        <div className="px-3 pb-3">
-          <p className="text-[11px] font-bold !text-white">
-            {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
-          </p>
-        </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-4 lg:flex-1 lg:flex-col">
           {items.map((item) => {
             const active = item.href === activeHref;

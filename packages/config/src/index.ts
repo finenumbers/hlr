@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Redis key: last successful SMSC balance poll from the worker. */
+export const SMSC_BALANCE_REDIS_KEY = 'hlr:provider:smsc:balance';
+
 export {
   maskPhone,
   maskPhonesInText,
