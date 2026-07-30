@@ -32,9 +32,9 @@ export function DataTable<T>({
   const t = useT();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+    <div className="w-full overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
+      <div className="w-full overflow-x-auto">
+        <table className="w-full min-w-full text-left text-sm">
           <thead className="border-b border-[var(--color-line)] bg-[color-mix(in_oklab,var(--color-panel)_70%,transparent)]">
             <tr>
               {columns.map((col) => (

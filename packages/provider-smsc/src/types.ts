@@ -32,7 +32,8 @@ export type SmscBalanceBody = {
 
 /**
  * status.php with all>=1 / callback status payload.
- * HLR extras: imsi, msc, mcc, mnc, cn, net, rcn, rnet.
+ * HLR extras: imsi, msc, mcc, mnc, cn, net, rcn, rnet;
+ * all=2 also: country, operator, region.
  */
 export type SmscStatusBody = {
   id?: number | string;
@@ -56,6 +57,10 @@ export type SmscStatusBody = {
   net?: string;
   rcn?: string;
   rnet?: string;
+  /** Extended status (all=2): number registration geo */
+  country?: string;
+  operator?: string;
+  region?: string;
   /** Present on some extended responses */
   flag?: number | string;
   error?: string;

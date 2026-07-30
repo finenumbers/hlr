@@ -220,28 +220,7 @@ export class JobsService {
     page: number;
     pageSize: number;
     status?: string;
-  }): Promise<
-    PaginatedResult<{
-      id: string;
-      jobId: string;
-      checkType: string;
-      status: string;
-      phoneE164: string;
-      resultStatus: string | null;
-      isReachable: boolean | null;
-      imsi: string | null;
-      mcc: string | null;
-      mnc: string | null;
-      operatorName: string | null;
-      countryCode: string | null;
-      ported: boolean | null;
-      roaming: boolean | null;
-      errorCode: string | null;
-      errorMessage: string | null;
-      completedAt: Date | null;
-      createdAt: Date;
-    }>
-  > {
+  }) {
     await this.getByIdForTenant(input.tenantId, input.jobId);
     const page = Math.max(1, Number(input.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(input.pageSize) || 20));
@@ -269,83 +248,23 @@ export class JobsService {
         skip,
         take: pageSize,
         orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          jobId: true,
-          checkType: true,
-          status: true,
-          phoneE164: true,
-          resultStatus: true,
-          isReachable: true,
-          imsi: true,
-          mcc: true,
-          mnc: true,
-          operatorName: true,
-          countryCode: true,
-          ported: true,
-          roaming: true,
-          errorCode: true,
-          errorMessage: true,
-          completedAt: true,
-          createdAt: true,
-        },
+        select: jobItemListSelect,
       }),
       this.prisma.jobItem.count({ where }),
     ]);
 
     return {
-      items,
+      items: items.map(mapJobItemListRow),
       page,
       pageSize,
       total,
     };
   }
 
-  async getItemForTenant(
-    tenantId: string,
-    itemId: string,
-  ): Promise<{
-    id: string;
-    jobId: string;
-    checkType: string;
-    status: string;
-    phoneE164: string;
-    resultStatus: string | null;
-    isReachable: boolean | null;
-    imsi: string | null;
-    mcc: string | null;
-    mnc: string | null;
-    operatorName: string | null;
-    countryCode: string | null;
-    ported: boolean | null;
-    roaming: boolean | null;
-    errorCode: string | null;
-    errorMessage: string | null;
-    completedAt: Date | null;
-    createdAt: Date;
-  }> {
+  async getItemForTenant(tenantId: string, itemId: string) {
     const item = await this.prisma.jobItem.findFirst({
       where: { id: itemId, tenantId },
-      select: {
-        id: true,
-        jobId: true,
-        checkType: true,
-        status: true,
-        phoneE164: true,
-        resultStatus: true,
-        isReachable: true,
-        imsi: true,
-        mcc: true,
-        mnc: true,
-        operatorName: true,
-        countryCode: true,
-        ported: true,
-        roaming: true,
-        errorCode: true,
-        errorMessage: true,
-        completedAt: true,
-        createdAt: true,
-      },
+      select: jobItemListSelect,
     });
     if (!item) {
       throw new NotFoundException({
@@ -353,7 +272,7 @@ export class JobsService {
         message: `Check ${itemId} not found`,
       });
     }
-    return item;
+    return mapJobItemListRow(item);
   }
 
   async create(dto: CreateJobDto): Promise<CreateJobResult & { progress: JobProgress }> {
@@ -552,5 +471,78 @@ function mapJob(job: {
         : String(job.actualCost),
     currency: job.currency,
     createdAt: job.createdAt,
+  };
+}
+
+const jobItemListSelect = {
+  id: true,
+  jobId: true,
+  checkType: true,
+  status: true,
+  phoneE164: true,
+  resultStatus: true,
+  isReachable: true,
+  imsi: true,
+  mcc: true,
+  mnc: true,
+  operatorName: true,
+  countryCode: true,
+  ported: true,
+  roaming: true,
+  errorCode: true,
+  errorMessage: true,
+  completedAt: true,
+  createdAt: true,
+  normalizedResult: true,
+} as const;
+
+function extrasString(
+  extras: Record<string, unknown> | undefined,
+  key: string,
+): string | null {
+  const value = extras?.[key];
+  if (value == null || value === '') return null;
+  return String(value);
+}
+
+/** Lift reliable SMSC HLR extras from normalizedResult for list/detail UIs. */
+function mapJobItemListRow(item: {
+  id: string;
+  jobId: string;
+  checkType: string;
+  status: string;
+  phoneE164: string;
+  resultStatus: string | null;
+  isReachable: boolean | null;
+  imsi: string | null;
+  mcc: string | null;
+  mnc: string | null;
+  operatorName: string | null;
+  countryCode: string | null;
+  ported: boolean | null;
+  roaming: boolean | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  normalizedResult: unknown;
+}) {
+  const extras =
+    item.normalizedResult &&
+    typeof item.normalizedResult === 'object' &&
+    item.normalizedResult !== null &&
+    'extras' in item.normalizedResult &&
+    typeof (item.normalizedResult as { extras?: unknown }).extras === 'object' &&
+    (item.normalizedResult as { extras?: unknown }).extras !== null
+      ? ((item.normalizedResult as { extras: Record<string, unknown> }).extras)
+      : undefined;
+
+  const { normalizedResult: _normalized, ...rest } = item;
+  return {
+    ...rest,
+    msc: extrasString(extras, 'msc'),
+    region: extrasString(extras, 'region'),
+    roamingCountry: extrasString(extras, 'roamingCountry'),
+    roamingOperator: extrasString(extras, 'roamingOperator'),
   };
 }

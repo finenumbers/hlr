@@ -43,9 +43,21 @@ export function jobItemResultColumns(
     cols.push(
       { key: 'operator', header: t(`${p}.colOperator`), cell: (r) => text(t, r.operatorName) },
       { key: 'country', header: t(`${p}.colCountry`), cell: (r) => text(t, r.countryCode) },
+      { key: 'region', header: t(`${p}.colRegion`), cell: (r) => text(t, r.region) },
       { key: 'mccmnc', header: t(`${p}.colMccMnc`), cell: (r) => mccMnc(t, r) },
       { key: 'imsi', header: t(`${p}.colImsi`), cell: (r) => text(t, r.imsi) },
+      { key: 'msc', header: t(`${p}.colMsc`), cell: (r) => text(t, r.msc) },
       { key: 'roaming', header: t(`${p}.colRoaming`), cell: (r) => boolText(t, r.roaming) },
+      {
+        key: 'roamingCountry',
+        header: t(`${p}.colRoamingCountry`),
+        cell: (r) => text(t, r.roamingCountry),
+      },
+      {
+        key: 'roamingOperator',
+        header: t(`${p}.colRoamingOperator`),
+        cell: (r) => text(t, r.roamingOperator),
+      },
     );
   }
 
@@ -59,3 +71,17 @@ export function jobItemResultColumns(
 
   return cols;
 }
+
+/** CSV field names for HLR extras (aligned with listItems API). */
+export const HLR_CSV_EXTRA_FIELDS = [
+  'operatorName',
+  'countryCode',
+  'region',
+  'mcc',
+  'mnc',
+  'imsi',
+  'msc',
+  'roaming',
+  'roamingCountry',
+  'roamingOperator',
+] as const;

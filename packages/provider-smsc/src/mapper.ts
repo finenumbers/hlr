@@ -155,11 +155,15 @@ function extractHlrFields(body: SmscStatusBody): Partial<NormalizedResult> {
   const rnet = asString(body.rnet);
   const cn = asString(body.cn);
   const net = asString(body.net);
+  // all=2 registration fields (may duplicate cn/net; region is unique).
+  const country = asString(body.country);
+  const operator = asString(body.operator);
+  const region = asString(body.region);
 
   let roaming: boolean | null = null;
   if (rcn || rnet) {
     roaming = true;
-  } else if (cn || net || mcc || mnc) {
+  } else if (cn || net || mcc || mnc || country || operator) {
     // Have home network info but no roaming fields → not confidently roaming.
     roaming = false;
   }
@@ -174,6 +178,9 @@ function extractHlrFields(body: SmscStatusBody): Partial<NormalizedResult> {
   if (rnet) {
     extras.roamingOperator = rnet;
   }
+  if (region) {
+    extras.region = region;
+  }
   if (body.type !== undefined) {
     extras.messageType = asNumber(body.type) ?? body.type;
   }
@@ -185,8 +192,8 @@ function extractHlrFields(body: SmscStatusBody): Partial<NormalizedResult> {
     imsi: asString(body.imsi),
     mcc,
     mnc,
-    operatorName: net,
-    countryCode: cn,
+    operatorName: net ?? operator,
+    countryCode: cn ?? country,
     roaming,
     // Ported is not a reliable boolean in SMSC payloads without extra flags — leave null.
     ported: null,

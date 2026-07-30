@@ -14,7 +14,7 @@ import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
-import { jobItemResultColumns } from '@/lib/job-item-columns';
+import { HLR_CSV_EXTRA_FIELDS, jobItemResultColumns } from '@/lib/job-item-columns';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -57,9 +57,7 @@ export default function CabinetJobDetailPage() {
       'status',
       'resultStatus',
       'isReachable',
-      ...(isHlr
-        ? ['operatorName', 'countryCode', 'mcc', 'mnc', 'imsi', 'roaming']
-        : []),
+      ...(isHlr ? [...HLR_CSV_EXTRA_FIELDS] : []),
       'errorMessage',
     ];
     const lines = [
@@ -73,14 +71,10 @@ export default function CabinetJobDetailPage() {
           r.resultStatus ?? '',
           r.isReachable ?? '',
           ...(isHlr
-            ? [
-                JSON.stringify(r.operatorName ?? ''),
-                JSON.stringify(r.countryCode ?? ''),
-                r.mcc ?? '',
-                r.mnc ?? '',
-                r.imsi ?? '',
-                r.roaming ?? '',
-              ]
+            ? HLR_CSV_EXTRA_FIELDS.map((field) => {
+                const value = r[field];
+                return typeof value === 'string' ? JSON.stringify(value) : (value ?? '');
+              })
             : []),
           JSON.stringify(r.errorMessage ?? ''),
         ].join(','),

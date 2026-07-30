@@ -48,6 +48,9 @@ describe('mapProviderResponse', () => {
     expect(result.operatorName).toBe('MTS');
     expect(result.countryCode).toBe('Russia');
     expect(result.phoneE164).toBe('+79991234567');
+    expect(result.extras.msc).toBe('79001234567');
+    expect(result.extras.region).toBe('Moscow');
+    expect(result.roaming).toBe(false);
   });
 
   it('maps HLR unreachable with provider err preserved', () => {

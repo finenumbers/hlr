@@ -43,6 +43,9 @@ describe('JobsService tenant isolation', () => {
     errorMessage: null,
     completedAt: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    normalizedResult: {
+      extras: { msc: '79001112233', region: 'Moscow' },
+    },
   };
 
   function createService() {
@@ -141,6 +144,8 @@ describe('JobsService tenant isolation', () => {
     expect(result.items).toHaveLength(1);
     expect(result.page).toBe(1);
     expect(result.pageSize).toBe(20);
+    expect(result.items[0]?.msc).toBe('79001112233');
+    expect(result.items[0]?.region).toBe('Moscow');
     expect(prisma.jobItem.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         skip: 0,
