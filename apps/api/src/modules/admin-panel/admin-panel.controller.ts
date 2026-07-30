@@ -191,6 +191,13 @@ class AssignTariffDto {
   priceOverride?: string;
 }
 
+class PlatformLedgerQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by tenant id' })
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
+}
+
 class AdminTopupDto {
   @ApiProperty()
   @IsString()
@@ -408,6 +415,12 @@ export class AdminPanelController {
   @Roles('SUPERADMIN')
   finalizeJob(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.admin.finalizeJob(id, user.userId);
+  }
+
+  @Get('billing/ledger')
+  @ApiOperation({ summary: 'Platform wallet journal (newest first)' })
+  listPlatformLedger(@Query() query: PlatformLedgerQueryDto) {
+    return this.admin.listPlatformLedger(query.page, query.pageSize, query.tenantId);
   }
 
   @Get('billing/wallets/:tenantId')

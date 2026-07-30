@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { Can } from '@/components/auth/require-permission';
+import { DataTable } from '@/components/data/data-table';
 import { PageHeader } from '@/components/data/page-header';
 import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
-import { formatMoney } from '@/lib/utils';
+import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function AdminTenantDetailPage() {
   const t = useT();
@@ -49,6 +50,11 @@ export default function AdminTenantDetailPage() {
   const tariffs = useQuery({
     queryKey: ['admin', 'tariffs'],
     queryFn: () => api.admin.tariffs(),
+  });
+  const ledger = useQuery({
+    queryKey: ['admin', 'ledger', id],
+    queryFn: () => api.admin.ledger(id),
+    enabled: Boolean(id),
   });
 
   useEffect(() => {
@@ -85,6 +91,8 @@ export default function AdminTenantDetailPage() {
     onSuccess: async () => {
       setConfirmTopup(false);
       await qc.invalidateQueries({ queryKey: ['admin', 'tenant', id] });
+      await qc.invalidateQueries({ queryKey: ['admin', 'ledger', id] });
+      await qc.invalidateQueries({ queryKey: ['admin', 'platform-ledger'] });
     },
   });
   const limitsMut = useMutation({
@@ -435,6 +443,67 @@ export default function AdminTenantDetailPage() {
             </Link>
           </Card>
         </div>
+
+        <Card className="mt-4">
+          <h2 className="mb-3 font-semibold">{t('adminTenants.ledger')}</h2>
+          <QueryState
+            isLoading={ledger.isLoading}
+            isError={ledger.isError}
+            error={ledger.error}
+            isEmpty={!ledger.data?.length}
+            emptyTitle={t('adminTenants.ledgerEmpty')}
+            onRetry={() => void ledger.refetch()}
+          >
+            <DataTable
+              columns={[
+                {
+                  key: 'createdAt',
+                  header: t('adminTenants.colLedgerWhen'),
+                  cell: (row) => formatDate(String(row.createdAt)),
+                },
+                {
+                  key: 'type',
+                  header: t('adminTenants.colLedgerType'),
+                  cell: (row) => String(row.type ?? t('common.dash')),
+                },
+                {
+                  key: 'amount',
+                  header: t('adminTenants.colLedgerAmount'),
+                  cell: (row) =>
+                    formatMoney(String(row.amount ?? '0'), String(row.currency ?? currency)),
+                },
+                {
+                  key: 'balance',
+                  header: t('adminTenants.colLedgerBalance'),
+                  cell: (row) =>
+                    row.balanceAfterAvailable == null
+                      ? t('common.dash')
+                      : formatMoney(
+                          String(row.balanceAfterAvailable),
+                          String(row.currency ?? currency),
+                        ),
+                },
+                {
+                  key: 'description',
+                  header: t('adminTenants.colLedgerDesc'),
+                  cell: (row) => String(row.description ?? t('common.dash')),
+                },
+              ]}
+              rows={[...((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])]
+                .slice()
+                .reverse()
+                .slice(0, 50)}
+              rowKey={(row) => String(row.id)}
+              page={1}
+              pageSize={50}
+              total={Math.min(
+                50,
+                ((ledger.data as Array<Record<string, unknown>> | undefined) ?? []).length,
+              )}
+              onPageChange={() => undefined}
+            />
+          </QueryState>
+        </Card>
       </QueryState>
 
       <ConfirmDialog

@@ -228,6 +228,8 @@ export const api = {
       apiRequest<Record<string, unknown>>(`/admin/billing/wallets/${tenantId}`),
     ledger: (tenantId: string) =>
       apiRequest<unknown[]>(`/admin/billing/wallets/${tenantId}/ledger`),
+    platformLedger: (q: string) =>
+      apiRequest<Paginated<Record<string, unknown>>>(`/admin/billing/ledger?${q}`),
     topup: (body: {
       tenantId: string;
       amount: string;

@@ -1,179 +1,134 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { Can } from '@/components/auth/require-permission';
+import { DataTable } from '@/components/data/data-table';
 import { PageHeader } from '@/components/data/page-header';
 import { QueryState } from '@/components/data/query-state';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { ConfirmDialog } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
-import { formatMoney } from '@/lib/utils';
+import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function AdminBillingPage() {
   const t = useT();
-  const [tenantId, setTenantId] = useState('');
-  const [amount, setAmount] = useState('100');
-  const [direction, setDirection] = useState<'credit' | 'debit'>('credit');
-  const [confirm, setConfirm] = useState<'topup' | 'adjust' | null>(null);
+  const [page, setPage] = useState(1);
+  const [tenantFilter, setTenantFilter] = useState('');
+  const pageSize = 25;
 
-  const wallet = useQuery({
-    queryKey: ['admin', 'wallet', tenantId],
-    queryFn: () => api.admin.wallet(tenantId),
-    enabled: Boolean(tenantId),
+  const tenants = useQuery({
+    queryKey: ['admin', 'tenants', 'billing-filter'],
+    queryFn: () => api.admin.tenants('page=1&pageSize=100&status=ACTIVE'),
   });
+
+  const ledgerQuery = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (tenantFilter) params.set('tenantId', tenantFilter);
+    return params.toString();
+  }, [page, tenantFilter]);
+
   const ledger = useQuery({
-    queryKey: ['admin', 'ledger', tenantId],
-    queryFn: () => api.admin.ledger(tenantId),
-    enabled: Boolean(tenantId),
-  });
-
-  const topup = useMutation({
-    mutationFn: () =>
-      api.admin.topup({
-        tenantId,
-        amount,
-        idempotencyKey: `ui-topup-${tenantId}-${Date.now()}`,
-      }),
-    onSuccess: async () => {
-      setConfirm(null);
-      await wallet.refetch();
-      await ledger.refetch();
-    },
-  });
-  const adjust = useMutation({
-    mutationFn: () =>
-      api.admin.adjust({
-        tenantId,
-        amount,
-        direction,
-        idempotencyKey: `ui-adj-${tenantId}-${Date.now()}`,
-      }),
-    onSuccess: async () => {
-      setConfirm(null);
-      await wallet.refetch();
-      await ledger.refetch();
-    },
+    queryKey: ['admin', 'platform-ledger', ledgerQuery],
+    queryFn: () => api.admin.platformLedger(ledgerQuery),
   });
 
   return (
     <div>
       <PageHeader title={t('adminBilling.title')} description={t('adminBilling.description')} />
-      <Card className="mb-4 max-w-xl space-y-3">
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
-          <Label>{t('adminBilling.tenantId')}</Label>
-          <Input
-            value={tenantId}
-            onChange={(e) => setTenantId(e.target.value)}
-            placeholder={t('adminBilling.tenantIdPlaceholder')}
-          />
+          <label className="mb-1 block text-sm text-[var(--color-ink-muted)]" htmlFor="billing-tenant">
+            {t('adminBilling.filterTenant')}
+          </label>
+          <select
+            id="billing-tenant"
+            className="h-10 min-w-[16rem] rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
+            value={tenantFilter}
+            onChange={(e) => {
+              setTenantFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">{t('adminBilling.filterAllTenants')}</option>
+            {((tenants.data?.items ?? []) as Array<Record<string, unknown>>).map((row) => (
+              <option key={String(row.id)} value={String(row.id)}>
+                {String(row.name)} ({String(row.slug)})
+              </option>
+            ))}
+          </select>
         </div>
-        <Can permission="admin.billing.mutate">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>{t('adminBilling.amount')}</Label>
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </div>
-            <div>
-              <Label>{t('adminBilling.adjustDirection')}</Label>
-              <select
-                className="h-10 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
-                value={direction}
-                onChange={(e) => setDirection(e.target.value as 'credit' | 'debit')}
-              >
-                <option value="credit">{t('adminBilling.credit')}</option>
-                <option value="debit">{t('adminBilling.debit')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" disabled={!tenantId} onClick={() => setConfirm('topup')}>
-              {t('adminBilling.topup')}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!tenantId}
-              onClick={() => setConfirm('adjust')}
-            >
-              {t('adminBilling.adjust')}
-            </Button>
-          </div>
-        </Can>
-      </Card>
+        <p className="pb-2 text-xs text-[var(--color-ink-muted)]">{t('adminBilling.topupHint')}</p>
+      </div>
 
       <QueryState
-        isLoading={Boolean(tenantId) && wallet.isLoading}
-        isError={wallet.isError}
-        error={wallet.error}
-        isEmpty={!tenantId}
+        isLoading={ledger.isLoading}
+        isError={ledger.isError}
+        error={ledger.error}
+        isEmpty={!ledger.data?.items.length}
         emptyTitle={t('adminBilling.emptyTitle')}
         emptyDescription={t('adminBilling.emptyDescription')}
+        onRetry={() => void ledger.refetch()}
       >
-        {wallet.data ? (
-          <div className="space-y-4">
-            <Card>
-              <p className="text-sm text-[var(--color-ink-muted)]">{t('adminBilling.available')}</p>
-              <p className="text-3xl font-semibold">
-                {formatMoney(String(wallet.data.availableBalance), String(wallet.data.currency))}
-              </p>
-              <p className="text-sm text-[var(--color-ink-muted)]">
-                {t('adminBilling.held', {
-                  amount: formatMoney(String(wallet.data.heldBalance), String(wallet.data.currency)),
-                })}
-              </p>
-              <Link
-                href={`/admin/tenants/${tenantId}`}
-                className="mt-2 inline-block text-xs text-[var(--color-accent)]"
-              >
-                {t('adminBilling.openTenant')}
-              </Link>
-            </Card>
-            <Card>
-              <h2 className="mb-3 font-semibold">{t('adminBilling.recentLedger')}</h2>
-              <ul className="space-y-2 text-sm">
-                {((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])
-                  .slice()
-                  .reverse()
-                  .slice(0, 20)
-                  .map((row) => (
-                    <li key={String(row.id)} className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2">
-                      <span>
-                        {String(row.type)} · {String(row.amount)}
-                      </span>
-                      <span className="text-[var(--color-ink-muted)]">{String(row.createdAt)}</span>
-                    </li>
-                  ))}
-              </ul>
-            </Card>
-          </div>
-        ) : null}
+        <DataTable
+          columns={[
+            {
+              key: 'createdAt',
+              header: t('adminBilling.colWhen'),
+              cell: (row) => formatDate(String(row.createdAt)),
+            },
+            {
+              key: 'tenant',
+              header: t('adminBilling.colTenant'),
+              cell: (row) => (
+                <Link
+                  href={`/admin/tenants/${String(row.tenantId)}`}
+                  className="font-medium hover:underline"
+                >
+                  {String(row.tenantName ?? row.tenantId)}
+                </Link>
+              ),
+            },
+            {
+              key: 'type',
+              header: t('adminBilling.colType'),
+              cell: (row) => String(row.type ?? t('common.dash')),
+            },
+            {
+              key: 'amount',
+              header: t('adminBilling.colAmount'),
+              cell: (row) =>
+                formatMoney(String(row.amount ?? '0'), String(row.currency ?? 'RUB')),
+            },
+            {
+              key: 'balance',
+              header: t('adminBilling.colBalance'),
+              cell: (row) =>
+                row.balanceAfterAvailable == null
+                  ? t('common.dash')
+                  : formatMoney(
+                      String(row.balanceAfterAvailable),
+                      String(row.currency ?? 'RUB'),
+                    ),
+            },
+            {
+              key: 'description',
+              header: t('adminBilling.colDesc'),
+              cell: (row) => String(row.description ?? t('common.dash')),
+            },
+          ]}
+          rows={(ledger.data?.items ?? []) as Array<Record<string, unknown>>}
+          rowKey={(row) => String(row.id)}
+          page={page}
+          pageSize={pageSize}
+          total={ledger.data?.total ?? 0}
+          onPageChange={setPage}
+        />
       </QueryState>
-
-      <ConfirmDialog
-        open={confirm === 'topup'}
-        onClose={() => setConfirm(null)}
-        title={t('adminBilling.confirmTopupTitle')}
-        description={t('adminBilling.confirmTopupDesc', { amount, tenantId })}
-        confirmLabel={t('adminBilling.topup')}
-        loading={topup.isPending}
-        onConfirm={() => topup.mutate()}
-      />
-      <ConfirmDialog
-        open={confirm === 'adjust'}
-        onClose={() => setConfirm(null)}
-        title={t('adminBilling.confirmAdjustTitle')}
-        description={t('adminBilling.confirmAdjustDesc', { direction, amount, tenantId })}
-        danger={direction === 'debit'}
-        loading={adjust.isPending}
-        onConfirm={() => adjust.mutate()}
-      />
     </div>
   );
 }

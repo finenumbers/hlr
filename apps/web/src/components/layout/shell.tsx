@@ -124,14 +124,17 @@ export function AppShell({
             ) : null}
             <LocaleSwitcher />
             {area === 'cabinet' ? (
-              <div className="flex h-9 items-center rounded-md border border-transparent bg-[var(--color-accent-bright)] px-3 text-sm font-semibold tabular-nums !text-black">
+              <Link
+                href="/app/billing"
+                className="flex h-9 items-center rounded-md border border-transparent bg-[var(--color-accent-bright)] px-3 text-sm font-semibold tabular-nums !text-black hover:opacity-90"
+              >
                 {balance.isLoading
                   ? t('common.dash')
                   : formatMoney(
                       balanceData?.availableBalance ?? '0',
                       balanceData?.currency ?? 'RUB',
                     )}
-              </div>
+              </Link>
             ) : null}
           </div>
         </header>

@@ -826,6 +826,59 @@ export class AdminPanelService {
     return this.billing.listLedger(tenantId);
   }
 
+  /**
+   * Platform-wide wallet journal (newest first), optional filter by tenant.
+   */
+  async listPlatformLedger(page: number, pageSize: number, tenantId?: string) {
+    const where = tenantId?.trim() ? { tenantId: tenantId.trim() } : {};
+    const [total, rows] = await Promise.all([
+      this.prisma.walletTransaction.count({ where }),
+      this.prisma.walletTransaction.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          tenantId: true,
+          type: true,
+          amount: true,
+          currency: true,
+          balanceAfterAvailable: true,
+          balanceAfterHeld: true,
+          jobItemId: true,
+          description: true,
+          createdAt: true,
+          tenant: {
+            select: { id: true, name: true, slug: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        tenantId: row.tenantId,
+        tenantName: row.tenant.name,
+        tenantSlug: row.tenant.slug,
+        type: row.type,
+        amount: row.amount.toString(),
+        currency: row.currency,
+        balanceAfterAvailable:
+          row.balanceAfterAvailable === null ? null : row.balanceAfterAvailable.toString(),
+        balanceAfterHeld:
+          row.balanceAfterHeld === null ? null : row.balanceAfterHeld.toString(),
+        jobItemId: row.jobItemId,
+        description: row.description,
+        createdAt: row.createdAt,
+      })),
+      page,
+      pageSize,
+      total,
+    };
+  }
+
   topup(input: {
     tenantId: string;
     amount: string;
