@@ -32,6 +32,36 @@ const enMessages = {
     serviceHlr: 'HLR',
     servicePing: 'Silent SMS',
   },
+  labels: {
+    bool: {
+      yes: 'yes',
+      no: 'no',
+    },
+    resultStatus: {
+      reachable: 'in network',
+      unreachable: 'out of network',
+      pending: 'processing',
+      error: 'check error',
+      unknown: 'no data',
+    },
+    jobItemStatus: {
+      QUEUED: 'queued',
+      RESERVED: 'reserved',
+      SENT: 'sent to provider',
+      PENDING: 'awaiting response',
+      COMPLETED: 'done',
+      FAILED: 'failed',
+      CANCELLED: 'cancelled',
+    },
+    jobStatus: {
+      QUEUED: 'queued',
+      PROCESSING: 'processing',
+      COMPLETED: 'completed',
+      COMPLETED_WITH_ERRORS: 'completed with errors',
+      FAILED: 'failed',
+      CANCELLED: 'cancelled',
+    },
+  },
   nav: {
     dashboard: 'Dashboard',
     tenants: 'Clients',

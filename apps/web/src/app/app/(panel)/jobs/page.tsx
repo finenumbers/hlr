@@ -13,6 +13,7 @@ import { api } from '@/lib/api/client';
 import { isCheckType, serviceLabel, type CheckType } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
+import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 function LoadingFallback() {
@@ -86,7 +87,7 @@ function CabinetJobsPage() {
           <option value="">{t('cabinetJobs.allStatuses')}</option>
           {['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED'].map((s) => (
             <option key={s} value={s}>
-              {s}
+              {labelJobStatus(s, t)}
             </option>
           ))}
         </select>
@@ -122,7 +123,7 @@ function CabinetJobsPage() {
             {
               key: 'status',
               header: t('cabinetJobs.colStatus'),
-              cell: (row) => <Badge>{String(row.status)}</Badge>,
+              cell: (row) => <Badge>{labelJobStatus(row.status, t)}</Badge>,
             },
             {
               key: 'progress',

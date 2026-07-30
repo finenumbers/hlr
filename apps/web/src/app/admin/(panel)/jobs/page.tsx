@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
+import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 function LoadingFallback() {
@@ -60,7 +61,7 @@ function AdminJobsPage() {
           {['QUEUED', 'PROCESSING', 'COMPLETED', 'COMPLETED_WITH_ERRORS', 'FAILED', 'CANCELLED'].map(
             (s) => (
               <option key={s} value={s}>
-                {s}
+                {labelJobStatus(s, t)}
               </option>
             ),
           )}
@@ -114,7 +115,7 @@ function AdminJobsPage() {
                         : 'neutral'
                   }
                 >
-                  {String(row.status)}
+                  {labelJobStatus(row.status, t)}
                 </Badge>
               ),
             },

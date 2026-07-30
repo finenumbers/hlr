@@ -17,6 +17,12 @@ import { useT } from '@/lib/i18n';
 import { buildExcelCsv, downloadCsv } from '@/lib/csv';
 import { HLR_CSV_EXTRA_FIELDS, jobItemResultColumns } from '@/lib/job-item-columns';
 import { smscErrLabel } from '@/lib/smsc-err';
+import {
+  labelBool,
+  labelJobItemStatus,
+  labelJobStatus,
+  labelResultStatus,
+} from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -66,12 +72,14 @@ export default function CabinetJobDetailPage() {
       checkType,
       service,
       r.phoneE164,
-      r.status,
-      r.resultStatus ?? '',
-      r.isReachable ?? '',
+      labelJobItemStatus(r.status, t),
+      labelResultStatus(r.resultStatus, t),
+      labelBool(r.isReachable, t),
       ...(isHlr
         ? [
-            ...HLR_CSV_EXTRA_FIELDS.map((field) => r[field] ?? ''),
+            ...HLR_CSV_EXTRA_FIELDS.map((field) =>
+              field === 'roaming' ? labelBool(r[field], t) : (r[field] ?? ''),
+            ),
             smscErrLabel(r.errorCode, t) ?? '',
           ]
         : []),
@@ -117,7 +125,7 @@ export default function CabinetJobDetailPage() {
         <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.status')}</p>
-            <Badge className="mt-2">{String(job.data?.status ?? t('common.dash'))}</Badge>
+            <Badge className="mt-2">{labelJobStatus(job.data?.status, t)}</Badge>
           </Card>
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.service')}</p>

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
+import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function AdminDashboardPage() {
@@ -161,7 +162,7 @@ function ProblemList({ rows }: { rows: Array<Record<string, unknown>> }) {
               </Link>
               <p className="truncate text-xs text-[var(--color-ink-muted)]">
                 {tenant?.slug ?? String(row.tenantId)} · {String(row.checkType)} ·{' '}
-                {String(row.status)}
+                {labelJobStatus(row.status, t)}
               </p>
             </div>
             <span className="shrink-0 text-xs text-[var(--color-ink-muted)]">

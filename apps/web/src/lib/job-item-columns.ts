@@ -1,4 +1,9 @@
 import { smscErrLabel } from '@/lib/smsc-err';
+import {
+  labelBool,
+  labelJobItemStatus,
+  labelResultStatus,
+} from '@/lib/status-labels';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 type Row = Record<string, unknown>;
@@ -18,11 +23,6 @@ function text(t: Translate, value: unknown): string {
   return String(value);
 }
 
-function boolText(t: Translate, value: unknown): string {
-  if (value == null) return dash(t);
-  return String(value);
-}
-
 function mccMnc(t: Translate, row: Row): string {
   if (row.mcc == null && row.mnc == null) return dash(t);
   return `${row.mcc ?? '—'}/${row.mnc ?? '—'}`;
@@ -36,9 +36,17 @@ export function jobItemResultColumns(
   const p = opts.prefix;
   const cols: JobItemColumn[] = [
     { key: 'phone', header: t(`${p}.colPhone`), cell: (r) => text(t, r.phoneE164) },
-    { key: 'status', header: t(`${p}.colStatus`), cell: (r) => text(t, r.status) },
-    { key: 'result', header: t(`${p}.colResult`), cell: (r) => text(t, r.resultStatus) },
-    { key: 'reachable', header: t(`${p}.colReachable`), cell: (r) => boolText(t, r.isReachable) },
+    { key: 'status', header: t(`${p}.colStatus`), cell: (r) => labelJobItemStatus(r.status, t) },
+    {
+      key: 'result',
+      header: t(`${p}.colResult`),
+      cell: (r) => labelResultStatus(r.resultStatus, t),
+    },
+    {
+      key: 'reachable',
+      header: t(`${p}.colReachable`),
+      cell: (r) => labelBool(r.isReachable, t),
+    },
   ];
 
   if (opts.includeHlr) {
@@ -49,7 +57,7 @@ export function jobItemResultColumns(
       { key: 'mccmnc', header: t(`${p}.colMccMnc`), cell: (r) => mccMnc(t, r) },
       { key: 'imsi', header: t(`${p}.colImsi`), cell: (r) => text(t, r.imsi) },
       { key: 'msc', header: t(`${p}.colMsc`), cell: (r) => text(t, r.msc) },
-      { key: 'roaming', header: t(`${p}.colRoaming`), cell: (r) => boolText(t, r.roaming) },
+      { key: 'roaming', header: t(`${p}.colRoaming`), cell: (r) => labelBool(r.roaming, t) },
       {
         key: 'roamingCountry',
         header: t(`${p}.colRoamingCountry`),

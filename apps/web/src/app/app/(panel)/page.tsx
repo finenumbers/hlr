@@ -10,6 +10,7 @@ import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
+import { labelJobStatus } from '@/lib/status-labels';
 import { cn, formatDate, formatMoney } from '@/lib/utils';
 
 type ProductQuote = {
@@ -127,7 +128,7 @@ export default function CabinetDashboardPage() {
             {(d?.recentJobs ?? []).map((job) => (
               <li key={String(job.id)} className="flex justify-between gap-3 text-sm">
                 <Link href={`/app/jobs/${job.id}`} className="font-medium hover:underline">
-                  {serviceLabel(String(job.checkType), t)} · {String(job.status)}
+                  {serviceLabel(String(job.checkType), t)} · {labelJobStatus(job.status, t)}
                 </Link>
                 <span className="text-[var(--color-ink-muted)]">{formatDate(String(job.createdAt))}</span>
               </li>

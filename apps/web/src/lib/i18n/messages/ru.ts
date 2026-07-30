@@ -28,6 +28,36 @@ export const ru: EnMessages = {
     serviceHlr: 'HLR',
     servicePing: 'Silent SMS',
   },
+  labels: {
+    bool: {
+      yes: 'да',
+      no: 'нет',
+    },
+    resultStatus: {
+      reachable: 'в сети',
+      unreachable: 'не в сети',
+      pending: 'в обработке',
+      error: 'ошибка проверки',
+      unknown: 'нет данных',
+    },
+    jobItemStatus: {
+      QUEUED: 'в очереди',
+      RESERVED: 'зарезервирован',
+      SENT: 'отправлен провайдеру',
+      PENDING: 'ждём ответ',
+      COMPLETED: 'готов',
+      FAILED: 'ошибка',
+      CANCELLED: 'отменён',
+    },
+    jobStatus: {
+      QUEUED: 'в очереди',
+      PROCESSING: 'в работе',
+      COMPLETED: 'готов',
+      COMPLETED_WITH_ERRORS: 'готов с ошибками',
+      FAILED: 'ошибка',
+      CANCELLED: 'отменён',
+    },
+  },
   nav: {
     dashboard: 'Дашборд',
     tenants: 'Клиенты',

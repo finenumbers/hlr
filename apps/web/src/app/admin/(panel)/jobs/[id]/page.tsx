@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { api, ApiError } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
+import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
@@ -91,7 +92,7 @@ export default function AdminJobDetailPage() {
         <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.status')}</p>
-            <Badge className="mt-2">{String(j?.status ?? t('common.dash'))}</Badge>
+            <Badge className="mt-2">{labelJobStatus(j?.status, t)}</Badge>
           </Card>
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.typeSource')}</p>
