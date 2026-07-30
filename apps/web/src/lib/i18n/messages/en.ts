@@ -207,6 +207,11 @@ const enMessages = {
     colPhone: 'Phone',
     colResult: 'Result',
     colReachable: 'Reachable',
+    colOperator: 'Operator',
+    colCountry: 'Country',
+    colMccMnc: 'MCC/MNC',
+    colImsi: 'IMSI',
+    colRoaming: 'Roaming',
     colError: 'Error',
   },
   adminBilling: {
@@ -343,6 +348,11 @@ const enMessages = {
     colPhone: 'Phone',
     colResult: 'Result',
     colReachable: 'Reachable',
+    colOperator: 'Operator',
+    colCountry: 'Country',
+    colMccMnc: 'MCC/MNC',
+    colImsi: 'IMSI',
+    colRoaming: 'Roaming',
   },
   cabinetBilling: {
     title: 'Billing',

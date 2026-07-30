@@ -14,6 +14,7 @@ import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
+import { jobItemResultColumns } from '@/lib/job-item-columns';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -45,6 +46,8 @@ export default function CabinetJobDetailPage() {
   const checkType = String(job.data?.checkType ?? '');
   const service = serviceLabel(checkType, t);
 
+  const isHlr = checkType === 'HLR';
+
   const exportCsv = () => {
     const rows = items.data?.items ?? [];
     const header = [
@@ -54,6 +57,9 @@ export default function CabinetJobDetailPage() {
       'status',
       'resultStatus',
       'isReachable',
+      ...(isHlr
+        ? ['operatorName', 'countryCode', 'mcc', 'mnc', 'imsi', 'roaming']
+        : []),
       'errorMessage',
     ];
     const lines = [
@@ -66,6 +72,16 @@ export default function CabinetJobDetailPage() {
           r.status,
           r.resultStatus ?? '',
           r.isReachable ?? '',
+          ...(isHlr
+            ? [
+                JSON.stringify(r.operatorName ?? ''),
+                JSON.stringify(r.countryCode ?? ''),
+                r.mcc ?? '',
+                r.mnc ?? '',
+                r.imsi ?? '',
+                r.roaming ?? '',
+              ]
+            : []),
           JSON.stringify(r.errorMessage ?? ''),
         ].join(','),
       ),
@@ -142,20 +158,10 @@ export default function CabinetJobDetailPage() {
           onRetry={() => void items.refetch()}
         >
           <DataTable
-            columns={[
-              { key: 'phone', header: t('cabinetJobs.colPhone'), cell: (r) => String(r.phoneE164) },
-              { key: 'status', header: t('cabinetJobs.colStatus'), cell: (r) => String(r.status) },
-              {
-                key: 'result',
-                header: t('cabinetJobs.colResult'),
-                cell: (r) => String(r.resultStatus ?? t('common.dash')),
-              },
-              {
-                key: 'reachable',
-                header: t('cabinetJobs.colReachable'),
-                cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
-              },
-            ]}
+            columns={jobItemResultColumns(t, {
+              prefix: 'cabinetJobs',
+              includeHlr: isHlr,
+            })}
             rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
             rowKey={(r) => String(r.id)}
             page={page}

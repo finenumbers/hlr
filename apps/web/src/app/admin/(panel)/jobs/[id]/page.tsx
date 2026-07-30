@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api, ApiError } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
+import { jobItemResultColumns } from '@/lib/job-item-columns';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
@@ -58,6 +59,7 @@ export default function AdminJobDetailPage() {
   const j = job.data;
   const status = String(j?.status ?? '');
   const canHeal = status === 'QUEUED' || status === 'PROCESSING';
+  const isHlr = String(j?.checkType ?? '') === 'HLR';
 
   return (
     <div>
@@ -121,25 +123,11 @@ export default function AdminJobDetailPage() {
           onRetry={() => void items.refetch()}
         >
           <DataTable
-            columns={[
-              { key: 'phone', header: t('adminJobs.colPhone'), cell: (r) => String(r.phoneE164) },
-              { key: 'status', header: t('adminJobs.colStatus'), cell: (r) => String(r.status) },
-              {
-                key: 'result',
-                header: t('adminJobs.colResult'),
-                cell: (r) => String(r.resultStatus ?? t('common.dash')),
-              },
-              {
-                key: 'reachable',
-                header: t('adminJobs.colReachable'),
-                cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
-              },
-              {
-                key: 'error',
-                header: t('adminJobs.colError'),
-                cell: (r) => String(r.errorMessage ?? t('common.dash')),
-              },
-            ]}
+            columns={jobItemResultColumns(t, {
+              prefix: 'adminJobs',
+              includeHlr: isHlr,
+              includeError: true,
+            })}
             rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
             rowKey={(r) => String(r.id)}
             page={page}

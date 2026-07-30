@@ -202,6 +202,11 @@ export const ru: EnMessages = {
     colPhone: 'Телефон',
     colResult: 'Результат',
     colReachable: 'Доступен',
+    colOperator: 'Оператор',
+    colCountry: 'Страна',
+    colMccMnc: 'MCC/MNC',
+    colImsi: 'IMSI',
+    colRoaming: 'Роуминг',
     colError: 'Ошибка',
   },
   adminBilling: {
@@ -339,6 +344,11 @@ export const ru: EnMessages = {
     colPhone: 'Телефон',
     colResult: 'Результат',
     colReachable: 'Доступен',
+    colOperator: 'Оператор',
+    colCountry: 'Страна',
+    colMccMnc: 'MCC/MNC',
+    colImsi: 'IMSI',
+    colRoaming: 'Роуминг',
   },
   cabinetBilling: {
     title: 'Биллинг',
