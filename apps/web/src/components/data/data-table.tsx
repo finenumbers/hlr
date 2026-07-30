@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 export type Column<T> = {
   key: string;
@@ -16,6 +17,7 @@ export function DataTable<T>({
   columns,
   rows,
   rowKey,
+  rowClassName,
   page,
   pageSize,
   total,
@@ -24,6 +26,7 @@ export function DataTable<T>({
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
+  rowClassName?: (row: T) => string | undefined;
   page: number;
   pageSize: number;
   total: number;
@@ -40,7 +43,7 @@ export function DataTable<T>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-xs font-bold text-[var(--color-ink-muted)] ${col.className ?? ''}`}
+                  className={`px-4 py-1.5 text-xs font-bold text-[var(--color-ink-muted)] ${col.className ?? ''}`}
                 >
                   {col.header}
                 </th>
@@ -51,10 +54,13 @@ export function DataTable<T>({
             {rows.map((row) => (
               <tr
                 key={rowKey(row)}
-                className="border-b border-[var(--color-line)] last:border-0 hover:bg-[color-mix(in_oklab,var(--color-accent)_6%,transparent)]"
+                className={cn(
+                  'border-b border-[var(--color-line)] last:border-0 hover:bg-[color-mix(in_oklab,var(--color-accent)_6%,transparent)]',
+                  rowClassName?.(row),
+                )}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className={`px-4 py-3 align-middle ${col.className ?? ''}`}>
+                  <td key={col.key} className={`px-4 py-1.5 align-middle ${col.className ?? ''}`}>
                     {col.cell(row)}
                   </td>
                 ))}

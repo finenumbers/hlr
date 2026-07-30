@@ -9,6 +9,7 @@ export function MetricCard({
   hint,
   href,
   tone,
+  surface = 'default',
   className,
 }: {
   label: string;
@@ -16,10 +17,14 @@ export function MetricCard({
   hint?: string;
   href?: string;
   tone?: 'default' | 'danger' | 'ok' | 'warn';
+  surface?: 'default' | 'accent';
   className?: string;
 }) {
-  const toneClass =
-    tone === 'danger'
+  const isAccent = surface === 'accent';
+
+  const toneClass = isAccent
+    ? '!text-black'
+    : tone === 'danger'
       ? 'text-[var(--color-danger)]'
       : tone === 'ok'
         ? 'text-[var(--color-ok)]'
@@ -32,12 +37,25 @@ export function MetricCard({
       className={cn(
         'h-full',
         href ? 'transition hover:border-[var(--color-accent)]' : undefined,
+        isAccent &&
+          'border-transparent bg-[var(--color-accent-bright)] text-black hover:border-transparent',
         className,
       )}
     >
-      <p className="text-xs font-bold text-[var(--color-ink-muted)]">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
-      {hint ? <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{hint}</p> : null}
+      <p
+        className={cn(
+          'text-xs font-bold',
+          isAccent ? '!text-black' : 'text-[var(--color-ink-muted)]',
+        )}
+      >
+        {label}
+      </p>
+      <p className={cn('mt-2 text-3xl font-semibold tabular-nums', toneClass)}>{value}</p>
+      {hint ? (
+        <p className={cn('mt-1 text-xs', isAccent ? '!text-black/70' : 'text-[var(--color-ink-muted)]')}>
+          {hint}
+        </p>
+      ) : null}
     </Card>
   );
 

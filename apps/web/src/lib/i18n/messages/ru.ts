@@ -66,6 +66,8 @@ export const ru: EnMessages = {
     stuckJobs: 'Зависшие задания: {count}',
     deadWebhooks: 'Мёртвые вебхуки 24ч: {count}',
     providerErrors: 'Ошибки провайдера: {pct}%',
+    clientsCard: 'Активные / неактивные клиенты',
+    clientsCardHint: '{active} активных · {inactive} неактивных',
     activeTenants: 'Активные клиенты',
     activeTenantsHint: '{total} всего · {suspended} приостановлено',
     jobs24h: 'Задания 24ч',
@@ -468,8 +470,6 @@ export const ru: EnMessages = {
     title: 'Настройки платформы',
     description:
       'Лимиты, таймауты, вебхуки и retention. Учётные данные SMSC только в env сервера.',
-    secretsNote:
-      'Логин / пароль / API-ключ SMSC задаются через переменные SMSC_* и здесь недоступны.',
     smscTestTitle: 'Проверка связи с SMSC',
     smscTestHint:
       'Без списания денег: исходящий запрос баланса к SMSC и проверка подписи входящего callback.',

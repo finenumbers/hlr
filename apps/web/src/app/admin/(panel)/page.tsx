@@ -30,6 +30,8 @@ export default function AdminDashboardPage() {
       tenantsTotal?: number;
       tenantsActive?: number;
       tenantsSuspended?: number;
+      tenantsInactive?: number;
+      tenantsLowBalance?: number;
       jobs24h?: number;
       hlrItems24h?: number;
       pingItems24h?: number;
@@ -72,13 +74,13 @@ export default function AdminDashboardPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            label={t('adminDashboard.activeTenants')}
-            value={d?.volume?.tenantsActive ?? 0}
-            hint={t('adminDashboard.activeTenantsHint', {
-              total: d?.volume?.tenantsTotal ?? 0,
-              suspended: d?.volume?.tenantsSuspended ?? 0,
+            label={t('adminDashboard.clientsCard')}
+            value={`${d?.volume?.tenantsTotal ?? 0} / ${d?.volume?.tenantsLowBalance ?? 0}`}
+            hint={t('adminDashboard.clientsCardHint', {
+              active: d?.volume?.tenantsActive ?? 0,
+              inactive: d?.volume?.tenantsInactive ?? 0,
             })}
-            href="/admin/tenants?status=ACTIVE"
+            href="/admin/tenants"
           />
           <MetricCard
             label={t('adminDashboard.jobs24h')}
@@ -96,6 +98,7 @@ export default function AdminDashboardPage() {
             href="/admin/audit?action=billing.wallet."
           />
           <MetricCard
+            surface="accent"
             label={t('adminDashboard.smscBalance')}
             value={
               smsc?.balance != null

@@ -156,19 +156,18 @@ export default function AdminSettingsPage() {
         onRetry={() => void q.refetch()}
       >
         <div className="space-y-4">
-          <Card className="space-y-2 border-[color-mix(in_oklab,var(--color-warn)_35%,var(--color-line))] bg-[color-mix(in_oklab,var(--color-warn)_8%,transparent)]">
-            <p className="text-sm">{t('adminSettings.secretsNote')}</p>
-            {!canWrite ? (
-              <p className="text-sm text-[var(--color-ink-muted)]">{t('adminSettings.readOnly')}</p>
-            ) : null}
-            {q.data?.updatedAt ? (
-              <p className="text-xs text-[var(--color-ink-muted)]">
-                {t('adminSettings.updatedAt', {
-                  when: formatDate(String(q.data.updatedAt), locale),
-                })}
-              </p>
-            ) : null}
-          </Card>
+          {!canWrite || q.data?.updatedAt ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-ink-muted)]">
+              {!canWrite ? <span>{t('adminSettings.readOnly')}</span> : null}
+              {q.data?.updatedAt ? (
+                <span>
+                  {t('adminSettings.updatedAt', {
+                    when: formatDate(String(q.data.updatedAt), locale),
+                  })}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           <Card className="space-y-3">
             <div>

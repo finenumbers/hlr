@@ -149,6 +149,11 @@ export default function CabinetJobDetailPage() {
             })}
             rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
             rowKey={(r) => String(r.id)}
+            rowClassName={(r) =>
+              isHlr && r.resultStatus === 'unreachable'
+                ? 'bg-[color-mix(in_oklab,var(--color-danger)_12%,transparent)] hover:bg-[color-mix(in_oklab,var(--color-danger)_18%,transparent)]'
+                : undefined
+            }
             page={page}
             pageSize={50}
             total={items.data?.total ?? 0}

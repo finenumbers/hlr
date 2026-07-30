@@ -71,6 +71,8 @@ const enMessages = {
     stuckJobs: 'Stuck jobs: {count}',
     deadWebhooks: 'Dead webhooks 24h: {count}',
     providerErrors: 'Provider errors: {pct}%',
+    clientsCard: 'Active / inactive clients',
+    clientsCardHint: '{active} active · {inactive} inactive',
     activeTenants: 'Active clients',
     activeTenantsHint: '{total} total · {suspended} suspended',
     jobs24h: 'Jobs 24h',
@@ -472,8 +474,6 @@ const enMessages = {
     title: 'Platform settings',
     description:
       'Runtime limits, timeouts, webhooks and retention. SMSC credentials stay in server env only.',
-    secretsNote:
-      'SMSC login / password / API key are configured via SMSC_* environment variables and cannot be edited here.',
     smscTestTitle: 'SMSC connectivity test',
     smscTestHint:
       'No charge: outbound balance request to SMSC plus inbound callback signature verification.',

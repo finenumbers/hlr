@@ -81,12 +81,58 @@ export class AdminPanelService {
     }
   }
 
+  /**
+   * ACTIVE tenants with at least one currently billable product tariff whose
+   * availableBalance is below the cheapest assigned unit sell price.
+   */
+  private async countLowBalanceTenants(): Promise<number> {
+    const now = new Date();
+    const rows = await this.prisma.tenant.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        wallet: { select: { availableBalance: true } },
+        tenantTariffs: {
+          select: {
+            priceOverride: true,
+            effectiveFrom: true,
+            effectiveTo: true,
+            tariffPlan: { select: { sellPrice: true, isActive: true } },
+          },
+        },
+      },
+    });
+
+    let low = 0;
+    for (const tenant of rows) {
+      const unitPrices: number[] = [];
+      for (const assignment of tenant.tenantTariffs) {
+        const plan = assignment.tariffPlan;
+        if (!plan?.isActive) continue;
+        if (assignment.effectiveFrom > now) continue;
+        if (assignment.effectiveTo && assignment.effectiveTo <= now) continue;
+        const price = assignment.priceOverride ?? plan.sellPrice;
+        const n = Number(price.toString());
+        if (Number.isFinite(n) && n > 0) unitPrices.push(n);
+      }
+      if (unitPrices.length === 0) continue;
+      const minPrice = Math.min(...unitPrices);
+      const available = Number(tenant.wallet?.availableBalance?.toString() ?? '0');
+      if (!Number.isFinite(available) || available < minPrice) {
+        low += 1;
+      }
+    }
+    return low;
+  }
+
   async dashboard() {
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [
       tenantsTotal,
       tenantsActive,
       tenantsSuspended,
+      tenantsArchived,
+      tenantsLowBalance,
       jobsTotal,
       jobsByStatus,
       itemsByType,
@@ -101,6 +147,8 @@ export class AdminPanelService {
       this.prisma.tenant.count(),
       this.prisma.tenant.count({ where: { status: 'ACTIVE' } }),
       this.prisma.tenant.count({ where: { status: 'SUSPENDED' } }),
+      this.prisma.tenant.count({ where: { status: 'ARCHIVED' } }),
+      this.countLowBalanceTenants(),
       this.prisma.job.count({ where: { createdAt: { gte: since24h } } }),
       this.prisma.job.groupBy({
         by: ['status'],
@@ -184,6 +232,8 @@ export class AdminPanelService {
         tenantsTotal,
         tenantsActive,
         tenantsSuspended,
+        tenantsInactive: tenantsSuspended + tenantsArchived,
+        tenantsLowBalance,
         jobs24h: jobsTotal,
         hlrItems24h: hlr,
         pingItems24h: ping,
