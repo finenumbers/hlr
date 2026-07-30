@@ -14,7 +14,9 @@ import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
+import { buildExcelCsv, downloadCsv } from '@/lib/csv';
 import { HLR_CSV_EXTRA_FIELDS, jobItemResultColumns } from '@/lib/job-item-columns';
+import { smscErrLabel } from '@/lib/smsc-err';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -57,37 +59,26 @@ export default function CabinetJobDetailPage() {
       'status',
       'resultStatus',
       'isReachable',
-      ...(isHlr ? [...HLR_CSV_EXTRA_FIELDS] : []),
+      ...(isHlr ? [...HLR_CSV_EXTRA_FIELDS, 'smscErr'] : []),
       'errorMessage',
     ];
-    const lines = [
-      header.join(','),
-      ...rows.map((r) =>
-        [
-          checkType,
-          JSON.stringify(service),
-          r.phoneE164,
-          r.status,
-          r.resultStatus ?? '',
-          r.isReachable ?? '',
-          ...(isHlr
-            ? HLR_CSV_EXTRA_FIELDS.map((field) => {
-                const value = r[field];
-                return typeof value === 'string' ? JSON.stringify(value) : (value ?? '');
-              })
-            : []),
-          JSON.stringify(r.errorMessage ?? ''),
-        ].join(','),
-      ),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const dataRows = rows.map((r) => [
+      checkType,
+      service,
+      r.phoneE164,
+      r.status,
+      r.resultStatus ?? '',
+      r.isReachable ?? '',
+      ...(isHlr
+        ? [
+            ...HLR_CSV_EXTRA_FIELDS.map((field) => r[field] ?? ''),
+            smscErrLabel(r.errorCode, t) ?? '',
+          ]
+        : []),
+      r.errorMessage ?? '',
+    ]);
     const slug = checkType === 'PING' ? 'ping-sms' : checkType === 'HLR' ? 'hlr' : 'job';
-    a.download = `${slug}-${id}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`${slug}-${id}.csv`, buildExcelCsv([header, ...dataRows]));
   };
 
   return (

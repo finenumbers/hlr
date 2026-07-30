@@ -1,3 +1,5 @@
+import { smscErrLabel } from '@/lib/smsc-err';
+
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 type Row = Record<string, unknown>;
 
@@ -61,7 +63,7 @@ export function jobItemResultColumns(
       {
         key: 'smscErr',
         header: t(`${p}.colSmscErr`),
-        cell: (r) => text(t, r.errorCode),
+        cell: (r) => text(t, smscErrLabel(r.errorCode, t)),
       },
     );
   }
@@ -77,7 +79,7 @@ export function jobItemResultColumns(
   return cols;
 }
 
-/** CSV field names for HLR extras (aligned with listItems API). */
+/** CSV field names for HLR extras (aligned with listItems API; smscErr is display label). */
 export const HLR_CSV_EXTRA_FIELDS = [
   'operatorName',
   'countryCode',
@@ -89,5 +91,4 @@ export const HLR_CSV_EXTRA_FIELDS = [
   'roaming',
   'roamingCountry',
   'roamingOperator',
-  'errorCode',
 ] as const;
