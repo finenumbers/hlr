@@ -96,12 +96,21 @@ export function createBillingJobsHooks(
     },
 
     async onJobFinalized(input) {
+      const settled = await billing.settleUnsettledHoldsForJob(input.jobId);
+      if (settled.captured > 0) {
+        logger.info('billing.hook.job_finalized_holds_settled', {
+          tenantId: input.tenantId,
+          jobId: input.jobId,
+          ...settled,
+        });
+      }
       const costs = await billing.reconcileJobCosts(input.jobId);
       logger.info('billing.hook.job_finalized', {
         tenantId: input.tenantId,
         jobId: input.jobId,
         status: input.status,
         ...costs,
+        ...settled,
       });
     },
   };

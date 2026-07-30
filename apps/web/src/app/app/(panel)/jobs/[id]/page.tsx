@@ -36,6 +36,10 @@ export default function CabinetJobDetailPage() {
     queryKey: ['cabinet', 'job-items', tenantId, id, page],
     queryFn: () => api.cabinet.jobItems(id, `page=${page}&pageSize=50`),
     enabled: Boolean(tenantId && id),
+    refetchInterval: () => {
+      const status = String(job.data?.status ?? '');
+      return status === 'QUEUED' || status === 'PROCESSING' ? 3000 : false;
+    },
   });
 
   const checkType = String(job.data?.checkType ?? '');
@@ -129,28 +133,37 @@ export default function CabinetJobDetailPage() {
             <p className="mt-2 font-medium">{formatDate(job.data?.createdAt as string | undefined)}</p>
           </Card>
         </div>
-        <DataTable
-          columns={[
-            { key: 'phone', header: t('cabinetJobs.colPhone'), cell: (r) => String(r.phoneE164) },
-            { key: 'status', header: t('cabinetJobs.colStatus'), cell: (r) => String(r.status) },
-            {
-              key: 'result',
-              header: t('cabinetJobs.colResult'),
-              cell: (r) => String(r.resultStatus ?? t('common.dash')),
-            },
-            {
-              key: 'reachable',
-              header: t('cabinetJobs.colReachable'),
-              cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
-            },
-          ]}
-          rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
-          rowKey={(r) => String(r.id)}
-          page={page}
-          pageSize={50}
-          total={items.data?.total ?? 0}
-          onPageChange={setPage}
-        />
+        <QueryState
+          isLoading={items.isLoading && !items.data}
+          isError={items.isError}
+          error={items.error}
+          isEmpty={!items.data?.items.length}
+          emptyTitle={t('cabinetJobs.emptyItems')}
+          onRetry={() => void items.refetch()}
+        >
+          <DataTable
+            columns={[
+              { key: 'phone', header: t('cabinetJobs.colPhone'), cell: (r) => String(r.phoneE164) },
+              { key: 'status', header: t('cabinetJobs.colStatus'), cell: (r) => String(r.status) },
+              {
+                key: 'result',
+                header: t('cabinetJobs.colResult'),
+                cell: (r) => String(r.resultStatus ?? t('common.dash')),
+              },
+              {
+                key: 'reachable',
+                header: t('cabinetJobs.colReachable'),
+                cell: (r) => (r.isReachable == null ? t('common.dash') : String(r.isReachable)),
+              },
+            ]}
+            rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
+            rowKey={(r) => String(r.id)}
+            page={page}
+            pageSize={50}
+            total={items.data?.total ?? 0}
+            onPageChange={setPage}
+          />
+        </QueryState>
       </QueryState>
     </div>
   );

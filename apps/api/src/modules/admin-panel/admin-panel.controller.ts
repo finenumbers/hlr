@@ -406,6 +406,12 @@ export class AdminPanelController {
     return this.admin.listJobItems(id, query.page, query.pageSize, query.status);
   }
 
+  @Post('jobs/:id/finalize')
+  @Roles('SUPERADMIN')
+  finalizeJob(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.admin.finalizeJob(id, user.userId);
+  }
+
   @Get('billing/wallets/:tenantId')
   getWallet(@Param('tenantId') tenantId: string) {
     return this.admin.getWallet(tenantId);

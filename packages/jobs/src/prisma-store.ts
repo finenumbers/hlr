@@ -12,7 +12,7 @@ import type {
 
 type PrismaLike = Pick<
   PrismaClient,
-  'job' | 'jobItem' | 'platformSettings' | 'tenant' | '$transaction'
+  'job' | 'jobItem' | 'platformSettings' | 'tenant' | '$transaction' | '$queryRaw'
 >;
 
 function decimalToString(
@@ -641,27 +641,38 @@ export class PrismaJobsStore implements JobsStore {
   }
 
   async listJobsNeedingFinalize(input: { limit: number }): Promise<JobRecord[]> {
-    const candidates = await this.prisma.job.findMany({
-      where: { status: { in: ['QUEUED', 'PROCESSING'] } },
-      orderBy: { updatedAt: 'asc' },
-      take: input.limit * 3,
-    });
-
-    const ready: JobRecord[] = [];
-    for (const job of candidates) {
-      const pending = await this.prisma.jobItem.count({
-        where: {
-          jobId: job.id,
-          status: { in: ['QUEUED', 'RESERVED', 'SENT', 'PENDING'] },
-        },
-      });
-      if (pending === 0 && job.itemCount > 0) {
-        ready.push(mapJob(job));
-      }
-      if (ready.length >= input.limit) {
-        break;
-      }
+    const limit = Math.max(1, Math.min(input.limit, 2_000));
+    const ids = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT j.id
+      FROM jobs j
+      WHERE j.status IN ('QUEUED'::"JobStatus", 'PROCESSING'::"JobStatus")
+        AND j."itemCount" > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM job_items i
+          WHERE i."jobId" = j.id
+            AND i.status IN (
+              'QUEUED'::"JobItemStatus",
+              'RESERVED'::"JobItemStatus",
+              'SENT'::"JobItemStatus",
+              'PENDING'::"JobItemStatus"
+            )
+        )
+      ORDER BY j."updatedAt" ASC
+      LIMIT ${limit}
+    `;
+    if (ids.length === 0) {
+      return [];
     }
-    return ready;
+    const jobs = await this.prisma.job.findMany({
+      where: { id: { in: ids.map((row) => row.id) } },
+    });
+    const byId = new Map(jobs.map((job) => [job.id, job]));
+    return ids
+      .map((row) => {
+        const job = byId.get(row.id);
+        return job ? mapJob(job) : null;
+      })
+      .filter((job): job is JobRecord => job !== null);
   }
 }

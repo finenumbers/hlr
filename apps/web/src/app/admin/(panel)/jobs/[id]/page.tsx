@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
@@ -8,8 +8,9 @@ import { DataTable } from '@/components/data/data-table';
 import { PageHeader } from '@/components/data/page-header';
 import { QueryState } from '@/components/data/query-state';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { api } from '@/lib/api/client';
+import { api, ApiError } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
 import { formatDate } from '@/lib/utils';
 
@@ -19,25 +20,66 @@ export default function AdminJobDetailPage() {
   const id = typeof params.id === 'string' ? params.id : '';
   const shortId = id ? `${id.slice(0, 12)}…` : t('common.dash');
   const [page, setPage] = useState(1);
+  const [healError, setHealError] = useState<string | null>(null);
+  const qc = useQueryClient();
   const job = useQuery({
     queryKey: ['admin', 'job', id],
     queryFn: () => api.admin.job(id),
     enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const status = String(query.state.data?.status ?? '');
+      return status === 'QUEUED' || status === 'PROCESSING' ? 3000 : false;
+    },
   });
   const items = useQuery({
     queryKey: ['admin', 'job-items', id, page],
     queryFn: () => api.admin.jobItems(id, `page=${page}&pageSize=20`),
     enabled: Boolean(id),
+    refetchInterval: () => {
+      const status = String(job.data?.status ?? '');
+      return status === 'QUEUED' || status === 'PROCESSING' ? 3000 : false;
+    },
+  });
+
+  const heal = useMutation({
+    mutationFn: () => api.admin.finalizeJob(id),
+    onSuccess: async () => {
+      setHealError(null);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['admin', 'job', id] }),
+        qc.invalidateQueries({ queryKey: ['admin', 'job-items', id] }),
+      ]);
+    },
+    onError: (err) => {
+      setHealError(err instanceof ApiError ? err.message : t('adminJobs.healFailed'));
+    },
   });
 
   const j = job.data;
+  const status = String(j?.status ?? '');
+  const canHeal = status === 'QUEUED' || status === 'PROCESSING';
 
   return (
     <div>
       <PageHeader
         title={t('adminJobs.detailTitle', { id: shortId })}
         description={t('adminJobs.detailDescription')}
+        actions={
+          canHeal ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => heal.mutate()}
+              disabled={heal.isPending || !id}
+            >
+              {heal.isPending ? t('common.loading') : t('adminJobs.healFinalize')}
+            </Button>
+          ) : null
+        }
       />
+      {healError ? (
+        <p className="mb-3 text-sm text-[var(--color-danger)]">{healError}</p>
+      ) : null}
       <QueryState
         isLoading={job.isLoading || !job.data}
         isError={job.isError}
@@ -76,6 +118,7 @@ export default function AdminJobDetailPage() {
           error={items.error}
           isEmpty={!items.data?.items.length}
           emptyTitle={t('adminJobs.emptyItems')}
+          onRetry={() => void items.refetch()}
         >
           <DataTable
             columns={[

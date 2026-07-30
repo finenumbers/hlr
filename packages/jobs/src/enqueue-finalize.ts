@@ -27,9 +27,9 @@ function isDuplicateJobIdError(err: unknown): boolean {
 }
 
 /**
- * Enqueue finalize with a stable BullMQ jobId so concurrent requests collapse,
- * but re-queue after a completed/failed no-op so later item-terminal events
- * (and reconciliation) are not silently dropped.
+ * Enqueue finalize with a stable BullMQ jobId so concurrent in-flight work collapses.
+ * Only skip when a finalize is currently **active**; waiting/delayed/completed leftovers
+ * are removed so reconciliation can heal stuck PROCESSING jobs.
  */
 export async function enqueueFinalizeJobOnQueue(
   queue: FinalizeQueueLike,
@@ -39,12 +39,10 @@ export async function enqueueFinalizeJobOnQueue(
   const existing = await queue.getJob(jobId);
   if (existing) {
     const state = await existing.getState();
-    if (state === 'completed' || state === 'failed') {
-      await existing.remove();
-    } else {
-      // waiting | active | delayed | paused — already in flight
+    if (state === 'active') {
       return;
     }
+    await existing.remove();
   }
 
   try {

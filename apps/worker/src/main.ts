@@ -150,6 +150,12 @@ async function bootstrap(): Promise<void> {
   const reconciliationQueue = new Queue(QUEUE_NAMES.JOBS_RECONCILIATION, {
     connection,
   });
+  // One-shot heal on boot so stuck PROCESSING jobs are finalized after redeploy.
+  await reconciliationQueue.add(
+    QUEUE_JOB_NAMES.RECONCILE_STALE,
+    { limit: 500 },
+    { jobId: `reconcile-startup-${Date.now()}` },
+  );
   await reconciliationQueue.add(
     QUEUE_JOB_NAMES.RECONCILE_STALE,
     { limit: 100 },

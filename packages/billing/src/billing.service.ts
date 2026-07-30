@@ -1161,6 +1161,36 @@ export class BillingService {
   }
 
   /**
+   * Capture any open HOLDs for terminal items of a job (idempotent).
+   * Used when item-terminal capture was skipped earlier but SMSC already charged.
+   */
+  async settleUnsettledHoldsForJob(jobId: string): Promise<{ attempted: number; captured: number }> {
+    const items = await this.prisma.jobItem.findMany({
+      where: {
+        jobId,
+        status: { in: ['COMPLETED', 'FAILED'] },
+      },
+      select: { id: true, tenantId: true },
+    });
+
+    let captured = 0;
+    for (const item of items) {
+      const open = await this.ledger.findOpenHoldForJobItem(item.id);
+      if (!open) {
+        continue;
+      }
+      const result = await this.captureForJobItem({
+        tenantId: item.tenantId,
+        jobItemId: item.id,
+      });
+      if (result.created || (result.debit && result.chargedAmount !== '0')) {
+        captured += 1;
+      }
+    }
+    return { attempted: items.length, captured };
+  }
+
+  /**
    * Sum actualCost of job items and persist on Job (called from job-finalized hook).
    */
   async reconcileJobCosts(jobId: string): Promise<{ estimatedCost: string; actualCost: string }> {

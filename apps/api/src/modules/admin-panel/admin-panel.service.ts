@@ -771,6 +771,44 @@ export class AdminPanelService {
     });
   }
 
+  /** Force finalize / heal a stuck PROCESSING job (SUPERADMIN). */
+  async finalizeJob(jobId: string, actorUserId: string) {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job) {
+      throw new NotFoundException({
+        errorCode: ErrorCodes.NOT_FOUND,
+        message: `Job ${jobId} not found`,
+      });
+    }
+
+    // Ensure a fresh finalize is queued even if Redis still holds a stale jobId.
+    await this.jobs.getProcessor().enqueueFinalizeJob({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      reason: 'admin-heal',
+    });
+    const finalized = await this.jobs.getLifecycle().processFinalizeJob({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      reason: 'admin-heal',
+    });
+
+    await this.audit.write({
+      tenantId: job.tenantId,
+      actorType: 'USER',
+      actorUserId,
+      action: 'admin.job.finalize',
+      targetType: 'Job',
+      targetId: job.id,
+      metadata: {
+        beforeStatus: job.status,
+        afterStatus: finalized?.status ?? job.status,
+      },
+    });
+
+    return this.getJob(jobId);
+  }
+
   getWallet(tenantId: string) {
     return this.wallets.getByTenantId(tenantId);
   }

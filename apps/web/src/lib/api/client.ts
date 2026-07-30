@@ -222,6 +222,8 @@ export const api = {
     job: (id: string) => apiRequest<Record<string, unknown>>(`/admin/jobs/${id}`),
     jobItems: (id: string, q: string) =>
       apiRequest<Paginated<Record<string, unknown>>>(`/admin/jobs/${id}/items?${q}`),
+    finalizeJob: (id: string) =>
+      apiRequest<Record<string, unknown>>(`/admin/jobs/${id}/finalize`, { method: 'POST' }),
     wallet: (tenantId: string) =>
       apiRequest<Record<string, unknown>>(`/admin/billing/wallets/${tenantId}`),
     ledger: (tenantId: string) =>
