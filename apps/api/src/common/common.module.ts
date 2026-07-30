@@ -8,7 +8,6 @@ import { RequestContextModule } from './request-context/request-context.module';
 import { AuthGuard } from './guards/auth.guard';
 import { IpRateLimitGuard } from './guards/ip-rate-limit.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { TenantAccessGuard } from './guards/tenant-access.guard';
 
 /**
  * Aggregates cross-cutting infrastructure used by feature modules.
@@ -22,7 +21,7 @@ import { TenantAccessGuard } from './guards/tenant-access.guard';
     RedisModule,
     RequestContextModule,
   ],
-  providers: [AuthGuard, RolesGuard, TenantAccessGuard, IpRateLimitGuard],
+  providers: [AuthGuard, RolesGuard, IpRateLimitGuard],
   exports: [
     AppConfigModule,
     LoggerModule,
@@ -31,7 +30,6 @@ import { TenantAccessGuard } from './guards/tenant-access.guard';
     RequestContextModule,
     AuthGuard,
     RolesGuard,
-    TenantAccessGuard,
     IpRateLimitGuard,
   ],
 })

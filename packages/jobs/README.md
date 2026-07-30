@@ -18,7 +18,7 @@ CreateJobService
 JobLifecycleService.processSubmitBatch
   ├─ mark Job PROCESSING
   ├─ claim item (QUEUED→RESERVED) — duplicate-safe
-  ├─ billing.onItemReserved (noop until E07)
+  ├─ billing.onItemReserved (reserve HOLD)
   ├─ provider.submitHlr|Ping
   ├─ item → PENDING (or terminal)
   ├─ on non-retryable failure → item FAILED (batch continues)
@@ -31,8 +31,8 @@ JobLifecycleService.processSubmitBatch
          jobs-finalize → recompute counters → COMPLETED |
                          COMPLETED_WITH_ERRORS | FAILED
                 │
-                ├─ billing.onJobFinalized (noop / E07)
-                └─ webhooks.onJobFinalized (noop / E13)
+                ├─ billing.onJobFinalized
+                └─ webhooks.onJobFinalized
 
 jobs-reconciliation
   ├─ re-queue stale PENDING/SENT items
@@ -98,15 +98,16 @@ Computed from counters: `total`, `processed`, `success`, `failed`, `pending`.
 
 ## Extension points
 
-| Hook | When | Stage |
-|------|------|-------|
-| `JobsBillingHooks.onItemReserved` | after claim | E07 reserve |
-| `JobsBillingHooks.onItemTerminal` | item terminal (`capture` \| `release`) | E07 |
-| `JobsBillingHooks.onJobFinalized` | job terminal | E07 reconcile |
-| `JobsWebhookHooks.onItemTerminal` | item terminal | E13 |
-| `JobsWebhookHooks.onJobFinalized` | job terminal | E13 |
+| Hook | When | Production |
+|------|------|------------|
+| `JobsBillingHooks.onItemReserved` | after claim | reserve HOLD |
+| `JobsBillingHooks.onItemTerminal` | item terminal (`capture` \| `release`) | capture / release |
+| `JobsBillingHooks.onJobFinalized` | job terminal | settle / reconcile |
+| `JobsWebhookHooks.onItemTerminal` | item terminal | enqueue delivery |
+| `JobsWebhookHooks.onJobFinalized` | job terminal | enqueue delivery |
 
-Defaults: `createNoopBillingHooks` / `createNoopWebhookHooks`.
+API/worker wire real hooks via `createBillingJobsHooks` / `createJobsWebhookHooks`.  
+Test defaults: `createNoopBillingHooks` / `createNoopWebhookHooks`.
 
 ## Assumptions
 

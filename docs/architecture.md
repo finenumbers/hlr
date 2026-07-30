@@ -11,15 +11,17 @@
 |-----|------|
 | `apps/api` | HTTP: public `/v1`, cabinet BFF, admin BFF, SMSC callback |
 | `apps/worker` | BullMQ: send, poll, csv-parse, webhook-deliver |
-| `apps/web` | Кабинет клиента (Next.js), RU/EN |
-| `apps/admin` | Админка платформы (Next.js), RU/EN |
+| `apps/web` | Кабинет (`/app`) + админка (`/admin`) на одном Next.js, RU/EN |
 
 ## Packages
 
 | Package | Роль |
 |---------|------|
 | `packages/db` | Prisma schema + client (`@finenumbers/db`) |
-| `packages/shared` | валидация, phone E.164, money, enums (позже) |
+| `packages/billing` | ledger, tariffs, jobs billing hooks |
+| `packages/jobs` | job lifecycle, stores, queues |
+| `packages/webhooks` | delivery signing / ports |
+| `packages/contracts` | shared health DTOs |
 | `packages/provider-core` | порт провайдера |
 | `packages/provider-smsc` | SMSC HTTP + normalizer |
 | `packages/config` | env secrets/infra |
@@ -39,7 +41,7 @@ Orchestration package: `@finenumbers/jobs` (see package README).
 ## Сетевой контур (prod)
 
 ```
-Internet → NPM (TLS) → web | admin | api
+Internet → NPM (TLS) → web | api
 worker — только внутренняя сеть + Redis/Postgres + SMSC egress
 ```
 
@@ -47,7 +49,7 @@ NPM **вне** compose-проекта. Подробности: [operations.md](.
 
 ## Модули api (целевые)
 
-`auth`, `rbac`, `tenants`, `users`, `api-keys`, `settings`, `tariffs`, `billing`, `checks`, `jobs`, `providers`, `smsc-callback`, `webhooks`, `audit`, `health`, `metrics`.
+`auth`, `tenants`, `api-keys`, `settings`, `tariffs`, `billing`, `jobs`, `provider-smsc`, `smsc-callback`, `webhooks`, `audit`, `cabinet`, `admin-panel`, `public-api`, `health`, `metrics`.
 
 ## Безопасность (кратко)
 
@@ -71,8 +73,7 @@ NPM **вне** compose-проекта. Подробности: [operations.md](.
 
 Health: `GET /health/live`, `GET /health/ready` на api.
 
-Структура: `apps/{api,worker,web}`, `packages/{db,billing,config,contracts,ui,tsconfig,provider-core,provider-smsc,jobs}`, `infra/{docker,monitoring}`.  
-`apps/admin` появится на этапе кабинета/админки.
+Структура: `apps/{api,worker,web}`, `packages/{db,billing,config,contracts,tsconfig,provider-core,provider-smsc,jobs,webhooks}`, `infra/{docker,monitoring}`.
 
 ### Billing ledger (E07)
 

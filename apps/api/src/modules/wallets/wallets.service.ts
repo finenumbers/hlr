@@ -1,20 +1,12 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { BILLING_WORKFLOW, BillingWorkflowPort } from './billing-workflow.port';
 import type { WalletResponseDto } from './dto/wallet-response.dto';
 
 @Injectable()
 export class WalletsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(BILLING_WORKFLOW) private readonly billing: BillingWorkflowPort,
-  ) {}
-
-  getBillingWorkflow(): BillingWorkflowPort {
-    return this.billing;
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async getByTenantId(tenantId: string): Promise<WalletResponseDto> {
     const wallet = await this.prisma.wallet.findUnique({

@@ -34,7 +34,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.join(appDir, '../..'),
-  transpilePackages: ['@finenumbers/ui'],
   images: {
     unoptimized: true,
   },

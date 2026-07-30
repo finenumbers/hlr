@@ -6,14 +6,12 @@ import { BillingModule } from '../billing/billing.module';
 import { ProviderSmscModule } from '../provider-smsc/provider-smsc.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { BullMqJobsPublisher } from './bullmq-jobs.publisher';
-import { JobsController } from './jobs.controller';
 import { JOBS_PROCESSOR } from './jobs-processor.port';
 import { JOBS_STORE } from './jobs-store.port';
 import { JobsService } from './jobs.service';
 
 @Module({
   imports: [ProviderSmscModule, BillingModule, forwardRef(() => WebhooksModule)],
-  controllers: [JobsController],
   providers: [
     JobsService,
     BullMqJobsPublisher,

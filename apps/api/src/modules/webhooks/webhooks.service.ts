@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { ALL_WEBHOOK_EVENTS, isWebhookEventType } from '@finenumbers/webhooks';
 
@@ -17,7 +12,6 @@ import type { UpdateWebhookDto } from './dto/update-webhook.dto';
 import type { WebhookCreatedResponseDto } from './dto/webhook-created-response.dto';
 import type { WebhookDeliveryResponseDto } from './dto/webhook-delivery-response.dto';
 import type { WebhookEndpointResponseDto } from './dto/webhook-endpoint-response.dto';
-import { WEBHOOK_DELIVERY, WebhookDeliveryPort } from './webhook-delivery.port';
 
 const endpointSelect = {
   id: true,
@@ -37,12 +31,7 @@ export class WebhooksService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly logger: AppLogger,
-    @Inject(WEBHOOK_DELIVERY) private readonly delivery: WebhookDeliveryPort,
   ) {}
-
-  getDeliveryPort(): WebhookDeliveryPort {
-    return this.delivery;
-  }
 
   async listByTenant(
     tenantId: string,
@@ -72,23 +61,6 @@ export class WebhooksService {
   ): Promise<WebhookEndpointResponseDto> {
     const endpoint = await this.prisma.webhookEndpoint.findFirst({
       where: { id, tenantId },
-      select: endpointSelect,
-    });
-
-    if (!endpoint) {
-      throw new NotFoundException({
-        errorCode: ErrorCodes.NOT_FOUND,
-        message: `Webhook endpoint ${id} not found`,
-      });
-    }
-
-    return mapEndpoint(endpoint);
-  }
-
-  /** Scaffold compat. */
-  async getById(id: string): Promise<WebhookEndpointResponseDto> {
-    const endpoint = await this.prisma.webhookEndpoint.findUnique({
-      where: { id },
       select: endpointSelect,
     });
 
@@ -329,13 +301,6 @@ export class WebhooksService {
     ]);
 
     return { items, page: input.page, pageSize: input.pageSize, total };
-  }
-
-  create(): never {
-    throw new BadRequestException({
-      errorCode: ErrorCodes.VALIDATION_FAILED,
-      message: 'Use POST /v1/webhooks',
-    });
   }
 
   private async requireTenantEndpoint(tenantId: string, id: string) {

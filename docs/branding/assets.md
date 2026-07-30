@@ -8,11 +8,10 @@
 | [assets/icon-512.png](./assets/icon-512.png) | Квадратная иконка `fn` (app icon) |
 | [assets/favicon.png](./assets/favicon.png) | Favicon |
 
-При реализации (E14/E15) копировать в:
+Копировать в:
 
-- `apps/web/public/branding/`
-- `apps/admin/public/branding/`
-- favicon → metadata каждого Next-приложения
+- `apps/web/public/branding/` (кабинет + админка — одно Next-приложение)
+- favicon → `apps/web/public/favicon.png` + metadata layout
 
 ## Правила
 

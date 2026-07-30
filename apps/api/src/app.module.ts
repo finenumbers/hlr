@@ -20,7 +20,6 @@ import { ProviderSmscModule } from './modules/provider-smsc/provider-smsc.module
 import { SmscCallbackModule } from './modules/smsc-callback/smsc-callback.module';
 import { TariffsModule } from './modules/tariffs/tariffs.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
-import { UsersModule } from './modules/users/users.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { PublicApiModule } from './modules/public-api/public-api.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
@@ -32,7 +31,6 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     HealthModule,
     AuthModule,
     TenantsModule,
-    UsersModule,
     ApiKeysModule,
     BillingModule,
     WalletsModule,

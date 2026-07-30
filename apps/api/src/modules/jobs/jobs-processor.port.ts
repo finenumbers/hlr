@@ -21,11 +21,6 @@ export abstract class JobsProcessorPort implements JobsQueuePublisher {
   abstract enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;
 
   abstract enqueueCsvParse(payload: CsvParsePayload): Promise<void>;
-
-  /** @deprecated Use enqueuePollItem — kept for older call sites. */
-  enqueuePollCheck(jobItemId: string, tenantId: string): Promise<void> {
-    return this.enqueuePollItem({ jobItemId, tenantId, attempt: 1 });
-  }
 }
 
 export const JOBS_PROCESSOR = Symbol('JOBS_PROCESSOR');

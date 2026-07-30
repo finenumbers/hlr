@@ -168,24 +168,6 @@ export class JobsService {
     };
   }
 
-  /**
-   * @deprecated Unscoped lookup — do not use for client-facing APIs.
-   * Prefer {@link getByIdForTenant}. Kept for internal lifecycle helpers only.
-   */
-  async getById(id: string): Promise<JobResponseDto & { progress: JobProgress }> {
-    const job = await this.store.findJobById(id);
-    if (!job) {
-      throw new NotFoundException({
-        errorCode: ErrorCodes.NOT_FOUND,
-        message: `Job ${id} not found`,
-      });
-    }
-    return {
-      ...mapJob(job),
-      progress: computeProgress(job),
-    };
-  }
-
   /** Tenant-scoped job fetch — returns 404 for cross-tenant ids (no existence leak detail). */
   async getByIdForTenant(
     tenantId: string,

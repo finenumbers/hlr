@@ -37,13 +37,13 @@ Create: header `Idempotency-Key` (рекомендуется)
 
 ## Cabinet BFF `/cabinet`
 
-Session auth. UI кабинета: keys, checks, jobs, webhooks, balance. _(не в Stage 7)_
+Session auth. UI кабинета: keys, checks, jobs, webhooks, balance.
 
 ---
 
 ## Admin BFF `/admin`
 
-Platform roles. Orgs, users, tariffs, topup, settings, limits, audit, health. _(не в Stage 7)_
+Platform roles. Orgs, users, tariffs, topup, settings, limits, audit, health.
 
 ---
 

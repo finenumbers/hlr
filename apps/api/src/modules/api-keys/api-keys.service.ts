@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
 import type { PaginatedResult } from '../../common/dto/pagination-query.dto';
@@ -77,23 +73,6 @@ export class ApiKeysService {
   ): Promise<ApiKeyResponseDto> {
     const key = await this.prisma.apiKey.findFirst({
       where: { id, tenantId },
-      select: apiKeySelect,
-    });
-
-    if (!key) {
-      throw new NotFoundException({
-        errorCode: ErrorCodes.NOT_FOUND,
-        message: `API key ${id} not found`,
-      });
-    }
-
-    return { ...key, masked: maskApiKeyPrefix(key.prefix) };
-  }
-
-  /** @deprecated Prefer getByIdForTenant for tenant isolation. */
-  async getById(id: string): Promise<ApiKeyResponseDto> {
-    const key = await this.prisma.apiKey.findUnique({
-      where: { id },
       select: apiKeySelect,
     });
 
@@ -273,21 +252,6 @@ export class ApiKeysService {
     );
 
     return { ...updated, masked: maskApiKeyPrefix(updated.prefix) };
-  }
-
-  /** Scaffold compat — use public API. */
-  create(): never {
-    throw new BadRequestException({
-      errorCode: ErrorCodes.VALIDATION_FAILED,
-      message: 'Use POST /v1/api-keys',
-    });
-  }
-
-  revoke(_id: string): never {
-    throw new BadRequestException({
-      errorCode: ErrorCodes.VALIDATION_FAILED,
-      message: 'Use POST /v1/api-keys/:id/revoke',
-    });
   }
 
   private async requireTenantKey(tenantId: string, id: string) {

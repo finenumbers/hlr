@@ -166,14 +166,8 @@ export const workerEnvSchema = baseEnvSchema
     UPLOAD_DIR: nonempty.default('./data/uploads'),
   });
 
-export const webEnvSchema = baseEnvSchema.extend({
-  PUBLIC_API_URL: publicUrl.default('http://localhost:3001'),
-  PUBLIC_WEB_URL: publicUrl.default('http://localhost:3000'),
-});
-
 export type ApiEnv = z.infer<typeof apiEnvSchema>;
 export type WorkerEnv = z.infer<typeof workerEnvSchema>;
-export type WebEnv = z.infer<typeof webEnvSchema>;
 export type SmscEnv = z.infer<typeof smscEnvSchema>;
 
 export type LoadEnvOptions = {
@@ -204,10 +198,6 @@ export function loadApiEnv(options?: LoadEnvOptions): ApiEnv {
 
 export function loadWorkerEnv(options?: LoadEnvOptions): WorkerEnv {
   return loadEnv(workerEnvSchema, options);
-}
-
-export function loadWebEnv(options?: LoadEnvOptions): WebEnv {
-  return loadEnv(webEnvSchema, options);
 }
 
 /** Resolve CORS allow-list from env (bare hosts → https://). */

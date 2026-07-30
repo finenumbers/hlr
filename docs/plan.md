@@ -121,7 +121,7 @@ docker-compose.obs.yml
 
 - `package.json`, `pnpm-workspace.yaml`, `turbo.json`  
 - `packages/tsconfig/`, `packages/config/`  
-- `apps/api`, `apps/worker`, `apps/web`, `apps/admin` (hello/boot)  
+- `apps/api`, `apps/worker`, `apps/web` (admin UI later under `apps/web/admin`, not a separate app)
 - ESLint/Prettier, `.gitignore`, `.env.example`  
 - `README.md` (как поднять локально — кратко)  
 
