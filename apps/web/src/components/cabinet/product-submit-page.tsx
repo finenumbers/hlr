@@ -38,15 +38,13 @@ export function ProductSubmitPage({ checkType }: { checkType: CheckType }) {
         error={tariff.error}
         onRetry={() => void tariff.refetch()}
       >
-        <div className="mx-auto max-w-2xl">
-          <ProductSubmitPanel
-            checkType={checkType}
-            available={Boolean(quote)}
-            sellPrice={quote?.sellPrice ?? null}
-            currency={quote?.currency ?? 'RUB'}
-            compactTitle
-          />
-        </div>
+        <ProductSubmitPanel
+          checkType={checkType}
+          available={Boolean(quote)}
+          sellPrice={quote?.sellPrice ?? null}
+          currency={quote?.currency ?? 'RUB'}
+          compactTitle
+        />
       </QueryState>
     </div>
   );

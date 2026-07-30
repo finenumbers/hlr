@@ -65,6 +65,7 @@ export default function AdminTenantDetailPage() {
     onSuccess: async () => {
       setStatus(null);
       await qc.invalidateQueries({ queryKey: ['admin', 'tenant', id] });
+      await qc.invalidateQueries({ queryKey: ['admin', 'tenants'] });
     },
   });
   const tariffMut = useMutation({
@@ -142,16 +143,35 @@ export default function AdminTenantDetailPage() {
           <Card>
             <h2 className="font-semibold">{t('adminTenants.status')}</h2>
             <div className="mt-2">
-              <Badge tone={tenant?.status === 'ACTIVE' ? 'ok' : 'warn'}>{String(tenant?.status)}</Badge>
+              <Badge
+                tone={
+                  tenant?.status === 'ACTIVE'
+                    ? 'ok'
+                    : tenant?.status === 'SUSPENDED'
+                      ? 'warn'
+                      : 'neutral'
+                }
+              >
+                {String(tenant?.status)}
+              </Badge>
             </div>
             <Can permission="admin.tenants.write">
-              <div className="mt-4 flex gap-2">
-                <Button type="button" size="sm" variant="secondary" onClick={() => setStatus('SUSPENDED')}>
-                  {t('adminTenants.suspend')}
-                </Button>
-                <Button type="button" size="sm" variant="secondary" onClick={() => setStatus('ACTIVE')}>
-                  {t('adminTenants.activate')}
-                </Button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {tenant?.status !== 'SUSPENDED' ? (
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setStatus('SUSPENDED')}>
+                    {t('adminTenants.suspend')}
+                  </Button>
+                ) : null}
+                {tenant?.status !== 'ACTIVE' ? (
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setStatus('ACTIVE')}>
+                    {t('adminTenants.activate')}
+                  </Button>
+                ) : null}
+                {tenant?.status !== 'ARCHIVED' ? (
+                  <Button type="button" size="sm" variant="danger" onClick={() => setStatus('ARCHIVED')}>
+                    {t('adminTenants.delete')}
+                  </Button>
+                ) : null}
               </div>
             </Can>
           </Card>
@@ -420,9 +440,19 @@ export default function AdminTenantDetailPage() {
       <ConfirmDialog
         open={Boolean(status)}
         onClose={() => setStatus(null)}
-        title={t('adminTenants.confirmStatusTitle')}
-        description={t('adminTenants.confirmStatusDesc', { status: status ?? '' })}
-        confirmLabel={t('adminTenants.update')}
+        title={
+          status === 'ARCHIVED'
+            ? t('adminTenants.confirmDeleteTitle')
+            : t('adminTenants.confirmStatusTitle')
+        }
+        description={
+          status === 'ARCHIVED'
+            ? t('adminTenants.confirmDeleteDesc')
+            : t('adminTenants.confirmStatusDesc', { status: status ?? '' })
+        }
+        confirmLabel={
+          status === 'ARCHIVED' ? t('adminTenants.delete') : t('adminTenants.update')
+        }
         loading={statusMut.isPending}
         onConfirm={() => status && statusMut.mutate(status)}
       />

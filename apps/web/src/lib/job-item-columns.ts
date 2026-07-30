@@ -58,6 +58,11 @@ export function jobItemResultColumns(
         header: t(`${p}.colRoamingOperator`),
         cell: (r) => text(t, r.roamingOperator),
       },
+      {
+        key: 'smscErr',
+        header: t(`${p}.colSmscErr`),
+        cell: (r) => text(t, r.errorCode),
+      },
     );
   }
 
@@ -84,4 +89,5 @@ export const HLR_CSV_EXTRA_FIELDS = [
   'roaming',
   'roamingCountry',
   'roamingOperator',
+  'errorCode',
 ] as const;

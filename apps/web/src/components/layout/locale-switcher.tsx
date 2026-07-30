@@ -28,8 +28,8 @@ export function LocaleSwitcher({ className }: { className?: string }) {
           size="sm"
           variant={locale === opt.value ? 'secondary' : 'ghost'}
           className={cn(
-            'h-8 min-w-9 px-2 text-xs font-semibold',
-            locale === opt.value && 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]',
+            'h-8 min-w-9 px-2 text-xs font-semibold !text-black',
+            locale === opt.value && 'bg-[var(--color-accent-soft)]',
           )}
           onClick={() => setLocale(opt.value)}
           aria-pressed={locale === opt.value}

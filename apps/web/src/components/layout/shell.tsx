@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -7,10 +8,11 @@ import type { ReactNode } from 'react';
 import { BrandLogo } from '@/components/layout/brand-logo';
 import { LocaleSwitcher } from '@/components/layout/locale-switcher';
 import { Button } from '@/components/ui/button';
+import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import type { Permission } from '@/lib/auth/permissions';
 import { useT } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, formatMoney } from '@/lib/utils';
 
 export type NavItem = {
   href: string;
@@ -44,9 +46,18 @@ export function AppShell({
     items.map((item) => item.href),
   );
 
+  const balance = useQuery({
+    queryKey: ['cabinet', 'balance', tenantId],
+    queryFn: () => api.cabinet.balance(),
+    enabled: area === 'cabinet' && Boolean(tenantId),
+  });
+  const balanceData = balance.data as
+    | { availableBalance?: string; currency?: string }
+    | undefined;
+
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[192px_1fr]">
-      <aside className="border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:border-b-0 lg:border-r">
+      <aside className="flex flex-col border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:min-h-screen lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-3 px-3 py-5">
           <BrandLogo variant="dark" priority className="h-[2.1rem] w-auto" />
         </div>
@@ -55,7 +66,7 @@ export function AppShell({
             {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
           </p>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-2 pb-4 lg:flex-col">
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-4 lg:flex-1 lg:flex-col">
           {items.map((item) => {
             const active = item.href === activeHref;
             return (
@@ -74,6 +85,17 @@ export function AppShell({
             );
           })}
         </nav>
+        <div className="mt-auto border-t border-[var(--color-nav-line)] px-2 py-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="w-full justify-start !text-white hover:!text-white hover:bg-[color-mix(in_oklab,var(--color-accent-bright)_18%,transparent)]"
+            onClick={() => void logout()}
+          >
+            {t('common.logout')}
+          </Button>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-col">
@@ -101,9 +123,16 @@ export function AppShell({
               </select>
             ) : null}
             <LocaleSwitcher />
-            <Button type="button" size="sm" variant="ghost" onClick={() => void logout()}>
-              {t('common.logout')}
-            </Button>
+            {area === 'cabinet' ? (
+              <div className="flex h-9 items-center rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-3 text-sm font-semibold tabular-nums">
+                {balance.isLoading
+                  ? t('common.dash')
+                  : formatMoney(
+                      balanceData?.availableBalance ?? '0',
+                      balanceData?.currency ?? 'RUB',
+                    )}
+              </div>
+            ) : null}
           </div>
         </header>
         <main className="w-full flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>

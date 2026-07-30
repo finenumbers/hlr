@@ -88,18 +88,18 @@ export default function AdminJobDetailPage() {
         error={job.error}
         onRetry={() => void job.refetch()}
       >
-        <div className="mb-4 grid gap-4 sm:grid-cols-4">
-          <Card>
+        <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.status')}</p>
             <Badge className="mt-2">{String(j?.status ?? t('common.dash'))}</Badge>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.typeSource')}</p>
             <p className="mt-2 font-medium">
               {String(j?.checkType ?? t('common.dash'))} · {String(j?.source ?? t('common.dash'))}
             </p>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.progress')}</p>
             <p className="mt-2 font-medium">
               {t('adminJobs.progressCell', {
@@ -109,7 +109,7 @@ export default function AdminJobDetailPage() {
               })}
             </p>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.created')}</p>
             <p className="mt-2 font-medium">{formatDate(j?.createdAt as string | undefined)}</p>
           </Card>

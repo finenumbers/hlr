@@ -97,6 +97,15 @@ const enMessages = {
     status: 'Status',
     suspend: 'Suspend',
     activate: 'Activate',
+    delete: 'Delete',
+    confirmDeleteTitle: 'Delete client',
+    confirmDeleteDesc:
+      'The client will be archived (status ARCHIVED). History, jobs, and balance are kept. Continue?',
+    filterStatus: 'Status',
+    filterActive: 'Active',
+    filterSuspended: 'Suspended',
+    filterArchived: 'Archived',
+    filterAll: 'All',
     wallet: 'Wallet',
     held: 'Held: {amount}',
     topupAmount: 'Top-up amount',
@@ -216,6 +225,7 @@ const enMessages = {
     colRoaming: 'Roaming',
     colRoamingCountry: 'Roaming country',
     colRoamingOperator: 'Roaming operator',
+    colSmscErr: 'SMSC err',
     colError: 'Error',
   },
   adminBilling: {
@@ -299,12 +309,10 @@ const enMessages = {
     title: 'HLR & Silent SMS',
     description:
       'HLR and Silent SMS are separate products. Without an assigned tariff the request is blocked.',
-    hlrTitle: 'HLR',
-    pingTitle: 'Silent SMS',
-    hlrDescription:
-      'Submit an HLR lookup. This page is only for HLR — Silent SMS is a separate service.',
-    pingDescription:
-      'Submit a Silent SMS check. This page is only for Silent SMS — HLR is a separate service.',
+    hlrTitle: 'HLR check',
+    pingTitle: 'Silent SMS check',
+    hlrDescription: 'Submit an HLR lookup for E.164 phone numbers.',
+    pingDescription: 'Submit a Silent SMS check for E.164 phone numbers.',
     checkType: 'Service',
     optionHlr: 'HLR',
     optionPing: 'Silent SMS',
@@ -361,6 +369,7 @@ const enMessages = {
     colRoaming: 'Roaming',
     colRoamingCountry: 'Roaming country',
     colRoamingOperator: 'Roaming operator',
+    colSmscErr: 'SMSC err',
   },
   cabinetBilling: {
     title: 'Billing',

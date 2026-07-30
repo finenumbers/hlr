@@ -123,22 +123,22 @@ export default function CabinetJobDetailPage() {
         error={job.error}
         onRetry={() => void job.refetch()}
       >
-        <div className="mb-4 grid gap-4 sm:grid-cols-4">
-          <Card>
+        <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.status')}</p>
             <Badge className="mt-2">{String(job.data?.status ?? t('common.dash'))}</Badge>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.service')}</p>
             <p className="mt-2 font-medium">{service}</p>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.progress')}</p>
             <p className="mt-2 font-medium">
               {Number(job.data?.successCount ?? 0)}/{Number(job.data?.itemCount ?? 0)}
             </p>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.created')}</p>
             <p className="mt-2 font-medium">{formatDate(job.data?.createdAt as string | undefined)}</p>
           </Card>

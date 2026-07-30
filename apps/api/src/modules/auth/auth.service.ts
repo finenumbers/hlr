@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -115,6 +116,11 @@ export class AuthService {
               select: {
                 tenantId: true,
                 role: true,
+                tenant: {
+                  select: {
+                    status: true,
+                  },
+                },
               },
             },
           },
@@ -140,6 +146,15 @@ export class AuthService {
     let tenantId: string | null = null;
     let membershipRole: AuthenticatedUser['membershipRole'] = null;
 
+    const assertTenantActive = (status: string) => {
+      if (status !== 'ACTIVE') {
+        throw new ForbiddenException({
+          errorCode: ErrorCodes.FORBIDDEN,
+          message: 'Tenant is not active',
+        });
+      }
+    };
+
     const requested = tenantHeader?.trim() || null;
     if (requested) {
       const membership = memberships.find((m) => m.tenantId === requested);
@@ -155,10 +170,12 @@ export class AuthService {
         tenantId = requested;
         membershipRole = null;
       } else {
+        assertTenantActive(membership.tenant.status);
         tenantId = membership.tenantId;
         membershipRole = membership.role;
       }
     } else if (memberships.length === 1 && !session.user.platformRole) {
+      assertTenantActive(memberships[0]!.tenant.status);
       tenantId = memberships[0]!.tenantId;
       membershipRole = memberships[0]!.role;
     }
@@ -211,11 +228,13 @@ export class AuthService {
       name: record.name,
       platformRole: record.platformRole,
       isActive: record.isActive,
-      memberships: record.memberships.map((m) => ({
-        tenantId: m.tenantId,
-        role: m.role,
-        tenant: m.tenant,
-      })),
+      memberships: record.memberships
+        .filter((m) => m.tenant.status === 'ACTIVE')
+        .map((m) => ({
+          tenantId: m.tenantId,
+          role: m.role,
+          tenant: m.tenant,
+        })),
     };
   }
 }

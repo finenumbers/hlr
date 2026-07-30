@@ -166,6 +166,26 @@ function hlrFieldsImproved(normalized: NormalizedResult, item: JobItemRecord): b
   if (normalized.operatorName && !item.operatorName) return true;
   if (normalized.countryCode && !item.countryCode) return true;
   if (normalized.roaming != null && item.roaming == null) return true;
+  if (
+    normalized.isReachable != null &&
+    normalized.isReachable !== item.isReachable
+  ) {
+    return true;
+  }
+  if (
+    normalized.resultStatus &&
+    normalized.resultStatus !== 'pending' &&
+    normalized.resultStatus !== item.resultStatus
+  ) {
+    return true;
+  }
+  if (
+    normalized.providerErrorCode != null &&
+    normalized.providerErrorCode !== '' &&
+    normalized.providerErrorCode !== item.errorCode
+  ) {
+    return true;
+  }
   for (const key of ['msc', 'region', 'roamingCountry', 'roamingOperator']) {
     const next = normalized.extras?.[key];
     const prev = existingExtras[key];
@@ -728,7 +748,7 @@ export class JobLifecycleService {
       const rich = statusResult.normalized;
       return {
         ...merged,
-        // Keep terminal outcome from the original update; fill network fields from status.
+        // Network fields + reachability/err: status.php?all=2 wins when defined.
         imsi: preferString(rich.imsi, merged.imsi),
         mcc: preferString(rich.mcc, merged.mcc),
         mnc: preferString(rich.mnc, merged.mnc),
@@ -736,11 +756,23 @@ export class JobLifecycleService {
         countryCode: preferString(rich.countryCode, merged.countryCode),
         roaming: preferBool(rich.roaming, merged.roaming),
         ported: preferBool(rich.ported, merged.ported),
-        isReachable: preferBool(merged.isReachable, rich.isReachable),
+        isReachable: preferBool(rich.isReachable, merged.isReachable),
         resultStatus: preferString(
-          merged.resultStatus,
           rich.resultStatus,
+          merged.resultStatus,
         ) as NormalizedResult['resultStatus'],
+        providerErrorCode: preferString(
+          rich.providerErrorCode,
+          merged.providerErrorCode,
+        ),
+        providerErrorMessage: preferString(
+          rich.providerErrorMessage,
+          merged.providerErrorMessage,
+        ),
+        providerStatusCode: preferString(
+          rich.providerStatusCode,
+          merged.providerStatusCode,
+        ),
         extras: mergeExtras(rich.extras, merged.extras),
         cost: preferString(merged.cost, rich.cost),
       };

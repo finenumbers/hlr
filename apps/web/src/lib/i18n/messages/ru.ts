@@ -92,6 +92,15 @@ export const ru: EnMessages = {
     status: 'Статус',
     suspend: 'Приостановить',
     activate: 'Активировать',
+    delete: 'Удалить',
+    confirmDeleteTitle: 'Удалить клиента',
+    confirmDeleteDesc:
+      'Клиент будет архивирован (статус ARCHIVED). История, задания и баланс сохранятся. Продолжить?',
+    filterStatus: 'Статус',
+    filterActive: 'Активные',
+    filterSuspended: 'Приостановленные',
+    filterArchived: 'Архив',
+    filterAll: 'Все',
     wallet: 'Кошелёк',
     held: 'В холде: {amount}',
     topupAmount: 'Сумма пополнения',
@@ -211,6 +220,7 @@ export const ru: EnMessages = {
     colRoaming: 'Роуминг',
     colRoamingCountry: 'Страна роуминга',
     colRoamingOperator: 'Оператор роуминга',
+    colSmscErr: 'err SMSC',
     colError: 'Ошибка',
   },
   adminBilling: {
@@ -295,12 +305,10 @@ export const ru: EnMessages = {
     title: 'HLR и Silent SMS',
     description:
       'HLR и Silent SMS — отдельные услуги. Без назначенного тарифа запрос недоступен.',
-    hlrTitle: 'HLR',
-    pingTitle: 'Silent SMS',
-    hlrDescription:
-      'Отправка HLR-запроса. Эта страница только для HLR — Silent SMS отдельная услуга.',
-    pingDescription:
-      'Отправка Silent SMS. Эта страница только для Silent SMS — HLR отдельная услуга.',
+    hlrTitle: 'Проверка HLR',
+    pingTitle: 'Проверка Silent SMS',
+    hlrDescription: 'Отправка HLR-запроса по номерам E.164.',
+    pingDescription: 'Отправка Silent SMS по номерам E.164.',
     checkType: 'Услуга',
     optionHlr: 'HLR',
     optionPing: 'Silent SMS',
@@ -357,6 +365,7 @@ export const ru: EnMessages = {
     colRoaming: 'Роуминг',
     colRoamingCountry: 'Страна роуминга',
     colRoamingOperator: 'Оператор роуминга',
+    colSmscErr: 'err SMSC',
   },
   cabinetBilling: {
     title: 'Биллинг',

@@ -4,9 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { MetricCard } from '@/components/data/metric-card';
-import { PageHeader } from '@/components/data/page-header';
 import { QueryState } from '@/components/data/query-state';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
@@ -62,29 +60,13 @@ export default function CabinetDashboardPage() {
 
   return (
     <div>
-      <PageHeader
-        title={t('cabinetDashboard.title')}
-        description={t('cabinetDashboard.description')}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href="/app/submit/hlr">
-              <Button type="button" variant="secondary">
-                {t('cabinetDashboard.openHlr')}
-              </Button>
-            </Link>
-            <Link href="/app/submit/ping">
-              <Button type="button">{t('cabinetDashboard.openPing')}</Button>
-            </Link>
-          </div>
-        }
-      />
       <QueryState
         isLoading={q.isLoading || !tenantId}
         isError={q.isError}
         error={q.error}
         onRetry={() => void q.refetch()}
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <MetricCard
             label={t('cabinetDashboard.available')}
             value={formatMoney(d?.balance?.availableBalance ?? '0', currency)}
@@ -93,7 +75,7 @@ export default function CabinetDashboardPage() {
             })}
             href="/app/billing"
           />
-          <Card>
+          <Card className="h-full">
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
               {t('common.serviceHlr')}
             </p>
@@ -120,7 +102,7 @@ export default function CabinetDashboardPage() {
               {t('cabinetDashboard.viewHlrJobs')}
             </Link>
           </Card>
-          <Card>
+          <Card className="h-full">
             <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
               {t('common.servicePing')}
             </p>

@@ -36,12 +36,12 @@ function AdminTenantsPage() {
   const [ownerPassword, setOwnerPassword] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
-  const status = search.get('status') ?? '';
+  const status = search.get('status') ?? 'ACTIVE';
   const q = useQuery({
     queryKey: ['admin', 'tenants', page, status],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), pageSize: '20' });
-      if (status) params.set('status', status);
+      if (status && status !== 'ALL') params.set('status', status);
       return api.admin.tenants(params.toString());
     },
   });
@@ -92,6 +92,30 @@ function AdminTenantsPage() {
           </Can>
         }
       />
+      <div className="mb-4">
+        <label className="mr-2 text-sm text-[var(--color-ink-muted)]" htmlFor="tenant-status-filter">
+          {t('adminTenants.filterStatus')}
+        </label>
+        <select
+          id="tenant-status-filter"
+          className="h-9 rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-2 text-sm"
+          value={status}
+          onChange={(e) => {
+            const next = e.target.value;
+            setPage(1);
+            const params = new URLSearchParams(search.toString());
+            if (next === 'ACTIVE') params.delete('status');
+            else params.set('status', next);
+            const qs = params.toString();
+            router.replace(qs ? `/admin/tenants?${qs}` : '/admin/tenants');
+          }}
+        >
+          <option value="ACTIVE">{t('adminTenants.filterActive')}</option>
+          <option value="SUSPENDED">{t('adminTenants.filterSuspended')}</option>
+          <option value="ARCHIVED">{t('adminTenants.filterArchived')}</option>
+          <option value="ALL">{t('adminTenants.filterAll')}</option>
+        </select>
+      </div>
       <QueryState
         isLoading={q.isLoading}
         isError={q.isError}

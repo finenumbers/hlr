@@ -444,6 +444,132 @@ describe('JobLifecycleService', () => {
     expect(fresh?.imsi).toBe('250011234567890');
   });
 
+  it('prefers status.php reachability and err over sparse callback on HLR enrich', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { items } = await seedJob(store, ['+79991234567']);
+    const item = items[0]!;
+
+    await store.claimItemForSubmit(item.id);
+    await store.updateItemAfterSubmit({
+      jobItemId: item.id,
+      status: 'PENDING',
+      providerMessageId: 'msg-1',
+      providerCode: 'smsc',
+      sentAt: new Date(),
+    });
+
+    const fetchStatus = vi.fn().mockResolvedValue({
+      providerCode: 'smsc',
+      providerMessageId: 'msg-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'reachable',
+        isReachable: true,
+        providerErrorCode: '0',
+        providerStatusCode: '1',
+        imsi: '250013000895076',
+        mcc: '250',
+        mnc: '01',
+        operatorName: 'MegaFon',
+        extras: { msc: '79261234567' },
+      }),
+      rawRequest: {},
+      rawResponse: {},
+      providerRequestId: 'st-reach',
+    } satisfies FetchStatusResult);
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus,
+    };
+    const lifecycle = new JobLifecycleService({ store, queue, provider });
+
+    await lifecycle.applyProviderUpdate({
+      jobItemId: item.id,
+      tenantId: 'tenant-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'unreachable',
+        isReachable: false,
+        providerErrorCode: '11',
+        providerStatusCode: '1',
+        // Sparse callback — no imsi/msc, claims unreachable
+      }),
+      source: 'callback',
+    });
+
+    const after = await store.findItemById(item.id);
+    expect(after?.isReachable).toBe(true);
+    expect(after?.resultStatus).toBe('reachable');
+    expect(after?.errorCode).toBe('0');
+    expect(after?.imsi).toBe('250013000895076');
+  });
+
+  it('keeps unreachable + SMSC err when status.php enrich confirms err≠0', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { items } = await seedJob(store, ['+79991234567']);
+    const item = items[0]!;
+
+    await store.claimItemForSubmit(item.id);
+    await store.updateItemAfterSubmit({
+      jobItemId: item.id,
+      status: 'PENDING',
+      providerMessageId: 'msg-1',
+      providerCode: 'smsc',
+      sentAt: new Date(),
+    });
+
+    const fetchStatus = vi.fn().mockResolvedValue({
+      providerCode: 'smsc',
+      providerMessageId: 'msg-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'unreachable',
+        isReachable: false,
+        providerErrorCode: '11',
+        providerStatusCode: '1',
+        mcc: '250',
+        mnc: '20',
+        operatorName: 'T2',
+        extras: {},
+      }),
+      rawRequest: {},
+      rawResponse: {},
+      providerRequestId: 'st-unreach',
+    } satisfies FetchStatusResult);
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus,
+    };
+    const lifecycle = new JobLifecycleService({ store, queue, provider });
+
+    await lifecycle.applyProviderUpdate({
+      jobItemId: item.id,
+      tenantId: 'tenant-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'unreachable',
+        isReachable: false,
+        providerErrorCode: '11',
+        mcc: '250',
+        mnc: '20',
+        operatorName: 'T2',
+      }),
+      source: 'callback',
+    });
+
+    const after = await store.findItemById(item.id);
+    expect(after?.isReachable).toBe(false);
+    expect(after?.resultStatus).toBe('unreachable');
+    expect(after?.errorCode).toBe('11');
+    expect(fetchStatus).toHaveBeenCalled();
+  });
+
   it('enriches sparse HLR callback via status.php and does not clear fields with null', async () => {
     const store = new InMemoryJobsStore();
     const queue = new InMemoryJobsQueue();

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 export function MetricCard({
   label,
@@ -8,12 +9,14 @@ export function MetricCard({
   hint,
   href,
   tone,
+  className,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   href?: string;
   tone?: 'default' | 'danger' | 'ok' | 'warn';
+  className?: string;
 }) {
   const toneClass =
     tone === 'danger'
@@ -25,7 +28,13 @@ export function MetricCard({
           : 'text-[var(--color-ink)]';
 
   const body = (
-    <Card className={href ? 'transition hover:border-[var(--color-accent)]' : undefined}>
+    <Card
+      className={cn(
+        'h-full',
+        href ? 'transition hover:border-[var(--color-accent)]' : undefined,
+        className,
+      )}
+    >
       <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
         {label}
       </p>
@@ -34,5 +43,11 @@ export function MetricCard({
     </Card>
   );
 
-  return href ? <Link href={href}>{body}</Link> : body;
+  return href ? (
+    <Link href={href} className="block h-full">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }
