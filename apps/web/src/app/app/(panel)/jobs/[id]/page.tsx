@@ -21,7 +21,7 @@ export default function CabinetJobDetailPage() {
   const t = useT();
   const params = useParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  const shortId = id ? `${id.slice(0, 12)}…` : t('common.dash');
+  const displayId = id || t('common.dash');
   const { tenantId } = useAuth();
   const [page, setPage] = useState(1);
   const job = useQuery({
@@ -97,11 +97,11 @@ export default function CabinetJobDetailPage() {
           job.data
             ? t('cabinetJobs.detailTitle', {
                 service,
-                id: shortId,
+                id: displayId,
               })
             : t('cabinetJobs.detailTitle', {
                 service: t('common.loading'),
-                id: shortId,
+                id: displayId,
               })
         }
         description={t('cabinetJobs.detailDescription')}

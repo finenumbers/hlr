@@ -19,7 +19,7 @@ export default function AdminJobDetailPage() {
   const t = useT();
   const params = useParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  const shortId = id ? `${id.slice(0, 12)}…` : t('common.dash');
+  const displayId = id || t('common.dash');
   const [page, setPage] = useState(1);
   const [healError, setHealError] = useState<string | null>(null);
   const qc = useQueryClient();
@@ -64,7 +64,7 @@ export default function AdminJobDetailPage() {
   return (
     <div>
       <PageHeader
-        title={t('adminJobs.detailTitle', { id: shortId })}
+        title={t('adminJobs.detailTitle', { id: displayId })}
         description={t('adminJobs.detailDescription')}
         actions={
           canHeal ? (

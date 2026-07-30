@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  FINALIZE_ACTIVE_FOLLOWUP_DELAY_MS,
   enqueueFinalizeJobOnQueue,
   finalizeBullJobId,
   type FinalizeQueueLike,
@@ -28,8 +29,8 @@ describe('enqueueFinalizeJobOnQueue', () => {
     });
   });
 
-  it('no-ops when finalize is already active', async () => {
-    const add = vi.fn();
+  it('schedules delayed follow-up when finalize is already active', async () => {
+    const add = vi.fn().mockResolvedValue({});
     const remove = vi.fn();
     const queue: FinalizeQueueLike = {
       getJob: vi.fn().mockResolvedValue({
@@ -42,7 +43,10 @@ describe('enqueueFinalizeJobOnQueue', () => {
     await enqueueFinalizeJobOnQueue(queue, payload);
 
     expect(remove).not.toHaveBeenCalled();
-    expect(add).not.toHaveBeenCalled();
+    expect(add).toHaveBeenCalledOnce();
+    const [, , opts] = add.mock.calls[0]!;
+    expect(opts.delay).toBe(FINALIZE_ACTIVE_FOLLOWUP_DELAY_MS);
+    expect(String(opts.jobId)).toMatch(/^finalize:job-1:d:\d+$/);
   });
 
   it('removes waiting finalize and re-enqueues', async () => {

@@ -106,8 +106,11 @@ function CabinetJobsPage() {
               key: 'id',
               header: t('cabinetJobs.colJob'),
               cell: (row) => (
-                <Link href={`/app/jobs/${row.id}`} className="font-medium hover:underline">
-                  {String(row.id).slice(0, 12)}…
+                <Link
+                  href={`/app/jobs/${row.id}`}
+                  className="break-all font-medium hover:underline"
+                >
+                  {String(row.id)}
                 </Link>
               ),
             },

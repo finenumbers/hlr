@@ -90,6 +90,90 @@ function normalizedToPatch(normalized: NormalizedResult): {
   };
 }
 
+function preferString(
+  incoming: string | null | undefined,
+  existing: string | null | undefined,
+): string | null {
+  if (incoming != null && incoming !== '') return incoming;
+  if (existing != null && existing !== '') return existing;
+  return incoming ?? existing ?? null;
+}
+
+function preferBool(
+  incoming: boolean | null | undefined,
+  existing: boolean | null | undefined,
+): boolean | null {
+  if (incoming != null) return incoming;
+  return existing ?? null;
+}
+
+function extrasFromNormalizedResult(
+  normalizedResult: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!normalizedResult || typeof normalizedResult !== 'object') return {};
+  const extras = normalizedResult.extras;
+  if (!extras || typeof extras !== 'object') return {};
+  return { ...(extras as Record<string, unknown>) };
+}
+
+function mergeExtras(
+  incoming: Record<string, unknown> | undefined,
+  existing: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...(existing ?? {}) };
+  for (const [key, value] of Object.entries(incoming ?? {})) {
+    if (value != null && value !== '') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/** Merge incoming normalized HLR fields with already-stored item values (nulls do not clear). */
+function mergeNormalizedWithItem(
+  normalized: NormalizedResult,
+  item: JobItemRecord,
+): NormalizedResult {
+  const existingExtras = extrasFromNormalizedResult(item.normalizedResult);
+  return {
+    ...normalized,
+    providerMessageId: preferString(normalized.providerMessageId, item.providerMessageId),
+    phoneE164: preferString(normalized.phoneE164, item.phoneE164),
+    imsi: preferString(normalized.imsi, item.imsi),
+    mcc: preferString(normalized.mcc, item.mcc),
+    mnc: preferString(normalized.mnc, item.mnc),
+    operatorName: preferString(normalized.operatorName, item.operatorName),
+    countryCode: preferString(normalized.countryCode, item.countryCode),
+    ported: preferBool(normalized.ported, item.ported),
+    roaming: preferBool(normalized.roaming, item.roaming),
+    isReachable: preferBool(normalized.isReachable, item.isReachable),
+    resultStatus: preferString(normalized.resultStatus, item.resultStatus) as NormalizedResult['resultStatus'],
+    extras: mergeExtras(normalized.extras, existingExtras),
+  };
+}
+
+function needsHlrEnrich(normalized: NormalizedResult, checkType: string): boolean {
+  if (checkType !== 'HLR' && normalized.checkType !== 'HLR') return false;
+  const msc = normalized.extras?.msc;
+  return !normalized.imsi || msc == null || msc === '';
+}
+
+function hlrFieldsImproved(normalized: NormalizedResult, item: JobItemRecord): boolean {
+  const existingExtras = extrasFromNormalizedResult(item.normalizedResult);
+  if (normalized.imsi && !item.imsi) return true;
+  if (normalized.mcc && !item.mcc) return true;
+  if (normalized.mnc && !item.mnc) return true;
+  if (normalized.operatorName && !item.operatorName) return true;
+  if (normalized.countryCode && !item.countryCode) return true;
+  if (normalized.roaming != null && item.roaming == null) return true;
+  for (const key of ['msc', 'region', 'roamingCountry', 'roamingOperator']) {
+    const next = normalized.extras?.[key];
+    const prev = existingExtras[key];
+    if (next != null && next !== '' && (prev == null || prev === '')) return true;
+  }
+  return false;
+}
+
 /**
  * Core lifecycle orchestrator: submit batches, poll/callback updates, finalize, reconcile.
  * Provider calls go only through JobsProviderPort (adapter).
@@ -439,7 +523,8 @@ export class JobLifecycleService {
 
   /**
    * Idempotent status application from callback or poll.
-   * Safe under duplicate delivery.
+   * Safe under duplicate delivery. HLR: enrich sparse terminals via status.php?all=2
+   * and never clear already-stored network fields with nulls.
    */
   async applyProviderUpdate(
     input: ApplyProviderUpdateInput,
@@ -463,6 +548,32 @@ export class JobLifecycleService {
     }
 
     if (isTerminalJobItemStatus(item.status)) {
+      if (item.status === 'COMPLETED' && item.checkType === 'HLR') {
+        const enriched = await this.enrichHlrIfNeeded(item, input.normalized);
+        if (hlrFieldsImproved(enriched, item)) {
+          const patched = await this.deps.store.transitionItem({
+            jobItemId: item.id,
+            fromStatuses: ['COMPLETED'],
+            toStatus: 'COMPLETED',
+            patch: {
+              ...normalizedToPatch(enriched),
+              providerMessageId:
+                enriched.providerMessageId ?? item.providerMessageId,
+              completedAt: item.completedAt,
+            },
+          });
+          this.logger.info('jobs.update.hlr_enriched', {
+            jobItemId: item.id,
+            source: input.source,
+          });
+          return {
+            applied: Boolean(patched),
+            duplicate: false,
+            jobItem: patched ?? item,
+            becameTerminal: false,
+          };
+        }
+      }
       this.logger.info('jobs.update.duplicate_terminal', {
         jobItemId: item.id,
         status: item.status,
@@ -476,8 +587,10 @@ export class JobLifecycleService {
       };
     }
 
+    let normalized = mergeNormalizedWithItem(input.normalized, item);
+
     const next = mapProviderLifecycleToItemStatus(
-      input.normalized.lifecycleStatus,
+      normalized.lifecycleStatus,
       item.status,
     );
     if (!next) {
@@ -489,16 +602,18 @@ export class JobLifecycleService {
       };
     }
 
+    if (next === 'COMPLETED' || next === 'FAILED') {
+      normalized = await this.enrichHlrIfNeeded(item, normalized);
+    }
+
     if (next === 'PENDING' && item.status === 'PENDING') {
-      // Soft update of normalized fields without status change.
       const patched = await this.deps.store.transitionItem({
         jobItemId: item.id,
         fromStatuses: ['PENDING', 'SENT'],
         toStatus: 'PENDING',
         patch: {
-          ...normalizedToPatch(input.normalized),
-          providerMessageId:
-            input.normalized.providerMessageId ?? item.providerMessageId,
+          ...normalizedToPatch(normalized),
+          providerMessageId: normalized.providerMessageId ?? item.providerMessageId,
         },
       });
       return {
@@ -515,9 +630,8 @@ export class JobLifecycleService {
         fromStatuses: ['SENT', 'RESERVED'],
         toStatus: 'PENDING',
         patch: {
-          ...normalizedToPatch(input.normalized),
-          providerMessageId:
-            input.normalized.providerMessageId ?? item.providerMessageId,
+          ...normalizedToPatch(normalized),
+          providerMessageId: normalized.providerMessageId ?? item.providerMessageId,
           sentAt: item.sentAt ?? this.now(),
         },
       });
@@ -543,9 +657,8 @@ export class JobLifecycleService {
       fromStatuses: ['QUEUED', 'RESERVED', 'SENT', 'PENDING'],
       toStatus: next,
       patch: {
-        ...normalizedToPatch(input.normalized),
-        providerMessageId:
-          input.normalized.providerMessageId ?? item.providerMessageId,
+        ...normalizedToPatch(normalized),
+        providerMessageId: normalized.providerMessageId ?? item.providerMessageId,
         completedAt: this.now(),
       },
     });
@@ -586,8 +699,63 @@ export class JobLifecycleService {
     };
   }
 
+  /**
+   * When SMSC callback/poll is terminal but missing IMSI/MSC, fetch status.php?all=2
+   * and merge only real non-empty HLR fields (never invent values).
+   */
+  private async enrichHlrIfNeeded(
+    item: JobItemRecord,
+    normalized: NormalizedResult,
+  ): Promise<NormalizedResult> {
+    const merged = mergeNormalizedWithItem(normalized, item);
+    if (!needsHlrEnrich(merged, item.checkType)) {
+      return merged;
+    }
+    const providerMessageId = merged.providerMessageId ?? item.providerMessageId;
+    if (!providerMessageId) {
+      return merged;
+    }
+
+    try {
+      const statusResult = await this.deps.provider.fetchStatus({
+        checkType: 'HLR',
+        phoneE164: item.phoneE164,
+        providerMessageId,
+        tenantId: item.tenantId,
+        jobItemId: item.id,
+        includeDetails: true,
+      });
+      const rich = statusResult.normalized;
+      return {
+        ...merged,
+        // Keep terminal outcome from the original update; fill network fields from status.
+        imsi: preferString(rich.imsi, merged.imsi),
+        mcc: preferString(rich.mcc, merged.mcc),
+        mnc: preferString(rich.mnc, merged.mnc),
+        operatorName: preferString(rich.operatorName, merged.operatorName),
+        countryCode: preferString(rich.countryCode, merged.countryCode),
+        roaming: preferBool(rich.roaming, merged.roaming),
+        ported: preferBool(rich.ported, merged.ported),
+        isReachable: preferBool(merged.isReachable, rich.isReachable),
+        resultStatus: preferString(
+          merged.resultStatus,
+          rich.resultStatus,
+        ) as NormalizedResult['resultStatus'],
+        extras: mergeExtras(rich.extras, merged.extras),
+        cost: preferString(merged.cost, rich.cost),
+      };
+    } catch (err) {
+      this.logger.warn('jobs.hlr.enrich_failed', {
+        jobItemId: item.id,
+        providerMessageId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return merged;
+    }
+  }
+
   async processFinalizeJob(payload: FinalizeJobPayload): Promise<JobRecord | null> {
-    const job = await this.deps.store.refreshJobCounters(payload.jobId);
+    let job = await this.deps.store.refreshJobCounters(payload.jobId);
     if (job.tenantId !== payload.tenantId) {
       throw new JobsNotFoundError(`Job ${payload.jobId} not found for tenant`);
     }
@@ -597,14 +765,19 @@ export class JobLifecycleService {
       return job;
     }
 
-    const progress = computeProgress(job);
+    let progress = computeProgress(job);
     if (progress.pending > 0) {
-      this.logger.debug('jobs.finalize.waiting', {
-        jobId: job.id,
-        ...progress,
-        reason: payload.reason,
-      });
-      return job;
+      // Last item may have completed while this finalize was already running.
+      job = await this.deps.store.refreshJobCounters(payload.jobId);
+      progress = computeProgress(job);
+      if (progress.pending > 0) {
+        this.logger.debug('jobs.finalize.waiting', {
+          jobId: job.id,
+          ...progress,
+          reason: payload.reason,
+        });
+        return job;
+      }
     }
 
     const terminal = deriveJobTerminalStatus({
@@ -685,20 +858,36 @@ export class JobLifecycleService {
     }
 
     const needing = await this.deps.store.listJobsNeedingFinalize({ limit });
+    let finalizedCount = 0;
     for (const job of needing) {
-      await this.deps.queue.enqueueFinalizeJob({
+      // Finalize inline (do not rely solely on Bull dedupe — closes active-skip race).
+      const result = await this.processFinalizeJob({
         jobId: job.id,
         tenantId: job.tenantId,
         reason: 'reconciliation',
       });
+      if (result && isTerminalJobStatus(result.status)) {
+        finalizedCount += 1;
+        continue;
+      }
+      try {
+        await this.deps.queue.enqueueFinalizeJob({
+          jobId: job.id,
+          tenantId: job.tenantId,
+          reason: 'reconciliation',
+        });
+      } catch {
+        // Best-effort; inline attempt already ran.
+      }
     }
 
     this.logger.info('jobs.reconcile.tick', {
       polled: stale.length,
-      finalized: needing.length,
+      finalized: finalizedCount,
+      needing: needing.length,
     });
 
-    return { polled: stale.length, finalized: needing.length };
+    return { polled: stale.length, finalized: finalizedCount };
   }
 
   /**

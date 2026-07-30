@@ -390,7 +390,20 @@ describe('JobLifecycleService', () => {
     const provider: JobsProviderPort = {
       submitHlr: vi.fn(),
       submitPing: vi.fn(),
-      fetchStatus: vi.fn(),
+      fetchStatus: vi.fn().mockResolvedValue({
+        providerCode: 'smsc',
+        providerMessageId: 'msg-1',
+        normalized: baseNormalized({
+          lifecycleStatus: 'completed',
+          resultStatus: 'reachable',
+          isReachable: true,
+          imsi: '250011234567890',
+          extras: { msc: '79001234567' },
+        }),
+        rawRequest: {},
+        rawResponse: {},
+        providerRequestId: 'st-enrich',
+      } satisfies FetchStatusResult),
     };
     const lifecycle = new JobLifecycleService({ store, queue, provider });
 
@@ -406,6 +419,10 @@ describe('JobLifecycleService', () => {
     });
     expect(first.applied).toBe(true);
     expect(first.becameTerminal).toBe(true);
+    expect(first.jobItem?.imsi).toBe('250011234567890');
+    expect((first.jobItem?.normalizedResult as { extras?: { msc?: string } })?.extras?.msc).toBe(
+      '79001234567',
+    );
 
     const second = await lifecycle.applyProviderUpdate({
       jobItemId: item.id,
@@ -414,6 +431,8 @@ describe('JobLifecycleService', () => {
         lifecycleStatus: 'completed',
         resultStatus: 'reachable',
         isReachable: true,
+        imsi: '250011234567890',
+        extras: { msc: '79001234567' },
       }),
       source: 'poll',
     });
@@ -421,6 +440,129 @@ describe('JobLifecycleService', () => {
     expect(second.applied).toBe(false);
 
     const fresh = await store.findItemById(item.id);
+    expect(fresh?.status).toBe('COMPLETED');
+    expect(fresh?.imsi).toBe('250011234567890');
+  });
+
+  it('enriches sparse HLR callback via status.php and does not clear fields with null', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { items } = await seedJob(store, ['+79991234567']);
+    const item = items[0]!;
+
+    await store.claimItemForSubmit(item.id);
+    await store.updateItemAfterSubmit({
+      jobItemId: item.id,
+      status: 'PENDING',
+      providerMessageId: 'msg-1',
+      providerCode: 'smsc',
+      sentAt: new Date(),
+    });
+
+    const fetchStatus = vi.fn().mockResolvedValue({
+      providerCode: 'smsc',
+      providerMessageId: 'msg-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'reachable',
+        isReachable: true,
+        imsi: '250013000895076',
+        mcc: '250',
+        mnc: '01',
+        operatorName: 'Mobile TeleSystems (MTS)',
+        countryCode: 'Russia',
+        roaming: false,
+        extras: { msc: '79139400000', region: 'Novosibirsk' },
+      }),
+      rawRequest: {},
+      rawResponse: {},
+      providerRequestId: 'st-1',
+    } satisfies FetchStatusResult);
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus,
+    };
+    const lifecycle = new JobLifecycleService({ store, queue, provider });
+
+    await lifecycle.applyProviderUpdate({
+      jobItemId: item.id,
+      tenantId: 'tenant-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'reachable',
+        isReachable: true,
+        // Sparse callback — no imsi/msc
+      }),
+      source: 'callback',
+    });
+
+    expect(fetchStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMessageId: 'msg-1',
+        includeDetails: true,
+      }),
+    );
+
+    const after = await store.findItemById(item.id);
+    expect(after?.imsi).toBe('250013000895076');
+    expect(after?.operatorName).toBe('Mobile TeleSystems (MTS)');
+    expect((after?.normalizedResult as { extras?: { msc?: string } })?.extras?.msc).toBe(
+      '79139400000',
+    );
+
+    // Sparse poll must not clear enriched fields.
+    await lifecycle.applyProviderUpdate({
+      jobItemId: item.id,
+      tenantId: 'tenant-1',
+      normalized: baseNormalized({
+        lifecycleStatus: 'completed',
+        resultStatus: 'reachable',
+        isReachable: true,
+        imsi: null,
+        extras: {},
+      }),
+      source: 'poll',
+    });
+    const kept = await store.findItemById(item.id);
+    expect(kept?.imsi).toBe('250013000895076');
+    expect((kept?.normalizedResult as { extras?: { msc?: string } })?.extras?.msc).toBe(
+      '79139400000',
+    );
+  });
+
+  it('finalizes stuck PROCESSING job during reconciliation inline', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await seedJob(store, ['+79991111111', '+79992222222']);
+
+    for (const item of items) {
+      await store.claimItemForSubmit(item.id);
+      await store.transitionItem({
+        jobItemId: item.id,
+        fromStatuses: ['RESERVED'],
+        toStatus: 'COMPLETED',
+        patch: {
+          resultStatus: 'reachable',
+          isReachable: true,
+          completedAt: new Date(),
+        },
+      });
+    }
+    await store.markJobProcessing(job.id);
+    await store.refreshJobCounters(job.id);
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+    const lifecycle = new JobLifecycleService({ store, queue, provider });
+    const result = await lifecycle.processReconciliation({ limit: 50 });
+
+    expect(result.finalized).toBeGreaterThanOrEqual(1);
+    const fresh = await store.findJobById(job.id);
     expect(fresh?.status).toBe('COMPLETED');
   });
 

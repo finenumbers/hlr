@@ -136,8 +136,11 @@ function ProblemList({ rows }: { rows: Array<Record<string, unknown>> }) {
         return (
           <li key={String(row.id)} className="flex items-center justify-between gap-3 text-sm">
             <div className="min-w-0">
-              <Link href={`/admin/jobs/${row.id}`} className="font-medium hover:underline">
-                {String(row.id).slice(0, 10)}…
+              <Link
+                href={`/admin/jobs/${row.id}`}
+                className="break-all font-medium hover:underline"
+              >
+                {String(row.id)}
               </Link>
               <p className="truncate text-xs text-[var(--color-ink-muted)]">
                 {tenant?.slug ?? String(row.tenantId)} · {String(row.checkType)} ·{' '}

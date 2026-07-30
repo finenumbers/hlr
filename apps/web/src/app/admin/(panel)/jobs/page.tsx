@@ -80,8 +80,11 @@ function AdminJobsPage() {
               key: 'id',
               header: t('adminJobs.colJob'),
               cell: (row) => (
-                <Link href={`/admin/jobs/${row.id}`} className="font-medium hover:underline">
-                  {String(row.id).slice(0, 12)}…
+                <Link
+                  href={`/admin/jobs/${row.id}`}
+                  className="break-all font-medium hover:underline"
+                >
+                  {String(row.id)}
                 </Link>
               ),
             },
