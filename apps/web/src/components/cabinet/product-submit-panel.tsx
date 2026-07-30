@@ -136,7 +136,7 @@ export function ProductSubmitPanel({
             </div>
           </div>
 
-          <p className="text-center text-xs uppercase tracking-wide text-[var(--color-ink-muted)]">
+          <p className="text-center text-xs font-bold text-[var(--color-ink-muted)]">
             {t('cabinetSubmit.orPaste')}
           </p>
 

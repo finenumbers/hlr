@@ -39,7 +39,7 @@ export default function CabinetBillingPage() {
       <QueryState isLoading={balance.isLoading} isError={balance.isError} error={balance.error}>
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('cabinetBilling.available')}</p>
+            <p className="text-xs font-bold text-[var(--color-ink-muted)]">{t('cabinetBilling.available')}</p>
             <p className="mt-2 text-3xl font-semibold">
               {formatMoney(String(balance.data?.availableBalance ?? '0'), String(balance.data?.currency ?? 'RUB'))}
             </p>
@@ -53,7 +53,7 @@ export default function CabinetBillingPage() {
             </p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('cabinetBilling.tariff')}</p>
+            <p className="text-xs font-bold text-[var(--color-ink-muted)]">{t('cabinetBilling.tariff')}</p>
             <div className="mt-2 space-y-2 text-sm">
               <div>
                 <p className="font-medium">{t('cabinetBilling.hlrTitle')}</p>

@@ -35,9 +35,7 @@ export function MetricCard({
         className,
       )}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
-        {label}
-      </p>
+      <p className="text-xs font-bold text-[var(--color-ink-muted)]">{label}</p>
       <p className={`mt-2 text-3xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
       {hint ? <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{hint}</p> : null}
     </Card>

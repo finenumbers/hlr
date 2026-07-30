@@ -10,7 +10,7 @@ import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
-import { formatDate, formatMoney } from '@/lib/utils';
+import { cn, formatDate, formatMoney } from '@/lib/utils';
 
 type ProductQuote = {
   sellPrice?: string;
@@ -23,6 +23,13 @@ type UsageSlice = {
   successCount?: number;
   failureCount?: number;
 };
+
+function productCardClass(assigned: boolean): string {
+  return cn(
+    'h-full !text-black border-transparent',
+    assigned ? 'bg-[var(--color-accent-bright)]' : 'bg-[#f97066]',
+  );
+}
 
 export default function CabinetDashboardPage() {
   const t = useT();
@@ -45,16 +52,15 @@ export default function CabinetDashboardPage() {
   const currency = d?.balance?.currency ?? 'RUB';
   const productStatus = (quote: ProductQuote | undefined, unavailableKey: string) => {
     if (!quote) {
-      return { text: t(unavailableKey), tone: 'warn' as const };
+      return t(unavailableKey);
     }
-    return {
-      text: t('cabinetDashboard.productAvailable', {
-        price: formatMoney(quote.sellPrice ?? '0', quote.currency ?? currency),
-        code: quote.code ?? '',
-      }),
-      tone: 'ok' as const,
-    };
+    return t('cabinetDashboard.productAvailable', {
+      price: formatMoney(quote.sellPrice ?? '0', quote.currency ?? currency),
+      code: quote.code ?? '',
+    });
   };
+  const hlrAssigned = Boolean(d?.products?.hlr);
+  const pingAssigned = Boolean(d?.products?.ping);
   const hlrStatus = productStatus(d?.products?.hlr, 'cabinetDashboard.hlrUnavailable');
   const pingStatus = productStatus(d?.products?.ping, 'cabinetDashboard.pingUnavailable');
 
@@ -75,20 +81,10 @@ export default function CabinetDashboardPage() {
             })}
             href="/app/billing"
           />
-          <Card className="h-full">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
-              {t('common.serviceHlr')}
-            </p>
-            <p
-              className={`mt-2 text-sm font-medium ${
-                hlrStatus.tone === 'ok'
-                  ? 'text-[var(--color-accent)]'
-                  : 'text-[var(--color-warn)]'
-              }`}
-            >
-              {hlrStatus.text}
-            </p>
-            <p className="mt-3 text-xs text-[var(--color-ink-muted)]">
+          <Card className={productCardClass(hlrAssigned)}>
+            <p className="text-xs font-bold !text-black">{t('cabinetSubmit.hlrTitle')}</p>
+            <p className="mt-2 text-sm font-medium !text-black">{hlrStatus}</p>
+            <p className="mt-3 text-xs !text-black">
               {t('cabinetDashboard.usageHint', {
                 jobs: d?.usage?.hlr?.jobs ?? 0,
                 success: d?.usage?.hlr?.successCount ?? 0,
@@ -97,25 +93,15 @@ export default function CabinetDashboardPage() {
             </p>
             <Link
               href="/app/jobs?checkType=HLR"
-              className="mt-2 inline-block text-xs text-[var(--color-accent)]"
+              className="mt-2 inline-block text-xs font-medium !text-black underline-offset-2 hover:underline"
             >
               {t('cabinetDashboard.viewHlrJobs')}
             </Link>
           </Card>
-          <Card className="h-full">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-muted)]">
-              {t('common.servicePing')}
-            </p>
-            <p
-              className={`mt-2 text-sm font-medium ${
-                pingStatus.tone === 'ok'
-                  ? 'text-[var(--color-accent)]'
-                  : 'text-[var(--color-warn)]'
-              }`}
-            >
-              {pingStatus.text}
-            </p>
-            <p className="mt-3 text-xs text-[var(--color-ink-muted)]">
+          <Card className={productCardClass(pingAssigned)}>
+            <p className="text-xs font-bold !text-black">{t('cabinetSubmit.pingTitle')}</p>
+            <p className="mt-2 text-sm font-medium !text-black">{pingStatus}</p>
+            <p className="mt-3 text-xs !text-black">
               {t('cabinetDashboard.usageHint', {
                 jobs: d?.usage?.ping?.jobs ?? 0,
                 success: d?.usage?.ping?.successCount ?? 0,
@@ -124,7 +110,7 @@ export default function CabinetDashboardPage() {
             </p>
             <Link
               href="/app/jobs?checkType=PING"
-              className="mt-2 inline-block text-xs text-[var(--color-accent)]"
+              className="mt-2 inline-block text-xs font-medium !text-black underline-offset-2 hover:underline"
             >
               {t('cabinetDashboard.viewPingJobs')}
             </Link>

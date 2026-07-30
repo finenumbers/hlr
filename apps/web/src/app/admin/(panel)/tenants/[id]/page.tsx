@@ -414,19 +414,19 @@ export default function AdminTenantDetailPage() {
 
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('adminTenants.apiKeys')}</p>
+            <p className="text-xs font-bold text-[var(--color-ink-muted)]">{t('adminTenants.apiKeys')}</p>
             <p className="mt-1 text-2xl font-semibold">
               {String((tenant?.counts as { apiKeys?: number } | undefined)?.apiKeys ?? 0)}
             </p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('adminTenants.webhooks')}</p>
+            <p className="text-xs font-bold text-[var(--color-ink-muted)]">{t('adminTenants.webhooks')}</p>
             <p className="mt-1 text-2xl font-semibold">
               {String((tenant?.counts as { webhookEndpoints?: number } | undefined)?.webhookEndpoints ?? 0)}
             </p>
           </Card>
           <Card>
-            <p className="text-xs uppercase text-[var(--color-ink-muted)]">{t('adminTenants.jobs')}</p>
+            <p className="text-xs font-bold text-[var(--color-ink-muted)]">{t('adminTenants.jobs')}</p>
             <p className="mt-1 text-2xl font-semibold">
               {String((tenant?.counts as { jobs?: number } | undefined)?.jobs ?? 0)}
             </p>

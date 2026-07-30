@@ -62,7 +62,7 @@ export function AppShell({
           <BrandLogo variant="dark" priority className="h-[2.1rem] w-auto" />
         </div>
         <div className="px-3 pb-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] !text-white">
+          <p className="text-[11px] font-bold !text-white">
             {area === 'admin' ? t('nav.adminArea') : t('nav.cabinetArea')}
           </p>
         </div>
@@ -124,7 +124,7 @@ export function AppShell({
             ) : null}
             <LocaleSwitcher />
             {area === 'cabinet' ? (
-              <div className="flex h-9 items-center rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-3 text-sm font-semibold tabular-nums">
+              <div className="flex h-9 items-center rounded-md border border-transparent bg-[var(--color-accent-bright)] px-3 text-sm font-semibold tabular-nums !text-black">
                 {balance.isLoading
                   ? t('common.dash')
                   : formatMoney(
