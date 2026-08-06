@@ -56,13 +56,15 @@ No Kubernetes required. Data plane stays on internal `hlr_net`; `api` / `web` al
 | `API_KEY_PEPPER` | Секрет для API-ключей клиентов (**не** логин на сайт) |
 | `PUBLIC_API_URL` | Публичный HTTPS API (браузер ходит сюда при логине) |
 | `PUBLIC_WEB_URL` | Публичный HTTPS кабинета |
-| `SEED_SUPERADMIN_EMAIL` / `SEED_SUPERADMIN_PASSWORD` | **Вход в админку** `/admin/login` |
+| `SEED_SUPERADMIN_EMAIL` / `SEED_SUPERADMIN_PASSWORD` | **Вход в админку** `/admin/login` (пароль ≥16, не `ChangeMeNow!`) |
 | `SMSC_LOGIN` + `SMSC_PASSWORD` | Доступ к SMSC.ru (или `SMSC_API_KEY`) |
 | `SMSC_CALLBACK_SECRET` | Секрет подписи callback от SMSC |
 
-По умолчанию админ: `admin@finenumbers.local` / `ChangeMeNow!`. Клиентов seed не создаёт — только пустые platform settings + superadmin. Сервис `migrate` при старте стека применяет миграции и seed (создаёт/обновляет пользователя из `SEED_SUPERADMIN_*`).
+Клиентов seed не создаёт — только platform settings + superadmin.  
+`SEED_SUPERADMIN_PASSWORD` **обязателен** (Compose требует переменную): длина ≥16, нельзя `ChangeMeNow!`.  
+Seed **не перезаписывает** пароль при каждом migrate. Чтобы сбросить: один раз `SEED_RESET_PASSWORD=true` + Redeploy, затем вернуть `false`.
 
-После смены `SEED_SUPERADMIN_*` в Portainer обязательно **Update/Redeploy** стека и проверьте логи контейнера `migrate` (`superadmin email: …`). Если migrate не пересоздался — удалите его вручную и снова Redeploy.
+После смены `SEED_SUPERADMIN_*` в Portainer — **Update/Redeploy** и проверьте логи `migrate`.
 
 Секреты не коммитьте — только в Environment variables стека Portainer.
 
@@ -202,6 +204,7 @@ Non-production: `/docs` + `/openapi.json` available for local/staging; set `OPEN
 - Helmet: `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS (prod), API CSP `default-src 'none'`
 - CORS: allow-list from `CORS_ORIGINS` / `PUBLIC_WEB_URL` only; credentials on; rate-limit headers exposed
 - Set `CORS_ORIGINS=https://app.example.com` in production (do not leave localhost)
+- **NPM:** add a Custom Location (or deny rule) for ` /metrics` → 404/403. Prometheus scrapes `api:3001/metrics` on the Docker network only — do not expose metrics on the public API host.
 
 ### Web hardening
 

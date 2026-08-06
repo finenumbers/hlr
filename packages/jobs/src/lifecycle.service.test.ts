@@ -692,10 +692,17 @@ describe('JobLifecycleService', () => {
     expect(fresh?.status).toBe('COMPLETED');
   });
 
-  it('marks dead-letter items failed and enqueues finalize', async () => {
+  it('dead-letter fails only RESERVED and re-enqueues remaining QUEUED', async () => {
     const store = new InMemoryJobsStore();
     const queue = new InMemoryJobsQueue();
-    const { job, items } = await seedJob(store, ['+79991234567']);
+    const { job, items } = await seedJob(store, [
+      '+79991234567',
+      '+79997654321',
+      '+79991112233',
+    ]);
+
+    // Simulate: first claimed (RESERVED), others still QUEUED.
+    await store.claimItemForSubmit(items[0]!.id);
 
     const provider: JobsProviderPort = {
       submitHlr: vi.fn(),
@@ -707,14 +714,24 @@ describe('JobLifecycleService', () => {
       {
         jobId: job.id,
         tenantId: job.tenantId,
-        itemIds: [items[0]!.id],
+        itemIds: items.map((i) => i.id),
       },
       'attempts exhausted',
     );
 
-    const item = await store.findItemById(items[0]!.id);
-    expect(item?.status).toBe('FAILED');
-    expect(item?.errorCode).toBe('QUEUE_DEAD_LETTER');
+    const reserved = await store.findItemById(items[0]!.id);
+    expect(reserved?.status).toBe('FAILED');
+    expect(reserved?.errorCode).toBe('QUEUE_DEAD_LETTER');
+
+    const stillQueued = await store.findItemById(items[1]!.id);
+    expect(stillQueued?.status).toBe('QUEUED');
+
+    expect(queue.of('submit').length).toBeGreaterThan(0);
+    const submitMsg = queue.of('submit')[0];
+    expect(submitMsg?.payload).toMatchObject({
+      jobId: job.id,
+      enqueueNonce: expect.stringMatching(/^dlq-/),
+    });
     expect(queue.of('finalize')).toHaveLength(1);
   });
 });

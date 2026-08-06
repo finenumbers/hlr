@@ -25,7 +25,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function AdminLoginPage() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const router = useRouter();
   const t = useT();
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +39,7 @@ export default function AdminLoginPage() {
     try {
       const user = await login(values.email, values.password);
       if (!can(user, 'admin.access')) {
+        await logout();
         setError(t('auth.notOperator'));
         return;
       }

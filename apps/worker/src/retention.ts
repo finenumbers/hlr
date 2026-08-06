@@ -7,13 +7,13 @@ import { workerLogger } from './logger';
 
 const RETAINED_PLACEHOLDER = { retained: false } as const;
 
-/** Default orphan CSV upload TTL (hours). Immediate unlink happens after parse. */
+/** Default orphan CSV upload TTL (hours). Parsed files are unlinked after attach. */
 const DEFAULT_UPLOAD_RETENTION_HOURS = 24;
 
 /**
  * Delete/redact provider & webhook payloads older than PlatformSettings.retentionDays.
  * Keeps Job/JobItem/billing history intact.
- * Also sweeps orphan files under UPLOAD_DIR (crash leftovers / .tmp).
+ * Also sweeps orphan files under UPLOAD_DIR (tenant dirs + .tmp).
  */
 export async function runRetentionSweep(
   prisma: PrismaClient,
@@ -51,11 +51,13 @@ export async function runRetentionSweep(
       }),
     ]);
 
+  const protectedPaths = await loadProtectedUploadPaths(prisma);
   const uploadFilesDeleted = await sweepUploadDir({
     uploadDir: options.uploadDir ?? process.env.UPLOAD_DIR ?? './data/uploads',
     retentionHours:
       options.uploadRetentionHours ??
       Number(process.env.UPLOAD_RETENTION_HOURS ?? DEFAULT_UPLOAD_RETENTION_HOURS),
+    protectedPaths,
   });
 
   const result = {
@@ -75,42 +77,77 @@ export async function runRetentionSweep(
   return result;
 }
 
+async function loadProtectedUploadPaths(prisma: PrismaClient): Promise<Set<string>> {
+  const rows = await prisma.job.findMany({
+    where: {
+      status: { in: ['QUEUED', 'PROCESSING'] },
+      itemCount: 0,
+    },
+    select: { metadata: true },
+    take: 5_000,
+  });
+  const paths = new Set<string>();
+  for (const row of rows) {
+    const meta = row.metadata;
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) continue;
+    const record = meta as Record<string, unknown>;
+    if (record.csvPending !== true) continue;
+    if (typeof record.csvFilePath === 'string' && record.csvFilePath.length > 0) {
+      paths.add(record.csvFilePath);
+    }
+  }
+  return paths;
+}
+
 async function sweepUploadDir(input: {
   uploadDir: string;
   retentionHours: number;
+  protectedPaths: Set<string>;
 }): Promise<number> {
   const hours = Number.isFinite(input.retentionHours)
     ? Math.max(1, input.retentionHours)
     : DEFAULT_UPLOAD_RETENTION_HOURS;
   const cutoffMs = Date.now() - hours * 60 * 60 * 1000;
   let deleted = 0;
-  let entries: string[];
-  try {
-    entries = await readdir(input.uploadDir);
-  } catch (error) {
-    const code =
-      typeof error === 'object' && error !== null && 'code' in error
-        ? String((error as { code: unknown }).code)
-        : '';
-    if (code === 'ENOENT') return 0;
-    workerLogger.warn('jobs.retention.upload_dir_unreadable', {
-      uploadDir: input.uploadDir,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return 0;
-  }
 
-  for (const name of entries) {
-    const path = join(input.uploadDir, name);
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > 3) return;
+    let entries: string[];
     try {
-      const info = await stat(path);
-      if (!info.isFile()) continue;
-      if (info.mtimeMs >= cutoffMs) continue;
-      await unlink(path);
-      deleted += 1;
-    } catch {
-      // Best-effort orphan cleanup.
+      entries = await readdir(dir);
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code: unknown }).code)
+          : '';
+      if (code === 'ENOENT') return;
+      workerLogger.warn('jobs.retention.upload_dir_unreadable', {
+        uploadDir: dir,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    for (const name of entries) {
+      if (name === '.' || name === '..') continue;
+      const path = join(dir, name);
+      try {
+        const info = await stat(path);
+        if (info.isDirectory()) {
+          await walk(path, depth + 1);
+          continue;
+        }
+        if (!info.isFile()) continue;
+        if (info.mtimeMs >= cutoffMs) continue;
+        if (input.protectedPaths.has(path)) continue;
+        await unlink(path);
+        deleted += 1;
+      } catch {
+        // Best-effort orphan cleanup.
+      }
     }
   }
+
+  await walk(input.uploadDir, 0);
   return deleted;
 }

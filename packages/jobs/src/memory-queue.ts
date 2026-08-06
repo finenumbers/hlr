@@ -1,4 +1,4 @@
-import type { JobsQueuePublisher } from './ports.js';
+import type { EnqueueCsvParseOptions, JobsQueuePublisher } from './ports.js';
 import type {
   CsvParsePayload,
   FinalizeJobPayload,
@@ -34,7 +34,10 @@ export class InMemoryJobsQueue implements JobsQueuePublisher {
     this.messages.push({ queue: 'reconciliation', payload });
   }
 
-  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
+  async enqueueCsvParse(
+    payload: CsvParsePayload,
+    _options?: EnqueueCsvParseOptions,
+  ): Promise<void> {
     this.messages.push({ queue: 'csv-parse', payload });
   }
 

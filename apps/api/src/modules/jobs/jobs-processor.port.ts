@@ -1,5 +1,6 @@
 import type {
   CsvParsePayload,
+  EnqueueCsvParseOptions,
   FinalizeJobPayload,
   JobsQueuePublisher,
   PollItemPayload,
@@ -20,7 +21,10 @@ export abstract class JobsProcessorPort implements JobsQueuePublisher {
 
   abstract enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;
 
-  abstract enqueueCsvParse(payload: CsvParsePayload): Promise<void>;
+  abstract enqueueCsvParse(
+    payload: CsvParsePayload,
+    options?: EnqueueCsvParseOptions,
+  ): Promise<void>;
 }
 
 export const JOBS_PROCESSOR = Symbol('JOBS_PROCESSOR');

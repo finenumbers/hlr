@@ -220,7 +220,7 @@ export const api = {
       body: { email, password },
       auth: false,
     }),
-  logout: () => apiRequest<{ ok: true }>('/auth/logout', { method: 'POST', auth: false }),
+  logout: () => apiRequest<{ ok: true }>('/auth/logout', { method: 'POST' }),
   me: () => apiRequest<AuthUser>('/auth/me'),
 
   admin: {

@@ -57,6 +57,7 @@ export {
 export type {
   JobsStore,
   JobsQueuePublisher,
+  EnqueueCsvParseOptions,
   JobsBillingHooks,
   JobsWebhookHooks,
   JobsProviderPort,

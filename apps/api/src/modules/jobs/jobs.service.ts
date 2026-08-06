@@ -389,6 +389,26 @@ export class JobsService {
         input.idempotencyKey,
       );
       if (existing) {
+        // Heal: empty CSV shell still pending parse — re-enqueue if file remains.
+        if (
+          existing.itemCount === 0 &&
+          existing.metadata?.csvPending === true &&
+          typeof existing.metadata.csvFilePath === 'string'
+        ) {
+          try {
+            await this.processor.enqueueCsvParse(
+              {
+                jobId: existing.id,
+                tenantId: existing.tenantId,
+                filePath: existing.metadata.csvFilePath,
+                ...(input.requestId ? { requestId: input.requestId } : {}),
+              },
+              { replaceExisting: true },
+            );
+          } catch {
+            // Best-effort; client still gets the existing shell.
+          }
+        }
         return { job: existing, progress: computeProgress(existing) };
       }
     }

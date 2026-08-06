@@ -10,6 +10,11 @@ const SUPERADMIN_EMAIL = (
   .trim()
   .toLowerCase();
 const SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMeNow!';
+const WEAK_DEFAULT_PASSWORD = 'ChangeMeNow!';
+const RESET_PASSWORD = process.env.SEED_RESET_PASSWORD === 'true';
+const IS_PRODUCTION =
+  process.env.NODE_ENV === 'production' ||
+  process.env.SEED_REQUIRE_STRONG_PASSWORD === 'true';
 
 /** Legacy bootstrap demo org/user — remove if still present from older seeds. */
 async function removeLegacyDemo(): Promise<void> {
@@ -50,13 +55,26 @@ async function demoteLegacyDefaultAdmin(): Promise<void> {
   console.log(`  demoted legacy superadmin ${legacyEmail}`);
 }
 
+function assertPasswordPolicy(): void {
+  if (!SUPERADMIN_PASSWORD || SUPERADMIN_PASSWORD.length < 8) {
+    throw new Error('SEED_SUPERADMIN_PASSWORD must be at least 8 characters');
+  }
+  if (
+    IS_PRODUCTION &&
+    (SUPERADMIN_PASSWORD === WEAK_DEFAULT_PASSWORD || SUPERADMIN_PASSWORD.length < 16)
+  ) {
+    throw new Error(
+      'SEED_SUPERADMIN_PASSWORD must be a strong secret in production ' +
+        '(≠ ChangeMeNow!, length ≥ 16). Set it in Portainer/env before migrate.',
+    );
+  }
+}
+
 async function main(): Promise<void> {
   if (!SUPERADMIN_EMAIL || !SUPERADMIN_EMAIL.includes('@')) {
     throw new Error(`Invalid SEED_SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL}`);
   }
-  if (!SUPERADMIN_PASSWORD || SUPERADMIN_PASSWORD.length < 8) {
-    throw new Error('SEED_SUPERADMIN_PASSWORD must be at least 8 characters');
-  }
+  assertPasswordPolicy();
 
   await prisma.platformSettings.upsert({
     where: { id: 'default' },
@@ -76,36 +94,52 @@ async function main(): Promise<void> {
     update: {},
   });
 
-  const superadmin = await prisma.user.upsert({
+  const existing = await prisma.user.findUnique({
     where: { email: SUPERADMIN_EMAIL },
-    create: {
-      email: SUPERADMIN_EMAIL,
-      name: 'Platform Superadmin',
-      passwordHash: hashSync(SUPERADMIN_PASSWORD, 12),
-      platformRole: PlatformRole.SUPERADMIN,
-      isActive: true,
-    },
-    update: {
-      platformRole: PlatformRole.SUPERADMIN,
-      isActive: true,
-      // Re-seed resets bootstrap password from env (Portainer first boot / recovery).
-      passwordHash: hashSync(SUPERADMIN_PASSWORD, 12),
-    },
   });
+
+  if (!existing) {
+    await prisma.user.create({
+      data: {
+        email: SUPERADMIN_EMAIL,
+        name: 'Platform Superadmin',
+        passwordHash: hashSync(SUPERADMIN_PASSWORD, 12),
+        platformRole: PlatformRole.SUPERADMIN,
+        isActive: true,
+      },
+    });
+    console.log(`  created superadmin ${SUPERADMIN_EMAIL}`);
+  } else {
+    const updateData: {
+      platformRole: typeof PlatformRole.SUPERADMIN;
+      isActive: boolean;
+      passwordHash?: string;
+    } = {
+      platformRole: PlatformRole.SUPERADMIN,
+      isActive: true,
+    };
+    if (RESET_PASSWORD) {
+      updateData.passwordHash = hashSync(SUPERADMIN_PASSWORD, 12);
+      console.log(`  reset password for ${SUPERADMIN_EMAIL} (SEED_RESET_PASSWORD=true)`);
+    }
+    await prisma.user.update({
+      where: { email: SUPERADMIN_EMAIL },
+      data: updateData,
+    });
+  }
 
   await demoteLegacyDefaultAdmin();
   await removeLegacyDemo();
 
   console.log('Seed completed (empty tenants — create clients in admin):');
   console.log(`  platform settings: default`);
-  console.log(`  superadmin email: ${superadmin.email}`);
-  console.log(`  superadmin password: from SEED_SUPERADMIN_PASSWORD (${SUPERADMIN_PASSWORD.length} chars)`);
+  console.log(`  superadmin: ${SUPERADMIN_EMAIL}`);
 }
 
 main()
-  .catch((error: unknown) => {
+  .catch((error) => {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();

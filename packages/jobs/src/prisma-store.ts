@@ -359,6 +359,7 @@ export class PrismaJobsStore implements JobsStore {
           })),
         });
       }
+      const prevMeta = asRecord(jobRow.metadata) ?? {};
       await tx.job.update({
         where: { id: input.jobId },
         data: {
@@ -368,6 +369,11 @@ export class PrismaJobsStore implements JobsStore {
             jobRow.unitSellPrice !== null
               ? jobRow.unitSellPrice.mul(input.phones.length)
               : null,
+          metadata: toJson({
+            ...prevMeta,
+            csvPending: false,
+            csvAttachedAt: new Date().toISOString(),
+          }),
         },
       });
     });
@@ -382,6 +388,20 @@ export class PrismaJobsStore implements JobsStore {
       throw new Error(`Job ${input.jobId} missing after attachItemsToJob`);
     }
     return { job, items: allItems };
+  }
+
+  async patchJobMetadata(
+    jobId: string,
+    patch: Record<string, unknown>,
+  ): Promise<JobRecord | null> {
+    const row = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!row) return null;
+    const prev = asRecord(row.metadata) ?? {};
+    const updated = await this.prisma.job.update({
+      where: { id: jobId },
+      data: { metadata: toJson({ ...prev, ...patch }) },
+    });
+    return mapJob(updated);
   }
 
   async listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]> {
@@ -718,5 +738,26 @@ export class PrismaJobsStore implements JobsStore {
         return job ? mapJob(job) : null;
       })
       .filter((job): job is JobRecord => job !== null);
+  }
+
+  async listEmptyCsvShellsNeedingHeal(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobRecord[]> {
+    const limit = Math.max(1, Math.min(input.limit, 2_000));
+    const rows = await this.prisma.job.findMany({
+      where: {
+        status: { in: ['QUEUED', 'PROCESSING'] },
+        itemCount: 0,
+        updatedAt: { lt: input.olderThan },
+        metadata: {
+          path: ['csvPending'],
+          equals: true,
+        },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: limit,
+    });
+    return rows.map(mapJob);
   }
 }

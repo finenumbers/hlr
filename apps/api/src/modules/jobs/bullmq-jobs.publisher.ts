@@ -9,6 +9,7 @@ import {
   QUEUE_NAMES,
   enqueueFinalizeJobOnQueue,
   type CsvParsePayload,
+  type EnqueueCsvParseOptions,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
   type PollItemPayload,
@@ -87,10 +88,12 @@ export class BullMqJobsPublisher
 
   async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
     const queue = this.requireQueue(this.submitQueue, QUEUE_NAMES.JOBS_SUBMIT);
+    const fingerprint = hashIds(payload.itemIds);
+    const jobId = payload.enqueueNonce
+      ? `submit:${payload.jobId}:${fingerprint}:n${payload.enqueueNonce}`
+      : `submit:${payload.jobId}:${fingerprint}`;
     try {
-      await queue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
-        jobId: `submit:${payload.jobId}:${hashIds(payload.itemIds)}`,
-      });
+      await queue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, { jobId });
     } catch (error) {
       if (isDuplicateJobIdError(error)) {
         this.logger.log(
@@ -119,11 +122,18 @@ export class BullMqJobsPublisher
 
   async enqueuePollItem(payload: PollItemPayload, delayMs = 0): Promise<void> {
     const queue = this.requireQueue(this.pollQueue, QUEUE_NAMES.JOBS_STATUS_POLL);
-    await queue.add(QUEUE_JOB_NAMES.POLL_ITEM, payload, {
-      delay: Math.max(0, delayMs),
-      // Unique per attempt so delayed retries are not deduped away.
-      jobId: `poll:${payload.jobItemId}:${payload.attempt}`,
-    });
+    try {
+      await queue.add(QUEUE_JOB_NAMES.POLL_ITEM, payload, {
+        delay: Math.max(0, delayMs),
+        // Unique per attempt so delayed retries are not deduped away.
+        jobId: `poll:${payload.jobItemId}:${payload.attempt}`,
+      });
+    } catch (error) {
+      if (isDuplicateJobIdError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void> {
@@ -142,11 +152,26 @@ export class BullMqJobsPublisher
     await queue.add(QUEUE_JOB_NAMES.RECONCILE_STALE, payload);
   }
 
-  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
+  async enqueueCsvParse(
+    payload: CsvParsePayload,
+    options?: EnqueueCsvParseOptions,
+  ): Promise<void> {
     const queue = this.requireQueue(this.csvParseQueue, QUEUE_NAMES.JOBS_CSV_PARSE);
-    await queue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, {
-      jobId: `csv-parse:${payload.jobId}`,
-    });
+    const jobId = `csv-parse:${payload.jobId}`;
+    if (options?.replaceExisting) {
+      const existing = await queue.getJob(jobId);
+      if (existing) {
+        await existing.remove();
+      }
+    }
+    try {
+      await queue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, { jobId });
+    } catch (error) {
+      if (isDuplicateJobIdError(error)) {
+        return;
+      }
+      throw error;
+    }
     this.logger.log(
       {
         message: 'jobs.queue.enqueue_csv_parse',

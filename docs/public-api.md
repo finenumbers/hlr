@@ -22,7 +22,7 @@ Authorization: Bearer fnk_live_<prefix>_<secret>
 |------|------------|-----|
 | `submit` | `POST /v1/checks`, `POST /v1/jobs` | key → tenant → platform `rateLimitRpm` |
 | `read` | GET polling / lists / me / balance / usage | `submit × RATE_LIMIT_READ_MULTIPLIER` (cap `RATE_LIMIT_READ_RPM_MAX`) |
-| `webhook` | `/v1/webhooks*`, API-key create/rotate/revoke | `min(submit, RATE_LIMIT_WEBHOOK_RPM, submit×multiplier)` |
+| `webhook` | `GET /v1/webhooks*` | `min(submit, RATE_LIMIT_WEBHOOK_RPM, submit×multiplier)` |
 | `auth` | `POST /auth/login`, `POST /auth/logout` | per-IP (`AUTH_LOGIN_RPM` / `AUTH_LOGOUT_RPM`) |
 
 Response headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Zone`, `Retry-After` on 429.
@@ -34,11 +34,9 @@ Payload size: default `BODY_LIMIT` (256kb); submit routes `BODY_LIMIT_SUBMIT` (1
 | Action | Endpoint |
 |--------|----------|
 | List (masked) | `GET /v1/api-keys` |
-| Create | `POST /v1/api-keys` → `{ secret, masked, ... }` once |
-| Rotate | `POST /v1/api-keys/:id/rotate` → new `secret` once |
-| Revoke | `POST /v1/api-keys/:id/revoke` |
+| Get | `GET /v1/api-keys/:id` |
 
-Store `secret` immediately; it cannot be retrieved again.
+**Create / rotate / revoke** are **cabinet-only** (session auth: `POST /cabinet/api-keys`, …). API keys cannot mint or manage other keys.
 
 ---
 
@@ -56,8 +54,11 @@ Store `secret` immediately; it cannot be retrieved again.
 | GET | `/v1/jobs` | List + filter/sort |
 | GET | `/v1/jobs/:id` | Job status |
 | GET | `/v1/jobs/:id/items` | Paginated results |
-| CRUD | `/v1/webhooks` | Endpoint config |
+| GET | `/v1/webhooks` | List endpoints (read-only) |
+| GET | `/v1/webhooks/:id` | Get endpoint |
 | GET | `/v1/webhooks/deliveries` | Delivery log / dead-letter |
+
+Webhook **create / update / rotate-secret / delete** are **cabinet-only** (`/cabinet/webhooks*`).
 
 Creates are **async only** (no sync wait for provider).
 
@@ -156,7 +157,7 @@ Empty `events[]` on an endpoint = subscribe to **all**.
 - Async via BullMQ (`webhooks-deliver`); HTTP create path is never blocked.
 - **At-least-once** — clients must dedupe by envelope `id` (delivery id).
 - Retries with exponential backoff (`PlatformSettings.webhookMaxAttempts`, timeout `webhookTimeoutMs`).
-- After many consecutive failures the endpoint is auto-disabled; re-enable via `PATCH /v1/webhooks/:id`.
+- After many consecutive failures the endpoint is auto-disabled; re-enable via cabinet `PATCH /cabinet/webhooks/:id`.
 - Failed / dead deliveries are visible at `GET /v1/webhooks/deliveries`.
 
 ### Payload (v1)
@@ -223,7 +224,7 @@ function verify(secret, rawBody, header, toleranceSec = 300) {
 }
 ```
 
-Signing secret is returned once on `POST /v1/webhooks` or `POST /v1/webhooks/:id/rotate-secret`.
+Signing secret is returned once on cabinet create / rotate-secret (`/cabinet/webhooks*`).
 
 ---
 

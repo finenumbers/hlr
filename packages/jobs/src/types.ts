@@ -137,6 +137,11 @@ export type SubmitBatchPayload = {
   itemIds: string[];
   /** Originating HTTP request id (propagated from create). */
   requestId?: string;
+  /**
+   * When set, BullMQ jobId includes this nonce so DLQ/reconcile re-enqueue
+   * cannot collide with a retained failed submit job fingerprint.
+   */
+  enqueueNonce?: string;
 };
 
 export type PollItemPayload = {

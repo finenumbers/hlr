@@ -92,8 +92,12 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://finenumbers:${POSTGRES_PASSWORD}@postgres:5432/finenumbers?schema=public
+      NODE_ENV: production
+      SEED_REQUIRE_STRONG_PASSWORD: "true"
       SEED_SUPERADMIN_EMAIL: ${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}
-      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:-ChangeMeNow!}
+      # Required strong secret (≥16 chars, not ChangeMeNow!). One-shot reset: SEED_RESET_PASSWORD=true
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?Задайте SEED_SUPERADMIN_PASSWORD (≥16)}
+      SEED_RESET_PASSWORD: ${SEED_RESET_PASSWORD:-false}
     labels:
       - "hlr.seed.email=${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}"
     working_dir: /app/packages/db

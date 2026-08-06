@@ -24,11 +24,10 @@ Create: header `Idempotency-Key` (рекомендуется)
 | GET | `/v1/jobs` | список |
 | GET | `/v1/jobs/:id` | прогресс |
 | GET | `/v1/jobs/:id/items` | элементы |
-| GET/POST | `/v1/api-keys` | list / create |
-| POST | `/v1/api-keys/:id/rotate` | rotate secret |
-| POST | `/v1/api-keys/:id/revoke` | revoke |
-| CRUD | `/v1/webhooks` | endpoints |
-| POST | `/v1/webhooks/:id/rotate-secret` | rotate signing secret |
+| GET | `/v1/api-keys` | list (read-only; create/rotate/revoke → `/cabinet`) |
+| GET | `/v1/api-keys/:id` | get |
+| GET | `/v1/webhooks` | list (mutations → `/cabinet`) |
+| GET | `/v1/webhooks/:id` | get |
 | GET | `/v1/webhooks/deliveries` | delivery log |
 
 Ошибки: envelope `{ error: { code, message, details?, requestId } }` — `400`, `401`, `402`, `403`, `404`, `409`, `429`.

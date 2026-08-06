@@ -1,3 +1,5 @@
+import { access } from 'node:fs/promises';
+
 import type { NormalizedResult } from '@finenumbers/provider-core';
 import { isProviderError } from '@finenumbers/provider-core';
 
@@ -928,18 +930,85 @@ export class JobLifecycleService {
       const submitBatchSize =
         storedSettings.submitBatchSize ?? DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
       const batches = chunkArray(queuedIds, submitBatchSize);
+      const nonce = `resume-${Date.now().toString(36)}`;
       for (const itemIds of batches) {
         try {
           await this.deps.queue.enqueueSubmitBatch({
             jobId: job.id,
             tenantId: job.tenantId,
             itemIds,
+            enqueueNonce: nonce,
           });
         } catch {
-          // Duplicate Bull jobId is fine — publisher should swallow; keep best-effort.
+          // Best-effort.
         }
       }
       resumedCount += 1;
+    }
+
+    // Empty CSV shells: re-enqueue parse or fail when file is gone / heal budget exhausted.
+    const emptyShells = await this.deps.store.listEmptyCsvShellsNeedingHeal({
+      olderThan,
+      limit,
+    });
+    let csvHealed = 0;
+    let csvAbandoned = 0;
+    const MAX_CSV_HEALS = 3;
+    for (const shell of emptyShells) {
+      const heals =
+        typeof shell.metadata?.csvHealAttempts === 'number'
+          ? shell.metadata.csvHealAttempts
+          : 0;
+      const filePath =
+        typeof shell.metadata?.csvFilePath === 'string'
+          ? shell.metadata.csvFilePath
+          : null;
+
+      if (!filePath || heals >= MAX_CSV_HEALS) {
+        await this.deps.store.finalizeJob({
+          jobId: shell.id,
+          status: 'FAILED',
+          errorCode: 'CSV_PARSE_ABANDONED',
+          errorMessage: filePath
+            ? 'CSV parse heal attempts exhausted'
+            : 'CSV upload file missing for empty shell',
+        });
+        csvAbandoned += 1;
+        continue;
+      }
+
+      try {
+        await access(filePath);
+      } catch {
+        await this.deps.store.finalizeJob({
+          jobId: shell.id,
+          status: 'FAILED',
+          errorCode: 'CSV_PARSE_ABANDONED',
+          errorMessage: 'CSV upload file missing for empty shell',
+        });
+        csvAbandoned += 1;
+        continue;
+      }
+
+      await this.deps.store.patchJobMetadata(shell.id, {
+        csvHealAttempts: heals + 1,
+      });
+      try {
+        await this.deps.queue.enqueueCsvParse(
+          {
+            jobId: shell.id,
+            tenantId: shell.tenantId,
+            filePath,
+          },
+          { replaceExisting: true },
+        );
+        csvHealed += 1;
+      } catch (error) {
+        this.logger.warn('jobs.reconcile.csv_heal_enqueue_failed', {
+          jobId: shell.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     this.logger.info('jobs.reconcile.tick', {
@@ -947,27 +1016,37 @@ export class JobLifecycleService {
       finalized: finalizedCount,
       needing: needing.length,
       submitResumed: resumedCount,
+      csvHealed,
+      csvAbandoned,
     });
 
     return { polled: stale.length, finalized: finalizedCount };
   }
 
   /**
-   * Dead-letter / exhausted BullMQ attempts for a submit batch item set.
-   * Marks still-open items as FAILED so the job can finalize.
+   * Dead-letter / exhausted BullMQ attempts for a submit batch.
+   * Fails only RESERVED (in-flight) items; re-enqueues remaining QUEUED with a
+   * unique Bull jobId nonce so retained failed jobs cannot swallow the heal.
    */
   async markSubmitBatchDeadLetter(payload: SubmitBatchPayload, reason: string): Promise<void> {
+    const MAX_DLQ_CYCLES = 3;
+    const job = await this.deps.store.findJobById(payload.jobId);
+    const prevCycles =
+      typeof job?.metadata?.submitDlqCycles === 'number'
+        ? job.metadata.submitDlqCycles
+        : 0;
+
     for (const itemId of payload.itemIds) {
       const item = await this.deps.store.findItemById(itemId);
       if (!item || isTerminalJobItemStatus(item.status)) {
         continue;
       }
-      if (item.status !== 'QUEUED' && item.status !== 'RESERVED') {
+      if (item.status !== 'RESERVED') {
         continue;
       }
       const failed = await this.deps.store.transitionItem({
         jobItemId: itemId,
-        fromStatuses: ['QUEUED', 'RESERVED'],
+        fromStatuses: ['RESERVED'],
         toStatus: 'FAILED',
         patch: {
           errorCode: 'QUEUE_DEAD_LETTER',
@@ -979,6 +1058,66 @@ export class JobLifecycleService {
         await this.onItemBecameTerminal(failed, 'release');
       }
     }
+
+    const queuedFromPayload: string[] = [];
+    for (const itemId of payload.itemIds) {
+      const item = await this.deps.store.findItemById(itemId);
+      if (item?.status === 'QUEUED') {
+        queuedFromPayload.push(itemId);
+      }
+    }
+
+    if (queuedFromPayload.length > 0) {
+      if (prevCycles >= MAX_DLQ_CYCLES) {
+        for (const itemId of queuedFromPayload) {
+          const failed = await this.deps.store.transitionItem({
+            jobItemId: itemId,
+            fromStatuses: ['QUEUED'],
+            toStatus: 'FAILED',
+            patch: {
+              errorCode: 'QUEUE_DEAD_LETTER',
+              errorMessage: `${reason} (dlq cycles exhausted)`,
+              completedAt: this.now(),
+            },
+          });
+          if (failed) {
+            await this.onItemBecameTerminal(failed, 'release');
+          }
+        }
+      } else {
+        await this.deps.store.patchJobMetadata(payload.jobId, {
+          submitDlqCycles: prevCycles + 1,
+        });
+        const storedSettings = await this.deps.store.getRuntimeSettings(
+          payload.tenantId,
+        );
+        const submitBatchSize =
+          storedSettings.submitBatchSize ??
+          DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
+        const nonce = `dlq-${Date.now().toString(36)}-${prevCycles + 1}`;
+        for (const itemIds of chunkArray(queuedFromPayload, submitBatchSize)) {
+          await this.deps.queue.enqueueSubmitBatch(
+            withRequestId(
+              {
+                jobId: payload.jobId,
+                tenantId: payload.tenantId,
+                itemIds,
+                enqueueNonce: nonce,
+              },
+              payload.requestId,
+            ),
+          );
+        }
+        this.logger.warn('jobs.submit.dead_letter_requeued', {
+          jobId: payload.jobId,
+          tenantId: payload.tenantId,
+          queuedCount: queuedFromPayload.length,
+          dlqCycle: prevCycles + 1,
+          reason,
+        });
+      }
+    }
+
     await this.deps.queue.enqueueFinalizeJob(
       withRequestId(
         {

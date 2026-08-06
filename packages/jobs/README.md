@@ -57,7 +57,7 @@ Constants: `QUEUE_NAMES`, `QUEUE_JOB_NAMES`, `QUEUE_DEFAULT_JOB_OPTIONS`.
 - **Submit**: BullMQ exponential backoff (`attempts: 3`) for *retryable* provider errors. Item stays `RESERVED` and is reclaimed on retry. Non-retryable item failures mark that item `FAILED` without failing the rest of the batch.
 - **Poll**: App-driven delayed re-enqueue with exponential backoff from `pollIntervalSec`. Soft cap `pollMaxAttempts` + hard `checkTimeoutSec`.
 - **Finalize**: BullMQ retries on transient DB errors.
-- **Dead-letter**: After submit attempts are exhausted, worker calls `markSubmitBatchDeadLetter` → remaining `QUEUED|RESERVED` items → `FAILED` (`QUEUE_DEAD_LETTER`) → finalize.
+- **Dead-letter**: After submit attempts are exhausted, worker calls `markSubmitBatchDeadLetter` → **RESERVED** items → `FAILED` (`QUEUE_DEAD_LETTER`); remaining **QUEUED** are re-enqueued with a unique Bull jobId nonce → finalize.
 
 ## Status lifecycle
 

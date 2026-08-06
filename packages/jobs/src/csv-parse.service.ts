@@ -68,7 +68,6 @@ export async function streamParsePhoneFile(
 }
 
 function splitCsvFirstCell(line: string): string {
-  // Minimal CSV: handle quoted first field, otherwise split on comma/semicolon/tab.
   if (line.startsWith('"')) {
     const end = line.indexOf('"', 1);
     if (end > 1) {
@@ -84,7 +83,6 @@ function looksLikeHeader(cell: string): boolean {
   if (lower === 'phone' || lower === 'msisdn' || lower === 'number' || lower === 'e164') {
     return true;
   }
-  // Digits / +digits → data row
   return !/^\+?\d[\d\s()-]{5,}$/.test(cell);
 }
 
@@ -123,11 +121,7 @@ export class CsvParseService {
   }
 
   async process(payload: CsvParsePayload): Promise<CsvParseResult> {
-    try {
-      return await this.processInner(payload);
-    } finally {
-      await safeUnlink(payload.filePath, this.logger);
-    }
+    return this.processInner(payload);
   }
 
   private async processInner(payload: CsvParsePayload): Promise<CsvParseResult> {
@@ -136,7 +130,7 @@ export class CsvParseService {
       throw new JobsNotFoundError(`Job ${payload.jobId} not found for CSV parse`);
     }
 
-    // Crash-safe resume: items already attached but submit fan-out may be incomplete.
+    // Crash-safe resume: items already attached — file may already be gone.
     if (job.itemCount > 0) {
       if (isTerminalJobStatus(job.status)) {
         this.logger.info('jobs.csv_parse.already_terminal', {
@@ -144,6 +138,7 @@ export class CsvParseService {
           status: job.status,
           itemCount: job.itemCount,
         });
+        await safeUnlink(payload.filePath, this.logger);
         return {
           job,
           workUnits: job.itemCount,
@@ -157,6 +152,7 @@ export class CsvParseService {
         job,
         payload.requestId,
       );
+      await safeUnlink(payload.filePath, this.logger);
       this.logger.info('jobs.csv_parse.resume_enqueued', {
         jobId: job.id,
         itemCount: job.itemCount,
@@ -185,12 +181,7 @@ export class CsvParseService {
         maxRows: settings.maxCsvRows,
       });
     } catch (error) {
-      await this.deps.store.finalizeJob({
-        jobId: job.id,
-        status: 'FAILED',
-        errorCode: 'CSV_READ_FAILED',
-        errorMessage: error instanceof Error ? error.message : 'Failed to read CSV',
-      });
+      // Keep file for Bull retry — do not unlink on retryable read failure.
       throw error;
     }
 
@@ -201,6 +192,7 @@ export class CsvParseService {
         errorCode: 'CSV_TOO_MANY_ROWS',
         errorMessage: `CSV exceeds maxCsvRows (${settings.maxCsvRows})`,
       });
+      await safeUnlink(payload.filePath, this.logger);
       return {
         job: failed ?? job,
         workUnits: 0,
@@ -217,6 +209,7 @@ export class CsvParseService {
         errorCode: 'CSV_EMPTY',
         errorMessage: 'CSV contained no phone numbers',
       });
+      await safeUnlink(payload.filePath, this.logger);
       return {
         job: failed ?? job,
         workUnits: 0,
@@ -236,6 +229,7 @@ export class CsvParseService {
           .slice(0, 5)
           .join(', ')})`,
       });
+      await safeUnlink(payload.filePath, this.logger);
       return {
         job: failed ?? job,
         workUnits: 0,
@@ -252,6 +246,7 @@ export class CsvParseService {
         errorCode: 'CSV_EMPTY',
         errorMessage: 'No valid phones after normalization',
       });
+      await safeUnlink(payload.filePath, this.logger);
       return {
         job: failed ?? job,
         workUnits: 0,
@@ -268,6 +263,7 @@ export class CsvParseService {
         errorCode: 'PRICE_SNAPSHOT_MISSING',
         errorMessage: 'CSV job shell has no unitSellPrice snapshot',
       });
+      await safeUnlink(payload.filePath, this.logger);
       return {
         job: failed ?? job,
         workUnits: 0,
@@ -305,6 +301,7 @@ export class CsvParseService {
         errorCode: code,
         errorMessage: message,
       });
+      await safeUnlink(payload.filePath, this.logger);
       this.logger.warn('jobs.csv_parse.affordability_failed', {
         jobId: job.id,
         tenantId: job.tenantId,
@@ -336,6 +333,9 @@ export class CsvParseService {
       payload.requestId,
     );
 
+    // Unlink only after successful attach (retry-safe before this point).
+    await safeUnlink(payload.filePath, this.logger);
+
     this.logger.info('jobs.csv_parse.enqueued', {
       jobId: updated.id,
       tenantId: updated.tenantId,
@@ -354,7 +354,6 @@ export class CsvParseService {
     };
   }
 
-  /** Re-enqueue submit for any still-QUEUED items (idempotent via Bull jobId / claim). */
   async enqueueQueuedSubmitBatches(
     job: JobRecord,
     requestId?: string,
@@ -378,11 +377,13 @@ export class CsvParseService {
       ...storedSettings,
     });
     const batches = chunkArray(itemIds, settings.submitBatchSize);
+    const nonce = `csv-${Date.now().toString(36)}`;
     for (const ids of batches) {
       await this.deps.queue.enqueueSubmitBatch({
         jobId: job.id,
         tenantId: job.tenantId,
         itemIds: ids,
+        enqueueNonce: nonce,
         ...(requestId ? { requestId } : {}),
       });
     }
@@ -390,7 +391,6 @@ export class CsvParseService {
   }
 }
 
-/** Thrown when CSV limits fail before enqueue (API-side). */
 export function assertCsvByteLimit(fileSize: number, maxCsvBytes: number): void {
   if (fileSize > maxCsvBytes) {
     throw new JobsValidationError('CSV file exceeds maxCsvBytes', {

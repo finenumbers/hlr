@@ -236,9 +236,26 @@ export class InMemoryJobsStore implements JobsStore {
       job.unitSellPrice !== null
         ? String(Number(job.unitSellPrice) * input.phones.length)
         : job.estimatedCost;
+    job.metadata = {
+      ...(job.metadata ?? {}),
+      csvPending: false,
+      csvAttachedAt: now.toISOString(),
+    };
     job.updatedAt = now;
     this.jobs.set(job.id, job);
     return { job: cloneJob(job), items };
+  }
+
+  async patchJobMetadata(
+    jobId: string,
+    patch: Record<string, unknown>,
+  ): Promise<JobRecord | null> {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    job.metadata = { ...(job.metadata ?? {}), ...patch };
+    job.updatedAt = new Date();
+    this.jobs.set(jobId, job);
+    return cloneJob(job);
   }
 
   async listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]> {
@@ -505,6 +522,22 @@ export class InMemoryJobsStore implements JobsStore {
       if (hasStranded) {
         result.push(cloneJob(job));
       }
+      if (result.length >= input.limit) break;
+    }
+    return result;
+  }
+
+  async listEmptyCsvShellsNeedingHeal(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobRecord[]> {
+    const result: JobRecord[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.status !== 'PROCESSING' && job.status !== 'QUEUED') continue;
+      if (job.itemCount !== 0) continue;
+      if (job.metadata?.csvPending !== true) continue;
+      if (job.updatedAt >= input.olderThan) continue;
+      result.push(cloneJob(job));
       if (result.length >= input.limit) break;
     }
     return result;

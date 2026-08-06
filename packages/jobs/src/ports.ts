@@ -73,6 +73,12 @@ export interface JobsStore {
     currency: string;
   }): Promise<{ job: JobRecord; items: JobItemRecord[] }>;
 
+  /** Shallow-merge job.metadata keys (used to clear csvPending, track DLQ cycles). */
+  patchJobMetadata(
+    jobId: string,
+    patch: Record<string, unknown>,
+  ): Promise<JobRecord | null>;
+
   listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]>;
 
   listItemsByJobId(jobId: string): Promise<JobItemRecord[]>;
@@ -177,17 +183,33 @@ export interface JobsStore {
     olderThan: Date;
     limit: number;
   }): Promise<JobRecord[]>;
+
+  /**
+   * CSV shells stuck with itemCount=0 and metadata.csvPending (parse never attached).
+   */
+  listEmptyCsvShellsNeedingHeal(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobRecord[]>;
 }
 
 /**
  * Queue publisher used by API (create) and workers (schedule poll/finalize).
  */
+export type EnqueueCsvParseOptions = {
+  /** Remove retained Bull job with the same csv-parse jobId before add (heal path). */
+  replaceExisting?: boolean;
+};
+
 export interface JobsQueuePublisher {
   enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void>;
   enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void>;
   enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void>;
   enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;
-  enqueueCsvParse(payload: CsvParsePayload): Promise<void>;
+  enqueueCsvParse(
+    payload: CsvParsePayload,
+    options?: EnqueueCsvParseOptions,
+  ): Promise<void>;
 }
 
 /**

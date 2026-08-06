@@ -4,6 +4,7 @@ import {
   QUEUE_NAMES,
   enqueueFinalizeJobOnQueue,
   type CsvParsePayload,
+  type EnqueueCsvParseOptions,
   type FinalizeJobPayload,
   type JobsQueuePublisher,
   type PollItemPayload,
@@ -44,10 +45,12 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
   }
 
   async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
+    const fingerprint = `${payload.itemIds.length}-${simpleHash(payload.itemIds.join(','))}`;
+    const jobId = payload.enqueueNonce
+      ? `submit:${payload.jobId}:${fingerprint}:n${payload.enqueueNonce}`
+      : `submit:${payload.jobId}:${fingerprint}`;
     try {
-      await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
-        jobId: `submit:${payload.jobId}:${payload.itemIds.length}-${simpleHash(payload.itemIds.join(','))}`,
-      });
+      await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, { jobId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/already exists/i.test(message)) {
@@ -58,10 +61,18 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
   }
 
   async enqueuePollItem(payload: PollItemPayload, delayMs = 0): Promise<void> {
-    await this.pollQueue.add(QUEUE_JOB_NAMES.POLL_ITEM, payload, {
-      delay: Math.max(0, delayMs),
-      jobId: `poll:${payload.jobItemId}:${payload.attempt}`,
-    });
+    try {
+      await this.pollQueue.add(QUEUE_JOB_NAMES.POLL_ITEM, payload, {
+        delay: Math.max(0, delayMs),
+        jobId: `poll:${payload.jobItemId}:${payload.attempt}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists/i.test(message)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void> {
@@ -72,10 +83,26 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
     await this.reconciliationQueue.add(QUEUE_JOB_NAMES.RECONCILE_STALE, payload);
   }
 
-  async enqueueCsvParse(payload: CsvParsePayload): Promise<void> {
-    await this.csvParseQueue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, {
-      jobId: `csv-parse:${payload.jobId}`,
-    });
+  async enqueueCsvParse(
+    payload: CsvParsePayload,
+    options?: EnqueueCsvParseOptions,
+  ): Promise<void> {
+    const jobId = `csv-parse:${payload.jobId}`;
+    if (options?.replaceExisting) {
+      const existing = await this.csvParseQueue.getJob(jobId);
+      if (existing) {
+        await existing.remove();
+      }
+    }
+    try {
+      await this.csvParseQueue.add(QUEUE_JOB_NAMES.CSV_PARSE, payload, { jobId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists/i.test(message)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async close(): Promise<void> {
