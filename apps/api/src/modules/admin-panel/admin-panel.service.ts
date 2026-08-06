@@ -137,6 +137,7 @@ export class AdminPanelService {
       jobsByStatus,
       itemsByType,
       debitSum,
+      walletSums,
       providerFailed,
       providerTotal,
       webhookDead,
@@ -163,6 +164,9 @@ export class AdminPanelService {
       this.prisma.walletTransaction.aggregate({
         where: { type: 'DEBIT', createdAt: { gte: since24h } },
         _sum: { amount: true },
+      }),
+      this.prisma.wallet.aggregate({
+        _sum: { availableBalance: true, heldBalance: true },
       }),
       this.prisma.providerRequest.count({
         where: { status: 'FAILED', createdAt: { gte: since24h } },
@@ -240,6 +244,8 @@ export class AdminPanelService {
       },
       money: {
         capturedDebit24h: debitSum._sum.amount?.toString() ?? '0',
+        clientsAvailableBalance: walletSums._sum.availableBalance?.toString() ?? '0',
+        clientsHeldBalance: walletSums._sum.heldBalance?.toString() ?? '0',
         currency: 'RUB',
       },
       provider: {

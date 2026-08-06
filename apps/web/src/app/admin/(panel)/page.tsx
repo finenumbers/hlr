@@ -37,7 +37,12 @@ export default function AdminDashboardPage() {
       hlrItems24h?: number;
       pingItems24h?: number;
     };
-    money?: { capturedDebit24h?: string; currency?: string };
+    money?: {
+      capturedDebit24h?: string;
+      clientsAvailableBalance?: string;
+      clientsHeldBalance?: string;
+      currency?: string;
+    };
     provider?: {
       smscBalance?: { balance?: string; currency?: string; checkedAt?: string } | null;
     };
@@ -84,13 +89,18 @@ export default function AdminDashboardPage() {
             href="/admin/tenants"
           />
           <MetricCard
-            label={t('adminDashboard.jobs24h')}
-            value={d?.volume?.jobs24h ?? 0}
-            hint={t('adminDashboard.jobs24hHint', {
-              hlr: d?.volume?.hlrItems24h ?? 0,
-              ping: d?.volume?.pingItems24h ?? 0,
+            label={t('adminDashboard.clientsBalance')}
+            value={formatMoney(
+              d?.money?.clientsAvailableBalance ?? '0',
+              d?.money?.currency ?? 'RUB',
+            )}
+            hint={t('adminDashboard.clientsBalanceHint', {
+              held: formatMoney(
+                d?.money?.clientsHeldBalance ?? '0',
+                d?.money?.currency ?? 'RUB',
+              ),
             })}
-            href="/admin/jobs"
+            href="/admin/billing"
           />
           <MetricCard
             label={t('adminDashboard.capturedDebit')}
@@ -117,7 +127,22 @@ export default function AdminDashboardPage() {
           />
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-semibold">{t('adminDashboard.jobs24h')}</h2>
+              <Link href="/admin/jobs" className="text-xs text-[var(--color-accent)]">
+                {t('adminDashboard.viewAll')}
+              </Link>
+            </div>
+            <p className="text-3xl font-semibold tabular-nums">{d?.volume?.jobs24h ?? 0}</p>
+            <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+              {t('adminDashboard.jobs24hHint', {
+                hlr: d?.volume?.hlrItems24h ?? 0,
+                ping: d?.volume?.pingItems24h ?? 0,
+              })}
+            </p>
+          </Card>
           <Card>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">{t('adminDashboard.stuckJobsTitle')}</h2>

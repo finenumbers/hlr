@@ -100,6 +100,8 @@ const enMessages = {
     providerErrors: 'Provider errors: {pct}%',
     clientsCard: 'Clients / low balance',
     clientsCardHint: '{active} active · {inactive} inactive',
+    clientsBalance: 'Clients balance',
+    clientsBalanceHint: 'Held {held}',
     jobs24h: 'Jobs 24h',
     jobs24hHint: 'HLR {hlr} · Ping {ping}',
     capturedDebit: 'Captured debit 24h',
@@ -258,7 +260,7 @@ const enMessages = {
     colRoaming: 'Roaming',
     colRoamingCountry: 'Roaming country',
     colRoamingOperator: 'Roaming operator',
-    colSmscErr: 'SMSC error',
+    colSmscErr: 'Errors',
     colError: 'Error',
   },
   adminBilling: {
@@ -388,7 +390,7 @@ const enMessages = {
     colRoaming: 'Roaming',
     colRoamingCountry: 'Roaming country',
     colRoamingOperator: 'Roaming operator',
-    colSmscErr: 'SMSC error',
+    colSmscErr: 'Errors',
   },
   cabinetBilling: {
     title: 'Billing',

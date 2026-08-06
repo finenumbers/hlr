@@ -95,6 +95,8 @@ export const ru: EnMessages = {
     providerErrors: 'Ошибки провайдера: {pct}%',
     clientsCard: 'Клиенты / низкий баланс',
     clientsCardHint: '{active} активных · {inactive} неактивных',
+    clientsBalance: 'Баланс клиентов',
+    clientsBalanceHint: 'В холде {held}',
     jobs24h: 'Задания 24ч',
     jobs24hHint: 'HLR {hlr} · Ping {ping}',
     capturedDebit: 'Списано 24ч',
@@ -253,7 +255,7 @@ export const ru: EnMessages = {
     colRoaming: 'Роуминг',
     colRoamingCountry: 'Страна роуминга',
     colRoamingOperator: 'Оператор роуминга',
-    colSmscErr: 'Ошибка SMSC',
+    colSmscErr: 'Ошибки',
     colError: 'Ошибка',
   },
   adminBilling: {
@@ -384,7 +386,7 @@ export const ru: EnMessages = {
     colRoaming: 'Роуминг',
     colRoamingCountry: 'Страна роуминга',
     colRoamingOperator: 'Оператор роуминга',
-    colSmscErr: 'Ошибка SMSC',
+    colSmscErr: 'Ошибки',
   },
   cabinetBilling: {
     title: 'Биллинг',
