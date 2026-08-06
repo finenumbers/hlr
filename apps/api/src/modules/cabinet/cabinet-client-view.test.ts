@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   redactLedgerMetadataForClient,
+  sanitizeClientErrorText,
   toCabinetJobView,
   toCabinetSellEstimate,
 } from './cabinet-client-view';
@@ -59,6 +60,8 @@ describe('cabinet-client-view', () => {
       estimatedCost: '2',
       actualCost: null,
       currency: 'RUB',
+      errorCode: 'CSV_EMPTY',
+      errorMessage: 'SMSC callback failed',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       unitSellPrice: '2',
       unitProviderCost: '0.5',
@@ -67,9 +70,16 @@ describe('cabinet-client-view', () => {
     });
 
     expect(view.unitSellPrice).toBe('2');
+    expect(view.errorCode).toBe('CSV_EMPTY');
+    expect(view.errorMessage).toBe('provider callback failed');
     expect(view).not.toHaveProperty('unitProviderCost');
     expect(view).not.toHaveProperty('tariffPlanId');
     expect(JSON.stringify(view)).not.toContain('0.5');
+    expect(JSON.stringify(view)).not.toMatch(/SMSC/i);
+  });
+
+  it('sanitizes SMSC brand from client error text', () => {
+    expect(sanitizeClientErrorText('SMSC.ru timeout')).toBe('provider timeout');
   });
 
   it('redacts provider fields from ledger metadata', () => {

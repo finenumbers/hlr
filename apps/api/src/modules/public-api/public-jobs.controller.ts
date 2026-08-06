@@ -131,6 +131,8 @@ export class PublicJobsController {
       estimatedCost: result.job.estimatedCost,
       actualCost: result.job.actualCost,
       currency: result.job.currency,
+      errorCode: result.job.errorCode ?? null,
+      errorMessage: result.job.errorMessage ?? null,
       createdAt: result.job.createdAt,
       progress: result.progress,
     });

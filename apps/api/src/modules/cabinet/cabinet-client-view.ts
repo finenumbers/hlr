@@ -65,8 +65,17 @@ export function toCabinetSellEstimate(estimate: {
   };
 }
 
+/** Strip supplier brand from tenant-visible error text. */
+export function sanitizeClientErrorText(
+  text: string | null | undefined,
+): string | null {
+  if (text == null || text === '') return text ?? null;
+  return text.replace(/\bSMSC(?:\.ru)?\b/gi, 'provider');
+}
+
 export function toCabinetJobView(job: {
   id: string;
+  tenantId?: string;
   checkType: string;
   source?: string;
   status: string;
@@ -76,7 +85,10 @@ export function toCabinetJobView(job: {
   estimatedCost: string | null | undefined;
   actualCost: string | null | undefined;
   currency: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
   createdAt: Date;
+  progress?: unknown;
   unitSellPrice?: string | null;
   unitProviderCost?: string | null;
   tariffPlanId?: string | null;
@@ -84,6 +96,7 @@ export function toCabinetJobView(job: {
 }) {
   return {
     id: job.id,
+    ...(job.tenantId !== undefined ? { tenantId: job.tenantId } : {}),
     checkType: job.checkType,
     source: job.source,
     status: job.status,
@@ -99,7 +112,10 @@ export function toCabinetJobView(job: {
         ? null
         : String(job.actualCost),
     currency: job.currency,
+    errorCode: job.errorCode ?? null,
+    errorMessage: sanitizeClientErrorText(job.errorMessage),
     createdAt: job.createdAt,
+    ...(job.progress !== undefined ? { progress: job.progress } : {}),
     // Sell snapshot only — never unitProviderCost / internal plan wiring.
     unitSellPrice: job.unitSellPrice ?? null,
   };

@@ -36,6 +36,12 @@ export class JobResponseDto {
   @ApiProperty()
   currency!: string;
 
+  @ApiPropertyOptional({ nullable: true })
+  errorCode!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  errorMessage!: string | null;
+
   @ApiProperty()
   createdAt!: Date;
 }

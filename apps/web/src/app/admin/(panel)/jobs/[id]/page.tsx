@@ -11,18 +11,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { api, ApiError } from '@/lib/api/client';
-import { useT } from '@/lib/i18n';
+import { downloadBlob } from '@/lib/csv';
+import { useI18n, useT } from '@/lib/i18n';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
 import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
   const t = useT();
+  const { locale } = useI18n();
   const params = useParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const displayId = id || t('common.dash');
   const [page, setPage] = useState(1);
   const [healError, setHealError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const qc = useQueryClient();
   const job = useQuery({
     queryKey: ['admin', 'job', id],
@@ -61,6 +65,24 @@ export default function AdminJobDetailPage() {
   const status = String(j?.status ?? '');
   const canHeal = status === 'QUEUED' || status === 'PROCESSING';
   const isHlr = String(j?.checkType ?? '') === 'HLR';
+  const jobError =
+    j?.errorCode || j?.errorMessage
+      ? [j?.errorCode, j?.errorMessage].filter(Boolean).join(' — ')
+      : null;
+
+  const exportCsv = async () => {
+    if (!id) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { blob, filename } = await api.admin.jobItemsExport(id, locale);
+      downloadBlob(filename ?? `job-${id}.csv`, blob);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : t('adminJobs.exportFailed'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div>
@@ -68,20 +90,34 @@ export default function AdminJobDetailPage() {
         title={t('adminJobs.detailTitle', { id: displayId })}
         description={t('adminJobs.detailDescription')}
         actions={
-          canHeal ? (
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
+              variant="secondary"
               size="sm"
-              onClick={() => heal.mutate()}
-              disabled={heal.isPending || !id}
+              onClick={() => void exportCsv()}
+              disabled={!job.data || exporting}
             >
-              {heal.isPending ? t('common.loading') : t('adminJobs.healFinalize')}
+              {exporting ? t('common.loading') : t('adminJobs.exportCsv')}
             </Button>
-          ) : null
+            {canHeal ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => heal.mutate()}
+                disabled={heal.isPending || !id}
+              >
+                {heal.isPending ? t('common.loading') : t('adminJobs.healFinalize')}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       {healError ? (
         <p className="mb-3 text-sm text-[var(--color-danger)]">{healError}</p>
+      ) : null}
+      {exportError ? (
+        <p className="mb-3 text-sm text-[var(--color-danger)]">{exportError}</p>
       ) : null}
       <QueryState
         isLoading={job.isLoading || !job.data}
@@ -115,6 +151,12 @@ export default function AdminJobDetailPage() {
             <p className="mt-2 font-medium">{formatDate(j?.createdAt as string | undefined)}</p>
           </Card>
         </div>
+        {jobError ? (
+          <Card className="mb-4 border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)]">
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.jobError')}</p>
+            <p className="mt-2 text-sm text-[var(--color-danger)]">{jobError}</p>
+          </Card>
+        ) : null}
         <QueryState
           isLoading={items.isLoading}
           isError={items.isError}

@@ -39,6 +39,7 @@ import type { ProviderSmscService } from '../provider-smsc/provider-smsc.service
 import { NestWebhookDeliveryService } from '../webhooks/nest-webhook-delivery.service';
 import type { CreateJobDto } from './dto/create-job.dto';
 import type { JobResponseDto } from './dto/job-response.dto';
+import { createJobItemsCsvStream } from './job-items-csv';
 import { JOBS_PROCESSOR, JobsProcessorPort } from './jobs-processor.port';
 import { JOBS_STORE } from './jobs-store.port';
 
@@ -257,6 +258,56 @@ export class JobsService {
     return mapJobItemListRow(item);
   }
 
+  /**
+   * Stream all job items as Excel-friendly CSV (BOM + `;`).
+   * Chunked cursor reads — safe for 100k-row jobs.
+   */
+  async streamItemsCsvForTenant(input: {
+    tenantId: string;
+    jobId: string;
+    locale: 'en' | 'ru';
+  }) {
+    const job = await this.getByIdForTenant(input.tenantId, input.jobId);
+    const pageSize = 500;
+    const prisma = this.prisma;
+    const tenantId = input.tenantId;
+    const jobId = input.jobId;
+
+    async function* iterate() {
+      let cursor: string | undefined;
+      for (;;) {
+        const rows = await prisma.jobItem.findMany({
+          where: { tenantId, jobId },
+          take: pageSize,
+          ...(cursor
+            ? { skip: 1, cursor: { id: cursor } }
+            : {}),
+          orderBy: { id: 'asc' },
+          select: jobItemListSelect,
+        });
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          yield mapJobItemListRow(row);
+        }
+        cursor = rows[rows.length - 1]?.id;
+        if (rows.length < pageSize) break;
+      }
+    }
+
+    const stream = createJobItemsCsvStream({
+      checkType: job.checkType,
+      locale: input.locale,
+      iterate,
+    });
+    const slug =
+      job.checkType === 'PING' ? 'ping-sms' : job.checkType === 'HLR' ? 'hlr' : 'job';
+    return {
+      stream,
+      filename: `${slug}-${job.id}.csv`,
+      job,
+    };
+  }
+
   async create(dto: CreateJobDto): Promise<CreateJobResult & { progress: JobProgress }> {
     try {
       // Fail fast: tariff must exist and available balance must cover estimate.
@@ -432,6 +483,8 @@ function mapJob(job: {
   estimatedCost: { toString(): string } | string | null;
   actualCost: { toString(): string } | string | null;
   currency: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
   createdAt: Date;
 }): JobResponseDto {
   return {
@@ -452,6 +505,8 @@ function mapJob(job: {
         ? null
         : String(job.actualCost),
     currency: job.currency,
+    errorCode: job.errorCode ?? null,
+    errorMessage: job.errorMessage ?? null,
     createdAt: job.createdAt,
   };
 }

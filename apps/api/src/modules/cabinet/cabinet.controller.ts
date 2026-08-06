@@ -4,12 +4,15 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -221,6 +224,28 @@ export class CabinetController {
   @Get('jobs/:id')
   getJob(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.cabinet.getJob(tenantId, id);
+  }
+
+  @Get('jobs/:id/items/export')
+  @ApiOperation({ summary: 'Download all job item results as CSV' })
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async exportItems(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Query('locale') localeRaw: string | undefined,
+    @Res({ passthrough: true }) res: import('express').Response,
+  ) {
+    const locale = localeRaw === 'ru' ? 'ru' : 'en';
+    const { stream, filename } = await this.cabinet.exportJobItemsCsv(
+      tenantId,
+      id,
+      locale,
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    return new StreamableFile(stream);
   }
 
   @Get('jobs/:id/items')

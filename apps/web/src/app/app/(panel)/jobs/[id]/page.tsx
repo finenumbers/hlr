@@ -13,25 +13,22 @@ import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
-import { useT } from '@/lib/i18n';
-import { buildExcelCsv, downloadCsv } from '@/lib/csv';
-import { HLR_CSV_EXTRA_FIELDS, jobItemResultColumns } from '@/lib/job-item-columns';
-import { smscErrLabel } from '@/lib/smsc-err';
-import {
-  labelBool,
-  labelJobItemStatus,
-  labelJobStatus,
-  labelResultStatus,
-} from '@/lib/status-labels';
+import { downloadBlob } from '@/lib/csv';
+import { useI18n, useT } from '@/lib/i18n';
+import { jobItemResultColumns } from '@/lib/job-item-columns';
+import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
   const t = useT();
+  const { locale } = useI18n();
   const params = useParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const displayId = id || t('common.dash');
   const { tenantId } = useAuth();
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const job = useQuery({
     queryKey: ['cabinet', 'job', tenantId, id],
     queryFn: () => api.cabinet.job(id),
@@ -53,40 +50,24 @@ export default function CabinetJobDetailPage() {
 
   const checkType = String(job.data?.checkType ?? '');
   const service = serviceLabel(checkType, t);
-
   const isHlr = checkType === 'HLR';
+  const jobError =
+    job.data?.errorCode || job.data?.errorMessage
+      ? [job.data?.errorCode, job.data?.errorMessage].filter(Boolean).join(' — ')
+      : null;
 
-  const exportCsv = () => {
-    const rows = items.data?.items ?? [];
-    const header = [
-      'checkType',
-      'service',
-      'phone',
-      'status',
-      'resultStatus',
-      'isReachable',
-      ...(isHlr ? [...HLR_CSV_EXTRA_FIELDS, 'smscErr'] : []),
-      'errorMessage',
-    ];
-    const dataRows = rows.map((r) => [
-      checkType,
-      service,
-      r.phoneE164,
-      labelJobItemStatus(r.status, t),
-      labelResultStatus(r.resultStatus, t),
-      labelBool(r.isReachable, t),
-      ...(isHlr
-        ? [
-            ...HLR_CSV_EXTRA_FIELDS.map((field) =>
-              field === 'roaming' ? labelBool(r[field], t) : (r[field] ?? ''),
-            ),
-            smscErrLabel(r.errorCode, t) ?? '',
-          ]
-        : []),
-      r.errorMessage ?? '',
-    ]);
-    const slug = checkType === 'PING' ? 'ping-sms' : checkType === 'HLR' ? 'hlr' : 'job';
-    downloadCsv(`${slug}-${id}.csv`, buildExcelCsv([header, ...dataRows]));
+  const exportCsv = async () => {
+    if (!id) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { blob, filename } = await api.cabinet.jobItemsExport(id, locale);
+      downloadBlob(filename ?? `job-${id}.csv`, blob);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : t('cabinetJobs.exportFailed'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -109,13 +90,16 @@ export default function CabinetJobDetailPage() {
             type="button"
             variant="secondary"
             size="sm"
-            onClick={exportCsv}
-            disabled={!job.data}
+            onClick={() => void exportCsv()}
+            disabled={!job.data || exporting}
           >
-            {t('cabinetJobs.exportCsv')}
+            {exporting ? t('common.loading') : t('cabinetJobs.exportCsv')}
           </Button>
         }
       />
+      {exportError ? (
+        <p className="mb-3 text-sm text-[var(--color-danger)]">{exportError}</p>
+      ) : null}
       <QueryState
         isLoading={job.isLoading || !job.data}
         isError={job.isError}
@@ -142,6 +126,12 @@ export default function CabinetJobDetailPage() {
             <p className="mt-2 font-medium">{formatDate(job.data?.createdAt as string | undefined)}</p>
           </Card>
         </div>
+        {jobError ? (
+          <Card className="mb-4 border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)]">
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.jobError')}</p>
+            <p className="mt-2 text-sm text-[var(--color-danger)]">{jobError}</p>
+          </Card>
+        ) : null}
         <QueryState
           isLoading={items.isLoading && !items.data}
           isError={items.isError}

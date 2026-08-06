@@ -400,6 +400,15 @@ export class PrismaJobsStore implements JobsStore {
     return rows.map(mapItem);
   }
 
+  async listQueuedItemIdsByJobId(jobId: string): Promise<string[]> {
+    const rows = await this.prisma.jobItem.findMany({
+      where: { jobId, status: 'QUEUED' },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    return rows.map((row) => row.id);
+  }
+
   async findItemById(jobItemId: string): Promise<JobItemRecord | null> {
     const row = await this.prisma.jobItem.findUnique({ where: { id: jobItemId } });
     return row ? mapItem(row) : null;
@@ -657,6 +666,41 @@ export class PrismaJobsStore implements JobsStore {
               'SENT'::"JobItemStatus",
               'PENDING'::"JobItemStatus"
             )
+        )
+      ORDER BY j."updatedAt" ASC
+      LIMIT ${limit}
+    `;
+    if (ids.length === 0) {
+      return [];
+    }
+    const jobs = await this.prisma.job.findMany({
+      where: { id: { in: ids.map((row) => row.id) } },
+    });
+    const byId = new Map(jobs.map((job) => [job.id, job]));
+    return ids
+      .map((row) => {
+        const job = byId.get(row.id);
+        return job ? mapJob(job) : null;
+      })
+      .filter((job): job is JobRecord => job !== null);
+  }
+
+  async listJobsNeedingSubmitResume(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobRecord[]> {
+    const limit = Math.max(1, Math.min(input.limit, 2_000));
+    const ids = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT j.id
+      FROM jobs j
+      WHERE j.status IN ('QUEUED'::"JobStatus", 'PROCESSING'::"JobStatus")
+        AND j."itemCount" > 0
+        AND EXISTS (
+          SELECT 1
+          FROM job_items i
+          WHERE i."jobId" = j.id
+            AND i.status = 'QUEUED'::"JobItemStatus"
+            AND i."updatedAt" < ${input.olderThan}
         )
       ORDER BY j."updatedAt" ASC
       LIMIT ${limit}

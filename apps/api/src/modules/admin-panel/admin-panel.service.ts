@@ -869,6 +869,21 @@ export class AdminPanelService {
     });
   }
 
+  async exportJobItemsCsv(jobId: string, locale: 'en' | 'ru') {
+    const job = await this.prisma.job.findUnique({ where: { id: jobId } });
+    if (!job) {
+      throw new NotFoundException({
+        errorCode: ErrorCodes.NOT_FOUND,
+        message: `Job ${jobId} not found`,
+      });
+    }
+    return this.jobs.streamItemsCsvForTenant({
+      tenantId: job.tenantId,
+      jobId,
+      locale,
+    });
+  }
+
   /** Force finalize / heal a stuck PROCESSING job (SUPERADMIN). */
   async finalizeJob(jobId: string, actorUserId: string) {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });

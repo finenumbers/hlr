@@ -170,22 +170,29 @@ export class SmscProvider implements NumberLookupProvider {
       signatures: input.signatures,
     });
 
-    if (signatureValid === false) {
+    // Fail closed: missing secret (null) or bad signature (false) both reject.
+    if (signatureValid !== true) {
       await this.persistence?.saveCallback({
         tenantId: input.tenantId ?? null,
         jobItemId: input.jobItemId ?? null,
         providerCode: this.code,
         providerMessageId: payload.id !== undefined ? String(payload.id) : null,
         rawPayload: redactSecrets(input.rawPayload),
-        signatureValid: false,
+        signatureValid: signatureValid === false ? false : null,
         dedupeKey: callbackDedupeKey(payload),
-        processError: 'Invalid callback signature',
+        processError:
+          signatureValid === null
+            ? 'SMSC callback secret is not configured'
+            : 'Invalid callback signature',
       });
 
       throw new ProviderError({
         providerCode: this.code,
         kind: 'signature',
-        message: 'Invalid SMSC callback signature',
+        message:
+          signatureValid === null
+            ? 'SMSC callback secret is not configured'
+            : 'Invalid SMSC callback signature',
         retryable: false,
         correlationId: input.correlationId,
         rawResponse: redactSecrets(input.rawPayload),

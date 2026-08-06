@@ -254,6 +254,13 @@ export class InMemoryJobsStore implements JobsStore {
       .map(cloneItem);
   }
 
+  async listQueuedItemIdsByJobId(jobId: string): Promise<string[]> {
+    return [...this.items.values()]
+      .filter((item) => item.jobId === jobId && item.status === 'QUEUED')
+      .map((item) => item.id)
+      .sort();
+  }
+
   async findItemById(jobItemId: string): Promise<JobItemRecord | null> {
     const item = this.items.get(jobItemId);
     return item ? cloneItem(item) : null;
@@ -475,6 +482,30 @@ export class InMemoryJobsStore implements JobsStore {
       if (result.length >= input.limit) {
         break;
       }
+    }
+    return result;
+  }
+
+  async listJobsNeedingSubmitResume(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobRecord[]> {
+    const result: JobRecord[] = [];
+    for (const job of this.jobs.values()) {
+      if (job.status !== 'PROCESSING' && job.status !== 'QUEUED') {
+        continue;
+      }
+      if (job.itemCount <= 0) continue;
+      const hasStranded = [...this.items.values()].some(
+        (item) =>
+          item.jobId === job.id &&
+          item.status === 'QUEUED' &&
+          item.updatedAt < input.olderThan,
+      );
+      if (hasStranded) {
+        result.push(cloneJob(job));
+      }
+      if (result.length >= input.limit) break;
     }
     return result;
   }

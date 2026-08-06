@@ -44,9 +44,17 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
   }
 
   async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
-    await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
-      jobId: `submit:${payload.jobId}:${payload.itemIds.length}-${simpleHash(payload.itemIds.join(','))}`,
-    });
+    try {
+      await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
+        jobId: `submit:${payload.jobId}:${payload.itemIds.length}-${simpleHash(payload.itemIds.join(','))}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists/i.test(message)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async enqueuePollItem(payload: PollItemPayload, delayMs = 0): Promise<void> {

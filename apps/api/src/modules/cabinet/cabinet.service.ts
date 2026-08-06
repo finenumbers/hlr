@@ -11,6 +11,7 @@ import type { CreateWebhookDto } from '../webhooks/dto/create-webhook.dto';
 import type { UpdateWebhookDto } from '../webhooks/dto/update-webhook.dto';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import {
+  sanitizeClientErrorText,
   toCabinetJobView,
   toCabinetLedgerEntry,
   toCabinetSellEstimate,
@@ -123,33 +124,53 @@ export class CabinetService {
     };
   }
 
-  listJobs(
+  async listJobs(
     tenantId: string,
     page: number,
     pageSize: number,
     filters?: { status?: string; checkType?: string },
   ) {
-    return this.jobs.listByTenant(tenantId, page, pageSize, filters);
+    const result = await this.jobs.listByTenant(tenantId, page, pageSize, filters);
+    return {
+      ...result,
+      items: result.items.map((job) => toCabinetJobView(job)),
+    };
   }
 
-  getJob(tenantId: string, id: string) {
-    return this.jobs.getByIdForTenant(tenantId, id);
+  async getJob(tenantId: string, id: string) {
+    const job = await this.jobs.getByIdForTenant(tenantId, id);
+    return toCabinetJobView(job);
   }
 
-  listJobItems(
+  async listJobItems(
     tenantId: string,
     jobId: string,
     page: number,
     pageSize: number,
     status?: string,
   ) {
-    return this.jobs.listItemsForTenant({
+    const result = await this.jobs.listItemsForTenant({
       tenantId,
       jobId,
       page,
       pageSize,
       status,
     });
+    return {
+      ...result,
+      items: result.items.map((item) => ({
+        ...item,
+        errorMessage: sanitizeClientErrorText(item.errorMessage),
+      })),
+    };
+  }
+
+  exportJobItemsCsv(
+    tenantId: string,
+    jobId: string,
+    locale: 'en' | 'ru',
+  ) {
+    return this.jobs.streamItemsCsvForTenant({ tenantId, jobId, locale });
   }
 
   getBalance(tenantId: string) {

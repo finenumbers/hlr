@@ -2,11 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -404,6 +407,20 @@ export class AdminPanelController {
   @Get('jobs/:id')
   getJob(@Param('id') id: string) {
     return this.admin.getJob(id);
+  }
+
+  @Get('jobs/:id/items/export')
+  @ApiOperation({ summary: 'Download all job item results as CSV' })
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async exportJobItems(
+    @Param('id') id: string,
+    @Query('locale') localeRaw: string | undefined,
+    @Res({ passthrough: true }) res: import('express').Response,
+  ) {
+    const locale = localeRaw === 'ru' ? 'ru' : 'en';
+    const { stream, filename } = await this.admin.exportJobItemsCsv(id, locale);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream);
   }
 
   @Get('jobs/:id/items')

@@ -2,6 +2,7 @@ import type { NormalizedResult } from '@finenumbers/provider-core';
 import { isProviderError } from '@finenumbers/provider-core';
 
 import { createNoopBillingHooks, createNoopWebhookHooks } from './hooks.js';
+import { chunkArray } from './phone.js';
 import type {
   JobLifecycleServiceDeps,
   JobsBillingHooks,
@@ -913,10 +914,39 @@ export class JobLifecycleService {
       }
     }
 
+    // Heal stranded QUEUED items after crash mid csv-parse fan-out.
+    const stranded = await this.deps.store.listJobsNeedingSubmitResume({
+      olderThan,
+      limit,
+    });
+    let resumedCount = 0;
+    for (const job of stranded) {
+      const queuedIds = await this.deps.store.listQueuedItemIdsByJobId(job.id);
+      if (queuedIds.length === 0) continue;
+      await this.deps.store.markJobProcessing(job.id);
+      const storedSettings = await this.deps.store.getRuntimeSettings(job.tenantId);
+      const submitBatchSize =
+        storedSettings.submitBatchSize ?? DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
+      const batches = chunkArray(queuedIds, submitBatchSize);
+      for (const itemIds of batches) {
+        try {
+          await this.deps.queue.enqueueSubmitBatch({
+            jobId: job.id,
+            tenantId: job.tenantId,
+            itemIds,
+          });
+        } catch {
+          // Duplicate Bull jobId is fine — publisher should swallow; keep best-effort.
+        }
+      }
+      resumedCount += 1;
+    }
+
     this.logger.info('jobs.reconcile.tick', {
       polled: stale.length,
       finalized: finalizedCount,
       needing: needing.length,
+      submitResumed: resumedCount,
     });
 
     return { polled: stale.length, finalized: finalizedCount };

@@ -216,6 +216,8 @@ export class PublicApiService {
           ? null
           : String(result.job.actualCost),
       currency: result.job.currency,
+      errorCode: result.job.errorCode ?? null,
+      errorMessage: result.job.errorMessage ?? null,
       createdAt: result.job.createdAt,
       progress: result.progress,
     };
@@ -243,6 +245,8 @@ export class PublicApiService {
     estimatedCost: string | null;
     actualCost: string | null;
     currency: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
     createdAt: Date;
     progress?: PublicJobResponseDto['progress'];
   }): PublicJobResponseDto {
@@ -256,6 +260,8 @@ export class PublicApiService {
       estimatedCost: job.estimatedCost,
       actualCost: job.actualCost,
       currency: job.currency,
+      errorCode: job.errorCode ?? null,
+      errorMessage: job.errorMessage ?? null,
       createdAt: job.createdAt,
       ...(job.progress ? { progress: job.progress } : {}),
     };

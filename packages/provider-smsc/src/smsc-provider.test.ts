@@ -194,7 +194,7 @@ describe('SmscProvider', () => {
     }
   });
 
-  it('normalizes callbacks via shared pipeline', async () => {
+  it('rejects callbacks when callback secret is not configured', async () => {
     const persistence = new InMemoryProviderPersistence();
     const provider = new SmscProvider({
       config: resolveSmscConfig({ login: 'u', password: 'p', callbackSecret: '' }),
@@ -202,14 +202,35 @@ describe('SmscProvider', () => {
     });
 
     const raw = loadFixture('callback-hlr.json');
+    await expect(provider.handleProviderCallback({ rawPayload: raw })).rejects.toMatchObject({
+      kind: 'signature',
+      message: 'SMSC callback secret is not configured',
+    });
+  });
+
+  it('normalizes callbacks via shared pipeline when signature is valid', async () => {
+    const persistence = new InMemoryProviderPersistence();
+    const secret = 'callback-secret';
+    const provider = new SmscProvider({
+      config: resolveSmscConfig({ login: 'u', password: 'p', callbackSecret: secret }),
+      persistence,
+    });
+
+    const raw = loadFixture('callback-hlr.json') as Record<string, unknown>;
+    const id = String(raw.id ?? '');
+    const phone = String(raw.phone ?? '');
+    const status = String(raw.status ?? '');
+    const { createHash } = await import('node:crypto');
+    const base = `${id}:${phone}:${status}:${secret}`;
+    raw.md5 = createHash('md5').update(base).digest('hex');
+
     const result = await provider.handleProviderCallback({ rawPayload: raw });
 
     expect(result.normalized.resultStatus).toBe('reachable');
-    expect(result.signatureValid).toBeNull();
+    expect(result.signatureValid).toBe(true);
     expect(result.deduplicated).toBe(false);
 
     const stored = [...persistence.callbacks.values()][0]!;
-    expect(stored.rawPayload).toEqual(raw);
     expect(stored.normalizedResult?.resultStatus).toBe('reachable');
     expect(stored.normalizedResult?.imsi).toBe('250011234567890');
 

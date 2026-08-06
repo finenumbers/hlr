@@ -130,6 +130,45 @@ describe('CsvParseService', () => {
     expect(await store.listItemsByJobId(shell.id)).toHaveLength(0);
   });
 
+  it('resumes submit fan-out when items already attached', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const service = new CsvParseService({
+      store,
+      queue,
+      assertCanAffordFrozen: async () => undefined,
+    });
+
+    const { job } = await store.createJobWithItems({
+      tenantId: 't1',
+      checkType: 'HLR',
+      source: 'BULK',
+      phones: ['+79991234567', '+79997654321'],
+      idempotencyKey: null,
+      createdByUserId: null,
+      apiKeyId: null,
+      originalFilename: 'resume.csv',
+      currency: 'RUB',
+      priceSnapshot: hlrSnap,
+      metadata: null,
+    });
+
+    const dir = await mkdtemp(join(tmpdir(), 'fn-csv-'));
+    const path = join(dir, 'gone.csv');
+    await writeFile(path, 'should-not-reparse\n', 'utf8');
+
+    const result = await service.process({
+      jobId: job.id,
+      tenantId: 't1',
+      filePath: path,
+    });
+
+    expect(result.failed).toBe(false);
+    expect(result.batchesEnqueued).toBeGreaterThan(0);
+    expect(queue.of('submit').length).toBeGreaterThan(0);
+    await expect(import('node:fs/promises').then((fs) => fs.access(path))).rejects.toThrow();
+  });
+
   it('fails when shell has no price snapshot', async () => {
     const store = new InMemoryJobsStore();
     const queue = new InMemoryJobsQueue();

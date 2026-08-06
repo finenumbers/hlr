@@ -147,6 +147,13 @@ export const apiEnvSchema = baseEnvSchema
         message: 'API_KEY_PEPPER must be set to a strong secret in production',
       });
     }
+    if (env.NODE_ENV === 'production' && !env.SMSC_CALLBACK_SECRET.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SMSC_CALLBACK_SECRET'],
+        message: 'SMSC_CALLBACK_SECRET must be set in production',
+      });
+    }
   });
 
 export const workerEnvSchema = baseEnvSchema
@@ -164,6 +171,17 @@ export const workerEnvSchema = baseEnvSchema
     PROVIDER_BALANCE_POLL_MS: z.coerce.number().int().min(0).default(300_000),
     /** Directory for CSV bulk uploads (must match api UPLOAD_DIR). */
     UPLOAD_DIR: nonempty.default('./data/uploads'),
+    /** Orphan upload file TTL (hours). Parsed files are unlinked immediately. */
+    UPLOAD_RETENTION_HOURS: z.coerce.number().int().positive().default(24),
+  })
+  .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.SMSC_CALLBACK_SECRET.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SMSC_CALLBACK_SECRET'],
+        message: 'SMSC_CALLBACK_SECRET must be set in production',
+      });
+    }
   });
 
 export type ApiEnv = z.infer<typeof apiEnvSchema>;

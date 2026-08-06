@@ -87,9 +87,25 @@ export class BullMqJobsPublisher
 
   async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
     const queue = this.requireQueue(this.submitQueue, QUEUE_NAMES.JOBS_SUBMIT);
-    await queue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
-      jobId: `submit:${payload.jobId}:${hashIds(payload.itemIds)}`,
-    });
+    try {
+      await queue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, {
+        jobId: `submit:${payload.jobId}:${hashIds(payload.itemIds)}`,
+      });
+    } catch (error) {
+      if (isDuplicateJobIdError(error)) {
+        this.logger.log(
+          {
+            message: 'jobs.queue.enqueue_submit_duplicate',
+            jobId: payload.jobId,
+            tenantId: payload.tenantId,
+            itemCount: payload.itemIds.length,
+          },
+          'JobsQueue',
+        );
+        return;
+      }
+      throw error;
+    }
     this.logger.log(
       {
         message: 'jobs.queue.enqueue_submit',
@@ -157,4 +173,9 @@ function hashIds(ids: string[]): string {
     hash = (hash * 31 + joined.charCodeAt(i)) >>> 0;
   }
   return `${ids.length}-${hash.toString(16)}`;
+}
+
+function isDuplicateJobIdError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /already exists/i.test(message);
 }

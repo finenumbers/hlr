@@ -50,8 +50,8 @@ export function smscErrorFromBody(
     providerCode: 'smsc',
     kind: mapped.kind,
     message: body.error
-      ? `SMSC error ${code ?? '?'}: ${body.error}`
-      : `SMSC error_code=${code ?? 'unknown'}`,
+      ? `Provider error ${code ?? '?'}: ${body.error}`
+      : `Provider error_code=${code ?? 'unknown'}`,
     providerErrorCode: code,
     providerErrorMessage: body.error ?? null,
     httpStatus: options.httpStatus ?? null,

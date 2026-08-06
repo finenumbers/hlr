@@ -1,3 +1,4 @@
+import { unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -6,6 +7,7 @@ import type { CreateJobServiceDeps, JobsLogger } from './ports.js';
 import { DEFAULT_JOB_RUNTIME_SETTINGS } from './queue-names.js';
 import type { CsvParsePayload, JobRecord, JobRuntimeSettings } from './types.js';
 import { JobsNotFoundError, JobsValidationError } from './types.js';
+import { isTerminalJobStatus } from './state-machine.js';
 
 const silentLogger: JobsLogger = {
   debug() {},
@@ -94,6 +96,22 @@ export type CsvParseResult = {
   failed: boolean;
 };
 
+async function safeUnlink(filePath: string, logger: JobsLogger): Promise<void> {
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code: unknown }).code)
+        : '';
+    if (code === 'ENOENT') return;
+    logger.warn('jobs.csv_parse.unlink_failed', {
+      filePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * Worker-side: parse uploaded CSV → attach items → enqueue submit batches.
  */
@@ -105,20 +123,49 @@ export class CsvParseService {
   }
 
   async process(payload: CsvParsePayload): Promise<CsvParseResult> {
+    try {
+      return await this.processInner(payload);
+    } finally {
+      await safeUnlink(payload.filePath, this.logger);
+    }
+  }
+
+  private async processInner(payload: CsvParsePayload): Promise<CsvParseResult> {
     const job = await this.deps.store.findJobById(payload.jobId);
     if (!job || job.tenantId !== payload.tenantId) {
       throw new JobsNotFoundError(`Job ${payload.jobId} not found for CSV parse`);
     }
 
+    // Crash-safe resume: items already attached but submit fan-out may be incomplete.
     if (job.itemCount > 0) {
-      this.logger.info('jobs.csv_parse.already_attached', {
+      if (isTerminalJobStatus(job.status)) {
+        this.logger.info('jobs.csv_parse.already_terminal', {
+          jobId: job.id,
+          status: job.status,
+          itemCount: job.itemCount,
+        });
+        return {
+          job,
+          workUnits: job.itemCount,
+          batchesEnqueued: 0,
+          deduplicatedPhoneCount: 0,
+          failed: false,
+        };
+      }
+
+      const batchesEnqueued = await this.enqueueQueuedSubmitBatches(
+        job,
+        payload.requestId,
+      );
+      this.logger.info('jobs.csv_parse.resume_enqueued', {
         jobId: job.id,
         itemCount: job.itemCount,
+        batchesEnqueued,
       });
       return {
         job,
         workUnits: job.itemCount,
-        batchesEnqueued: 0,
+        batchesEnqueued,
         deduplicatedPhoneCount: 0,
         failed: false,
       };
@@ -283,25 +330,17 @@ export class CsvParseService {
       currency: job.currency,
     });
 
-    const batches = chunkArray(
+    const batchesEnqueued = await this.enqueueSubmitBatches(
+      updated,
       items.map((item) => item.id),
-      settings.submitBatchSize,
+      payload.requestId,
     );
-
-    for (const itemIds of batches) {
-      await this.deps.queue.enqueueSubmitBatch({
-        jobId: updated.id,
-        tenantId: updated.tenantId,
-        itemIds,
-        ...(payload.requestId ? { requestId: payload.requestId } : {}),
-      });
-    }
 
     this.logger.info('jobs.csv_parse.enqueued', {
       jobId: updated.id,
       tenantId: updated.tenantId,
       workUnits: items.length,
-      batchesEnqueued: batches.length,
+      batchesEnqueued,
       deduplicatedPhoneCount: normalized.deduplicatedCount,
       ...(payload.requestId ? { requestId: payload.requestId } : {}),
     });
@@ -309,10 +348,45 @@ export class CsvParseService {
     return {
       job: updated,
       workUnits: items.length,
-      batchesEnqueued: batches.length,
+      batchesEnqueued,
       deduplicatedPhoneCount: normalized.deduplicatedCount,
       failed: false,
     };
+  }
+
+  /** Re-enqueue submit for any still-QUEUED items (idempotent via Bull jobId / claim). */
+  async enqueueQueuedSubmitBatches(
+    job: JobRecord,
+    requestId?: string,
+  ): Promise<number> {
+    const queuedIds = await this.deps.store.listQueuedItemIdsByJobId(job.id);
+    if (queuedIds.length === 0) {
+      return 0;
+    }
+    await this.deps.store.markJobProcessing(job.id);
+    return this.enqueueSubmitBatches(job, queuedIds, requestId);
+  }
+
+  private async enqueueSubmitBatches(
+    job: JobRecord,
+    itemIds: string[],
+    requestId?: string,
+  ): Promise<number> {
+    const storedSettings = await this.deps.store.getRuntimeSettings(job.tenantId);
+    const settings = mergeSettings({
+      ...DEFAULT_JOB_RUNTIME_SETTINGS,
+      ...storedSettings,
+    });
+    const batches = chunkArray(itemIds, settings.submitBatchSize);
+    for (const ids of batches) {
+      await this.deps.queue.enqueueSubmitBatch({
+        jobId: job.id,
+        tenantId: job.tenantId,
+        itemIds: ids,
+        ...(requestId ? { requestId } : {}),
+      });
+    }
+    return batches.length;
   }
 }
 

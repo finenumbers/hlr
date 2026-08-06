@@ -77,6 +77,9 @@ export interface JobsStore {
 
   listItemsByJobId(jobId: string): Promise<JobItemRecord[]>;
 
+  /** Item ids still QUEUED for a job (ordered for stable resume batching). */
+  listQueuedItemIdsByJobId(jobId: string): Promise<string[]>;
+
   findItemById(jobItemId: string): Promise<JobItemRecord | null>;
 
   findItemByProviderMessageId(input: {
@@ -163,6 +166,15 @@ export interface JobsStore {
   }): Promise<JobItemRecord[]>;
 
   listJobsNeedingFinalize(input: {
+    limit: number;
+  }): Promise<JobRecord[]>;
+
+  /**
+   * Jobs with stranded QUEUED items (fan-out lost after attach / crash).
+   * Used by reconciliation to re-enqueue submit batches.
+   */
+  listJobsNeedingSubmitResume(input: {
+    olderThan: Date;
     limit: number;
   }): Promise<JobRecord[]>;
 }

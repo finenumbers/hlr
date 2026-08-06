@@ -113,6 +113,59 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 /** Multipart upload (do not set Content-Type — browser sets boundary). */
+/** Authenticated binary download (CSV export, etc.). */
+export async function apiDownload(
+  path: string,
+  options: Omit<RequestOptions, 'body'> = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  const apiBase = await resolvePublicApiUrl();
+  const headers: Record<string, string> = {
+    Accept: 'text/csv,application/octet-stream,*/*',
+  };
+  if (options.auth !== false) {
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  const tenantId = options.tenantId === undefined ? getTenantId() : options.tenantId;
+  if (tenantId) headers['X-Tenant-Id'] = tenantId;
+
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase}${path}`, {
+      method: 'GET',
+      headers,
+      signal: options.signal,
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach API at ${apiBase}. Check PUBLIC_API_URL and that api is up.`,
+      0,
+    );
+  }
+
+  if (!res.ok) {
+    const text = await res.text();
+    let message = `Request failed (${res.status})`;
+    try {
+      const data = JSON.parse(text) as {
+        error?: { message?: string; code?: string };
+      };
+      message = data.error?.message ?? message;
+      throw new ApiError(message, res.status, data.error?.code);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(message, res.status);
+    }
+  }
+
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="([^"]+)"/i.exec(disposition);
+  return {
+    blob: await res.blob(),
+    filename: match?.[1] ?? null,
+  };
+}
+
 export async function apiFormRequest<T>(
   path: string,
   form: FormData,
@@ -222,6 +275,8 @@ export const api = {
     job: (id: string) => apiRequest<Record<string, unknown>>(`/admin/jobs/${id}`),
     jobItems: (id: string, q: string) =>
       apiRequest<Paginated<Record<string, unknown>>>(`/admin/jobs/${id}/items?${q}`),
+    jobItemsExport: (id: string, locale: string) =>
+      apiDownload(`/admin/jobs/${id}/items/export?locale=${encodeURIComponent(locale)}`),
     finalizeJob: (id: string) =>
       apiRequest<Record<string, unknown>>(`/admin/jobs/${id}/finalize`, { method: 'POST' }),
     wallet: (tenantId: string) =>
@@ -341,6 +396,10 @@ export const api = {
     job: (id: string) => apiRequest<Record<string, unknown>>(`/cabinet/jobs/${id}`),
     jobItems: (id: string, q: string) =>
       apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/jobs/${id}/items?${q}`),
+    jobItemsExport: (id: string, locale: string) =>
+      apiDownload(
+        `/cabinet/jobs/${id}/items/export?locale=${encodeURIComponent(locale)}`,
+      ),
     balance: () => apiRequest<Record<string, unknown>>('/cabinet/billing/balance'),
     ledger: () => apiRequest<unknown[]>('/cabinet/billing/ledger'),
     tariff: () =>

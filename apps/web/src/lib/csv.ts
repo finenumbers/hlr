@@ -16,7 +16,10 @@ export function buildExcelCsv(rows: unknown[][]): string {
 }
 
 export function downloadCsv(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  downloadBlob(filename, new Blob([content], { type: 'text/csv;charset=utf-8' }));
+}
+
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
