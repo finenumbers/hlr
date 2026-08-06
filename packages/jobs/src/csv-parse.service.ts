@@ -175,15 +175,10 @@ export class CsvParseService {
 
     await this.deps.store.markJobProcessing(job.id);
 
-    let parsed;
-    try {
-      parsed = await streamParsePhoneFile(payload.filePath, {
-        maxRows: settings.maxCsvRows,
-      });
-    } catch (error) {
-      // Keep file for Bull retry — do not unlink on retryable read failure.
-      throw error;
-    }
+    // On read failure: leave file on disk for Bull retry (no unlink here).
+    const parsed = await streamParsePhoneFile(payload.filePath, {
+      maxRows: settings.maxCsvRows,
+    });
 
     if (parsed.truncated || parsed.rowCount > settings.maxCsvRows) {
       const failed = await this.deps.store.finalizeJob({
