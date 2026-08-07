@@ -7,11 +7,16 @@ import { QueryState } from '@/components/data/query-state';
 import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
-import { useT } from '@/lib/i18n';
-import { formatMoney } from '@/lib/utils';
+import {
+  formatCabinetLedgerDescription,
+  formatCabinetLedgerType,
+} from '@/lib/billing/ledger-labels';
+import { useI18n, useT } from '@/lib/i18n';
+import { formatDate, formatMoney } from '@/lib/utils';
 
 export default function CabinetBillingPage() {
   const t = useT();
+  const { locale } = useI18n();
   const { tenantId } = useAuth();
   const balance = useQuery({
     queryKey: ['cabinet', 'balance', tenantId],
@@ -97,14 +102,37 @@ export default function CabinetBillingPage() {
               .slice()
               .reverse()
               .slice(0, 50)
-              .map((row) => (
-                <li key={String(row.id)} className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2">
-                  <span>
-                    {String(row.type)} · {String(row.amount)}
-                  </span>
-                  <span className="text-[var(--color-ink-muted)]">{String(row.createdAt)}</span>
-                </li>
-              ))}
+              .map((row) => {
+                const typeLabel = formatCabinetLedgerType(t, String(row.type ?? ''));
+                const description = formatCabinetLedgerDescription(
+                  t,
+                  row.description == null ? null : String(row.description),
+                );
+                const amount = formatMoney(
+                  String(row.amount ?? '0'),
+                  String(row.currency ?? balance.data?.currency ?? 'RUB'),
+                );
+                return (
+                  <li
+                    key={String(row.id)}
+                    className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-medium">
+                        {typeLabel} · {amount}
+                      </span>
+                      {description ? (
+                        <span className="mt-0.5 block text-xs text-[var(--color-ink-muted)]">
+                          {description}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="shrink-0 text-[var(--color-ink-muted)]">
+                      {formatDate(String(row.createdAt ?? ''), locale)}
+                    </span>
+                  </li>
+                );
+              })}
             {!ledger.data?.length ? (
               <li className="text-[var(--color-ink-muted)]">{t('cabinetBilling.noTransactions')}</li>
             ) : null}
