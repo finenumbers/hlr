@@ -413,6 +413,33 @@ export class LedgerService {
     return rows.map((row) => this.toEntryView(row));
   }
 
+  /**
+   * Paginated ledger (newest first) for cabinet/admin UI.
+   */
+  async listLedgerEntriesPage(
+    walletId: string,
+    page: number,
+    pageSize: number,
+    db: DbClient = this.prisma,
+  ): Promise<{ items: LedgerEntryView[]; total: number }> {
+    const safePage = Math.max(1, page);
+    const safeSize = Math.min(100, Math.max(1, pageSize));
+    const where = { walletId };
+    const [total, rows] = await Promise.all([
+      db.walletTransaction.count({ where }),
+      db.walletTransaction.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (safePage - 1) * safeSize,
+        take: safeSize,
+      }),
+    ]);
+    return {
+      items: rows.map((row) => this.toEntryView(row)),
+      total,
+    };
+  }
+
   async listLedgerEntriesForJobItem(
     jobItemId: string,
     db: DbClient = this.prisma,

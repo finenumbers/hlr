@@ -248,6 +248,14 @@ export class NestBillingService extends BillingWorkflowPort {
     }
   }
 
+  async listLedgerPage(tenantId: string, page: number, pageSize: number) {
+    try {
+      return await this.core.listLedgerPage(tenantId, page, pageSize);
+    } catch (error) {
+      throw this.toHttp(error);
+    }
+  }
+
   async listLedgerForJobItem(jobItemId: string) {
     try {
       return await this.core.listLedgerForJobItem(jobItemId);

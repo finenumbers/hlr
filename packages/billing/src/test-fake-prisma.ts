@@ -67,6 +67,9 @@ type JobItemRow = {
   tenantId: string;
   checkType: 'HLR' | 'PING';
   phoneE164: string;
+  status: 'QUEUED' | 'RESERVED' | 'SENT' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  resultStatus: string | null;
+  billingAction: 'CAPTURE' | 'RELEASE' | null;
   estimatedCost: Prisma.Decimal | null;
   actualCost: Prisma.Decimal | null;
   currency: string;
@@ -402,12 +405,20 @@ export class FakeBillingPrisma {
       where,
       select,
     }: {
-      where: { jobId?: string; id?: { in: string[] } };
+      where: {
+        jobId?: string;
+        id?: { in: string[] };
+        status?: { in: string[] };
+      };
       select?: Record<string, boolean>;
     }) => {
       let rows = [...this.jobItems.values()];
       if (where.jobId) {
         rows = rows.filter((i) => i.jobId === where.jobId);
+      }
+      if (where.status && 'in' in where.status) {
+        const set = new Set(where.status.in);
+        rows = rows.filter((i) => set.has(i.status));
       }
       if (where.id && 'in' in where.id) {
         const set = new Set(where.id.in);
@@ -630,6 +641,9 @@ export class FakeBillingPrisma {
       tenantId,
       checkType,
       phoneE164: '+79001234567',
+      status: 'QUEUED',
+      resultStatus: null,
+      billingAction: null,
       estimatedCost: unitSell,
       actualCost: null,
       currency: 'RUB',
@@ -673,6 +687,9 @@ export class FakeBillingPrisma {
     tenantId: string;
     checkType: 'HLR' | 'PING';
     phoneE164: string;
+    status?: JobItemRow['status'];
+    resultStatus?: string | null;
+    billingAction?: 'CAPTURE' | 'RELEASE' | null;
     estimatedCost?: string | null;
     actualCost?: string | null;
     currency?: string;
@@ -687,6 +704,9 @@ export class FakeBillingPrisma {
       tenantId: item.tenantId,
       checkType: item.checkType,
       phoneE164: item.phoneE164,
+      status: item.status ?? 'QUEUED',
+      resultStatus: item.resultStatus ?? null,
+      billingAction: item.billingAction ?? null,
       estimatedCost: item.estimatedCost == null ? null : dec(item.estimatedCost),
       actualCost: item.actualCost == null ? null : dec(item.actualCost),
       currency: item.currency ?? 'RUB',
@@ -710,5 +730,14 @@ export class FakeBillingPrisma {
       });
     }
     return row;
+  }
+
+  patchJobItem(
+    id: string,
+    patch: Partial<Pick<JobItemRow, 'status' | 'resultStatus' | 'billingAction'>>,
+  ): void {
+    const row = this.jobItems.get(id);
+    if (!row) throw new Error('job item not found');
+    Object.assign(row, patch);
   }
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import {
   computeProgress,
   CreateJobService,
   JobLifecycleService,
+  JobsConflictError,
   JobsNotFoundError,
   JobsValidationError,
   type ApplyProviderUpdateInput,
@@ -271,6 +273,18 @@ export class JobsService {
     locale: 'en' | 'ru';
   }) {
     const job = await this.getByIdForTenant(input.tenantId, input.jobId);
+    const exportMax = this.config.jobItemsExportMax;
+    const totalItems = await this.prisma.jobItem.count({
+      where: { tenantId: input.tenantId, jobId: input.jobId },
+    });
+    if (totalItems > exportMax) {
+      throw new PayloadTooLargeException({
+        errorCode: ErrorCodes.PAYLOAD_TOO_LARGE,
+        message: `Job has ${totalItems} items; XLSX export is limited to ${exportMax}. Split the job or raise JOB_ITEMS_EXPORT_MAX.`,
+        details: { totalItems, exportMax },
+      });
+    }
+
     const pageSize = 500;
     const items: ReturnType<typeof mapJobItemListRow>[] = [];
     let cursor: string | undefined;
@@ -544,6 +558,12 @@ export class JobsService {
       if (error instanceof JobsNotFoundError) {
         throw new NotFoundException({
           errorCode: ErrorCodes.NOT_FOUND,
+          message: error.message,
+        });
+      }
+      if (error instanceof JobsConflictError) {
+        throw new ConflictException({
+          errorCode: ErrorCodes.CONFLICT,
           message: error.message,
         });
       }

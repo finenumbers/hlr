@@ -935,8 +935,8 @@ export class AdminPanelService {
     return this.wallets.getByTenantId(tenantId);
   }
 
-  listLedger(tenantId: string) {
-    return this.billing.listLedger(tenantId);
+  async listLedger(tenantId: string, page = 1, pageSize = 50) {
+    return this.billing.listLedgerPage(tenantId, page, pageSize);
   }
 
   /**

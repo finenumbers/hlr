@@ -177,9 +177,14 @@ export class CabinetService {
     return this.wallets.getByTenantId(tenantId);
   }
 
-  async listLedger(tenantId: string) {
-    const rows = await this.billing.listLedger(tenantId);
-    return rows.map(toCabinetLedgerEntry);
+  async listLedger(tenantId: string, page = 1, pageSize = 50) {
+    const result = await this.billing.listLedgerPage(tenantId, page, pageSize);
+    return {
+      items: result.items.map(toCabinetLedgerEntry),
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.total,
+    };
   }
 
   /**

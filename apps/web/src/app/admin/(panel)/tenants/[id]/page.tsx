@@ -54,7 +54,7 @@ export default function AdminTenantDetailPage() {
   });
   const ledger = useQuery({
     queryKey: ['admin', 'ledger', id],
-    queryFn: () => api.admin.ledger(id),
+    queryFn: () => api.admin.ledger(id, 'page=1&pageSize=50'),
     enabled: Boolean(id),
   });
 
@@ -451,7 +451,7 @@ export default function AdminTenantDetailPage() {
             isLoading={ledger.isLoading}
             isError={ledger.isError}
             error={ledger.error}
-            isEmpty={!ledger.data?.length}
+            isEmpty={!ledger.data?.items?.length}
             emptyTitle={t('adminTenants.ledgerEmpty')}
             onRetry={() => void ledger.refetch()}
           >
@@ -497,17 +497,11 @@ export default function AdminTenantDetailPage() {
                     ) ?? t('common.dash'),
                 },
               ]}
-              rows={[...((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])]
-                .slice()
-                .reverse()
-                .slice(0, 50)}
+              rows={ledger.data?.items ?? []}
               rowKey={(row) => String(row.id)}
-              page={1}
-              pageSize={50}
-              total={Math.min(
-                50,
-                ((ledger.data as Array<Record<string, unknown>> | undefined) ?? []).length,
-              )}
+              page={ledger.data?.page ?? 1}
+              pageSize={ledger.data?.pageSize ?? 50}
+              total={ledger.data?.total ?? 0}
               onPageChange={() => undefined}
             />
           </QueryState>

@@ -141,6 +141,13 @@ export const apiEnvSchema = baseEnvSchema
     OPENAPI_ENABLED: booleanish.optional(),
     /** Prometheus metrics endpoint. */
     METRICS_ENABLED: booleanish.default(true),
+    /**
+     * When set, GET /metrics requires `Authorization: Bearer <token>`.
+     * Prefer setting this in production even if NPM denies /metrics publicly.
+     */
+    METRICS_SCRAPE_TOKEN: z.string().optional().default(''),
+    /** Max job items for XLSX export (hard cap; larger jobs → 413). */
+    JOB_ITEMS_EXPORT_MAX: z.coerce.number().int().positive().default(50_000),
     /** Directory for CSV bulk uploads (api writes, worker reads). */
     UPLOAD_DIR: nonempty.default('./data/uploads'),
   })

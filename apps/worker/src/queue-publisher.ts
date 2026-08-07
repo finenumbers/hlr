@@ -10,6 +10,7 @@ import {
   type PollItemPayload,
   type ReconcileStalePayload,
   type SubmitBatchPayload,
+  type SubmitDlqHealPayload,
 } from '@finenumbers/jobs';
 import { Queue } from 'bullmq';
 import type IORedis from 'ioredis';
@@ -51,6 +52,24 @@ export class WorkerQueuePublisher implements JobsQueuePublisher {
       : `submit:${payload.jobId}:${fingerprint}`;
     try {
       await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_BATCH, payload, { jobId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists/i.test(message)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async enqueueSubmitDlqHeal(payload: SubmitDlqHealPayload): Promise<void> {
+    const fingerprint = `${payload.itemIds.length}-${simpleHash(payload.itemIds.join(','))}`;
+    const jobId = `dlq-heal:${payload.jobId}:${fingerprint}`;
+    try {
+      await this.submitQueue.add(QUEUE_JOB_NAMES.SUBMIT_DLQ_HEAL, payload, {
+        jobId,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 2_000 },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/already exists/i.test(message)) {

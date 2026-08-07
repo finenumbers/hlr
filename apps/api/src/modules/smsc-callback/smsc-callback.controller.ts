@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -9,6 +10,7 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiExcludeController, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { isProviderError } from '@finenumbers/provider-core';
@@ -16,6 +18,10 @@ import type { Request } from 'express';
 
 import { Public } from '../../common/decorators/public.decorator';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import {
+  IpRateLimit,
+  IpRateLimitGuard,
+} from '../../common/guards/ip-rate-limit.guard';
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { JobsService } from '../jobs/jobs.service';
 import { ProviderSmscService } from '../provider-smsc/provider-smsc.service';
@@ -45,6 +51,8 @@ export class SmscCallbackController {
   ) {}
 
   @Public()
+  @UseGuards(IpRateLimitGuard)
+  @IpRateLimit({ scope: 'smsc_callback', rpm: 600 })
   @Post('callback')
   @HttpCode(200)
   @ApiOperation({ summary: 'SMSC status callback (POST)' })
@@ -57,6 +65,8 @@ export class SmscCallbackController {
   }
 
   @Public()
+  @UseGuards(IpRateLimitGuard)
+  @IpRateLimit({ scope: 'smsc_callback', rpm: 600 })
   @Get('callback')
   @HttpCode(200)
   @ApiOperation({ summary: 'SMSC status callback (GET)' })
@@ -112,6 +122,27 @@ export class SmscCallbackController {
             providerMessageId: result.providerMessageId,
             jobItemId: null,
             reason: 'item_not_found',
+          };
+        }
+        if (error instanceof ConflictException) {
+          // Ambiguous id(+phone) — do not apply to the wrong tenant/item.
+          this.logger.error(
+            {
+              message: 'smsc.callback.ambiguous_provider_message_id',
+              providerMessageId: result.providerMessageId,
+              phoneE164: result.normalized.phoneE164,
+              detail: error.message,
+            },
+            'SmscCallback',
+          );
+          return {
+            ok: true,
+            applied: false,
+            duplicate: false,
+            deduplicated: result.deduplicated,
+            providerMessageId: result.providerMessageId,
+            jobItemId: null,
+            reason: 'ambiguous_provider_message_id',
           };
         }
         throw error;

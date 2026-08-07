@@ -27,6 +27,7 @@ import {
   priceSnapshotFromResolved,
   type PriceSnapshotDto,
 } from './price-quote.js';
+import { resolveJobItemSettleAction } from './settle-action.js';
 import { TariffResolver } from './tariff-resolver.js';
 import type {
   AdjustmentResult,
@@ -227,6 +228,27 @@ export class BillingService {
       });
     }
     return this.ledger.listLedgerEntries(wallet.id);
+  }
+
+  async listLedgerPage(
+    tenantId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: LedgerEntryView[]; page: number; pageSize: number; total: number }> {
+    const wallet = await this.prisma.wallet.findUnique({ where: { tenantId } });
+    if (!wallet) {
+      throw new BillingError('WALLET_NOT_FOUND', `Wallet for tenant ${tenantId} not found`, {
+        details: { tenantId },
+      });
+    }
+    const safePage = Math.max(1, page);
+    const safeSize = Math.min(100, Math.max(1, pageSize));
+    const { items, total } = await this.ledger.listLedgerEntriesPage(
+      wallet.id,
+      safePage,
+      safeSize,
+    );
+    return { items, page: safePage, pageSize: safeSize, total };
   }
 
   /** All money movements for one check (job item). */
@@ -1161,23 +1183,47 @@ export class BillingService {
   }
 
   /**
-   * Capture any open HOLDs for terminal items of a job (idempotent).
-   * Used when item-terminal capture was skipped earlier but SMSC already charged.
+   * Settle open HOLDs for terminal items (idempotent).
+   * Honors JobItem.billingAction: CAPTURE vs RELEASE (Policy B).
+   * Legacy null action uses resolveJobItemSettleAction heuristic.
    */
-  async settleUnsettledHoldsForJob(jobId: string): Promise<{ attempted: number; captured: number }> {
+  async settleUnsettledHoldsForJob(jobId: string): Promise<{
+    attempted: number;
+    captured: number;
+    released: number;
+  }> {
     const items = await this.prisma.jobItem.findMany({
       where: {
         jobId,
         status: { in: ['COMPLETED', 'FAILED'] },
       },
-      select: { id: true, tenantId: true },
+      select: {
+        id: true,
+        tenantId: true,
+        status: true,
+        billingAction: true,
+        resultStatus: true,
+      },
     });
 
     let captured = 0;
+    let released = 0;
     for (const item of items) {
       try {
         const open = await this.ledger.findOpenHoldForJobItem(item.id);
         if (!open) {
+          continue;
+        }
+        const action = resolveJobItemSettleAction(item);
+        if (action === 'release') {
+          const result = await this.releaseForJobItem({
+            tenantId: item.tenantId,
+            jobItemId: item.id,
+            reason: 'finalize_settle_release',
+          });
+          if (result.created || result.releasedAmount !== '0') {
+            released += 1;
+          }
           continue;
         }
         const result = await this.captureForJobItem({
@@ -1196,7 +1242,7 @@ export class BillingService {
         });
       }
     }
-    return { attempted: items.length, captured };
+    return { attempted: items.length, captured, released };
   }
 
   /**

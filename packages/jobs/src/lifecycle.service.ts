@@ -269,15 +269,23 @@ export class JobLifecycleService {
           ) ?? 'PENDING';
 
         const patch = normalizedToPatch(result.normalized);
+        const terminalStatus =
+          nextStatus === 'COMPLETED' || nextStatus === 'FAILED' ? nextStatus : 'PENDING';
         const updated = await this.deps.store.updateItemAfterSubmit({
           jobItemId: claimed.id,
-          status: nextStatus === 'COMPLETED' || nextStatus === 'FAILED' ? nextStatus : 'PENDING',
+          status: terminalStatus,
           providerCode: result.providerCode,
           ...patch,
           providerMessageId: result.providerMessageId ?? patch.providerMessageId,
           sentAt: this.now(),
           completedAt:
-            nextStatus === 'COMPLETED' || nextStatus === 'FAILED' ? this.now() : null,
+            terminalStatus === 'COMPLETED' || terminalStatus === 'FAILED'
+              ? this.now()
+              : null,
+          billingAction:
+            terminalStatus === 'COMPLETED' || terminalStatus === 'FAILED'
+              ? 'CAPTURE'
+              : undefined,
         });
 
         if (!updated) {
@@ -289,7 +297,7 @@ export class JobLifecycleService {
           anyTerminal = true;
           failed += updated.status === 'FAILED' ? 1 : 0;
           submitted += updated.status === 'COMPLETED' ? 1 : 0;
-          await this.onItemBecameTerminal(updated);
+          await this.onItemBecameTerminal(updated, 'capture');
         } else {
           submitted += 1;
           await this.deps.queue.enqueuePollItem(
@@ -320,6 +328,7 @@ export class JobLifecycleService {
           errorCode: code,
           errorMessage: message,
           completedAt: this.now(),
+          billingAction: 'RELEASE',
         });
         failed += 1;
         anyTerminal = true;
@@ -392,6 +401,7 @@ export class JobLifecycleService {
           errorCode: 'MISSING_PROVIDER_MESSAGE_ID',
           errorMessage: 'Cannot poll without providerMessageId',
           completedAt: this.now(),
+          billingAction: 'RELEASE',
         },
       });
       if (failed) {
@@ -422,6 +432,7 @@ export class JobLifecycleService {
           errorCode: 'CHECK_TIMEOUT',
           errorMessage: 'Timed out waiting for provider final status',
           completedAt: this.now(),
+          billingAction: 'RELEASE',
         },
       });
       if (failed) {
@@ -518,6 +529,7 @@ export class JobLifecycleService {
             : 'POLL_FAILED',
           errorMessage: error instanceof Error ? error.message : 'Poll failed',
           completedAt: this.now(),
+          billingAction: 'RELEASE',
         },
       });
       if (failed) {
@@ -560,6 +572,7 @@ export class JobLifecycleService {
         providerCode: input.providerCode ?? input.normalized.providerCode,
         providerMessageId: input.providerMessageId,
         tenantId: input.tenantId,
+        phoneE164: input.normalized.phoneE164,
       });
     }
 
@@ -683,6 +696,7 @@ export class JobLifecycleService {
         ...normalizedToPatch(normalized),
         providerMessageId: normalized.providerMessageId ?? item.providerMessageId,
         completedAt: this.now(),
+        billingAction: 'CAPTURE',
       },
     });
 
@@ -946,6 +960,68 @@ export class JobLifecycleService {
       resumedCount += 1;
     }
 
+    // Heal stuck RESERVED items (lost Bull submit / failed DLQ heal).
+    const staleReserved = await this.deps.store.listStaleReservedItems({
+      olderThan,
+      limit,
+    });
+    let reservedResumed = 0;
+    let reservedFailed = 0;
+    const reservedByJob = new Map<string, { tenantId: string; itemIds: string[] }>();
+    for (const item of staleReserved) {
+      const settings = await this.deps.store.getRuntimeSettings(item.tenantId);
+      const ageMs = this.now().getTime() - item.updatedAt.getTime();
+      const hardTimeoutMs = settings.checkTimeoutSec * 1000;
+      if (ageMs >= hardTimeoutMs) {
+        const failed = await this.deps.store.transitionItem({
+          jobItemId: item.id,
+          fromStatuses: ['RESERVED'],
+          toStatus: 'FAILED',
+          patch: {
+            errorCode: 'RESERVED_STALE_TIMEOUT',
+            errorMessage: 'RESERVED item exceeded check timeout without submit progress',
+            completedAt: this.now(),
+            billingAction: 'RELEASE',
+          },
+        });
+        if (failed) {
+          await this.onItemBecameTerminal(failed, 'release');
+          reservedFailed += 1;
+          await this.deps.queue.enqueueFinalizeJob({
+            jobId: failed.jobId,
+            tenantId: failed.tenantId,
+            reason: 'reserved-stale-timeout',
+          });
+        }
+        continue;
+      }
+      const bucket = reservedByJob.get(item.jobId) ?? {
+        tenantId: item.tenantId,
+        itemIds: [],
+      };
+      bucket.itemIds.push(item.id);
+      reservedByJob.set(item.jobId, bucket);
+    }
+    for (const [jobId, bucket] of reservedByJob) {
+      const storedSettings = await this.deps.store.getRuntimeSettings(bucket.tenantId);
+      const submitBatchSize =
+        storedSettings.submitBatchSize ?? DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
+      const nonce = `reserved-${Date.now().toString(36)}`;
+      for (const itemIds of chunkArray(bucket.itemIds, submitBatchSize)) {
+        try {
+          await this.deps.queue.enqueueSubmitBatch({
+            jobId,
+            tenantId: bucket.tenantId,
+            itemIds,
+            enqueueNonce: nonce,
+          });
+          reservedResumed += itemIds.length;
+        } catch {
+          // Best-effort; next tick retries.
+        }
+      }
+    }
+
     // Empty CSV shells: re-enqueue parse or fail when file is gone / heal budget exhausted.
     // Use a longer age gate than poll interval so long stream-parses are not killed.
     const csvShellOlderThan = new Date(this.now().getTime() - 5 * 60 * 1000);
@@ -1054,6 +1130,7 @@ export class JobLifecycleService {
           errorCode: 'QUEUE_DEAD_LETTER',
           errorMessage: reason,
           completedAt: this.now(),
+          billingAction: 'RELEASE',
         },
       });
       if (failed) {
@@ -1080,6 +1157,7 @@ export class JobLifecycleService {
               errorCode: 'QUEUE_DEAD_LETTER',
               errorMessage: `${reason} (dlq cycles exhausted)`,
               completedAt: this.now(),
+              billingAction: 'RELEASE',
             },
           });
           if (failed) {
@@ -1139,17 +1217,28 @@ export class JobLifecycleService {
     if (item.status !== 'COMPLETED' && item.status !== 'FAILED') {
       return;
     }
+    const terminalStatus: 'COMPLETED' | 'FAILED' = item.status;
+    const persisted: JobItemRecord['billingAction'] =
+      billingAction === 'release' ? 'RELEASE' : 'CAPTURE';
+    if (item.billingAction !== persisted) {
+      await this.deps.store.transitionItem({
+        jobItemId: item.id,
+        fromStatuses: [terminalStatus],
+        toStatus: terminalStatus,
+        patch: { billingAction: persisted },
+      });
+    }
     await this.billing.onItemTerminal({
       tenantId: item.tenantId,
       jobItemId: item.id,
-      status: item.status,
+      status: terminalStatus,
       billingAction,
     });
     await this.webhooks.onItemTerminal({
       tenantId: item.tenantId,
       jobItemId: item.id,
       jobId: item.jobId,
-      status: item.status,
+      status: terminalStatus,
     });
     await this.deps.store.refreshJobCounters(item.jobId);
   }

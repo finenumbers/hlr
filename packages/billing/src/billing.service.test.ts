@@ -579,6 +579,71 @@ describe('BillingService ledger flows', () => {
     ).rejects.toMatchObject({ code: 'NEGATIVE_BALANCE_FORBIDDEN' });
   });
 
+  it('finalize settle releases open HOLD for RELEASE billingAction (not capture)', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-settle-release';
+    db.seedWallet(tenantId, '10');
+    db.seedAssignedPlan(tenantId, {
+      code: 'default',
+      sellPrice: '2.000000',
+      checkType: 'HLR',
+    });
+    const item = db.seedJobItem(tenantId);
+    const billing = createBilling(db);
+
+    await billing.reserveForJobItem({
+      tenantId,
+      jobItemId: item.id,
+      checkType: 'HLR',
+    });
+    expect((await billing.getWallet(tenantId)).heldBalance).toBe('2');
+
+    // Simulate timeout terminal + failed release (HOLD still open).
+    db.patchJobItem(item.id, {
+      status: 'FAILED',
+      billingAction: 'RELEASE',
+      resultStatus: null,
+    });
+
+    const settled = await billing.settleUnsettledHoldsForJob(item.jobId);
+    expect(settled.released).toBe(1);
+    expect(settled.captured).toBe(0);
+    const wallet = await billing.getWallet(tenantId);
+    expect(wallet.heldBalance).toBe('0');
+    expect(wallet.availableBalance).toBe('10');
+  });
+
+  it('finalize settle captures open HOLD for provider-final FAILED (CAPTURE)', async () => {
+    const db = new FakeBillingPrisma();
+    const tenantId = 'tenant-settle-capture';
+    db.seedWallet(tenantId, '10');
+    db.seedAssignedPlan(tenantId, {
+      code: 'default',
+      sellPrice: '2.000000',
+      checkType: 'HLR',
+    });
+    const item = db.seedJobItem(tenantId);
+    const billing = createBilling(db);
+
+    await billing.reserveForJobItem({
+      tenantId,
+      jobItemId: item.id,
+      checkType: 'HLR',
+    });
+    db.patchJobItem(item.id, {
+      status: 'FAILED',
+      billingAction: 'CAPTURE',
+      resultStatus: 'error',
+    });
+
+    const settled = await billing.settleUnsettledHoldsForJob(item.jobId);
+    expect(settled.captured).toBe(1);
+    expect(settled.released).toBe(0);
+    const wallet = await billing.getWallet(tenantId);
+    expect(wallet.heldBalance).toBe('0');
+    expect(wallet.availableBalance).toBe('8');
+  });
+
   it('reconstructs balances from wallet_transactions independently of cache', async () => {
     const db = new FakeBillingPrisma();
     const tenantId = 'tenant-1';

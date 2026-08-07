@@ -3,7 +3,7 @@ import { IBM_Plex_Sans } from 'next/font/google';
 import type { ReactElement, ReactNode } from 'react';
 
 import { Providers } from '@/app/providers';
-import { getPublicRuntimeEnv } from '@/lib/public-env';
+import { getPublicRuntimeEnv, serializeForHtmlScript } from '@/lib/public-env';
 
 import './globals.css';
 
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }): React
       <body className="font-sans antialiased">
         <script
           dangerouslySetInnerHTML={{
-            __html: `window.__FN_PUBLIC__=${JSON.stringify(publicEnv)};`,
+            __html: `window.__FN_PUBLIC__=${serializeForHtmlScript(publicEnv)};`,
           }}
         />
         <Providers>{children}</Providers>

@@ -66,7 +66,35 @@ export function createJobsWorkers(input: {
 
   const submit = new BullWorker(
     QUEUE_NAMES.JOBS_SUBMIT,
-    async (job: Job<SubmitBatchPayload>) => {
+    async (job: Job<SubmitBatchPayload & { reason?: string }>) => {
+      if (job.name === QUEUE_JOB_NAMES.SUBMIT_DLQ_HEAL) {
+        const started = process.hrtime.bigint();
+        workerLogger.warn('jobs.worker.submit.dlq_heal.start', {
+          bullJobId: job.id,
+          jobId: job.data.jobId,
+          tenantId: job.data.tenantId,
+          reason: job.data.reason,
+        });
+        try {
+          await lifecycle.markSubmitBatchDeadLetter(
+            job.data,
+            job.data.reason ?? 'submit dead-letter',
+          );
+          observeWorkerJob(metrics, {
+            queue: QUEUE_NAMES.JOBS_SUBMIT,
+            status: 'completed',
+            started,
+          });
+          return { healed: true };
+        } catch (error) {
+          observeWorkerJob(metrics, {
+            queue: QUEUE_NAMES.JOBS_SUBMIT,
+            status: 'failed',
+            started,
+          });
+          throw error;
+        }
+      }
       if (job.name !== QUEUE_JOB_NAMES.SUBMIT_BATCH) {
         throw new UnrecoverableError(`Unknown job name ${job.name}`);
       }
@@ -111,16 +139,26 @@ export function createJobsWorkers(input: {
       bullJobId: job?.id,
       jobId: job?.data?.jobId,
       tenantId: job?.data?.tenantId,
+      jobName: job?.name,
       attemptsMade: job?.attemptsMade,
       message: error.message,
       ...(job?.data?.requestId ? { requestId: job.data.requestId } : {}),
     });
     const maxAttempts = job?.opts.attempts ?? 1;
-    if (job && job.attemptsMade >= maxAttempts && job.data) {
-      void lifecycle
-        .markSubmitBatchDeadLetter(job.data, error.message)
+    // Only enqueue durable heal for submit-batch exhaustion (not for dlq-heal itself).
+    if (
+      job &&
+      job.name === QUEUE_JOB_NAMES.SUBMIT_BATCH &&
+      job.attemptsMade >= maxAttempts &&
+      job.data
+    ) {
+      void queue
+        .enqueueSubmitDlqHeal({
+          ...job.data,
+          reason: error.message,
+        })
         .catch((deadLetterError: unknown) => {
-          workerLogger.error('jobs.worker.submit.dead_letter_failed', {
+          workerLogger.error('jobs.worker.submit.dead_letter_enqueue_failed', {
             message:
               deadLetterError instanceof Error
                 ? deadLetterError.message

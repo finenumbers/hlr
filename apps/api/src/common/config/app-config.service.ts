@@ -122,6 +122,15 @@ export class AppConfigService {
     return this.env.METRICS_ENABLED;
   }
 
+  /** Bearer token for GET /metrics; empty = no auth (rely on network / NPM deny). */
+  get metricsScrapeToken(): string {
+    return this.env.METRICS_SCRAPE_TOKEN?.trim() ?? '';
+  }
+
+  get jobItemsExportMax(): number {
+    return this.env.JOB_ITEMS_EXPORT_MAX;
+  }
+
   get databaseUrl(): string {
     return this.env.DATABASE_URL;
   }

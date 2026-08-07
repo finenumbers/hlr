@@ -72,6 +72,13 @@ enum JobItemStatus {
   CANCELLED
 }
 
+/// Intended wallet settle when the item became terminal (Policy B).
+/// CAPTURE = provider final (incl. err); RELEASE = send-fail / timeout / DLQ.
+enum JobItemBillingAction {
+  CAPTURE
+  RELEASE
+}
+
 enum ProviderRequestKind {
   SEND
   STATUS
@@ -451,6 +458,8 @@ model JobItem {
   normalizedResult  Json?
   errorCode         String?
   errorMessage      String?
+  /// Set when item becomes terminal — drives finalize hold settle (capture vs release).
+  billingAction     JobItemBillingAction?
   sentAt            DateTime?
   completedAt       DateTime?
   createdAt         DateTime      @default(now())
@@ -466,8 +475,10 @@ model JobItem {
   @@index([jobId, status])
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
+  /// Partial unique (providerCode, providerMessageId) WHERE NOT NULL — see migration SQL.
   @@index([providerCode, providerMessageId])
   @@index([phoneE164])
+  @@index([status, updatedAt])
   @@map("job_items")
 }
 

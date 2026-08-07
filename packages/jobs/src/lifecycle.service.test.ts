@@ -10,6 +10,7 @@ import { JobLifecycleService } from './lifecycle.service.js';
 import { InMemoryJobsQueue } from './memory-queue.js';
 import { InMemoryJobsStore } from './memory-store.js';
 import type { JobsProviderPort } from './ports.js';
+import { JobsNotFoundError } from './types.js';
 
 function baseNormalized(
   overrides: Partial<NormalizedResult> = {},
@@ -722,6 +723,7 @@ describe('JobLifecycleService', () => {
     const reserved = await store.findItemById(items[0]!.id);
     expect(reserved?.status).toBe('FAILED');
     expect(reserved?.errorCode).toBe('QUEUE_DEAD_LETTER');
+    expect(reserved?.billingAction).toBe('RELEASE');
 
     const stillQueued = await store.findItemById(items[1]!.id);
     expect(stillQueued?.status).toBe('QUEUED');
@@ -733,5 +735,157 @@ describe('JobLifecycleService', () => {
       enqueueNonce: expect.stringMatching(/^dlq-/),
     });
     expect(queue.of('finalize')).toHaveLength(1);
+  });
+
+  it('reconcile re-enqueues stale RESERVED items', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await seedJob(store, ['+79991234567']);
+    await store.claimItemForSubmit(items[0]!.id);
+    const item = store.items.get(items[0]!.id)!;
+    item.updatedAt = new Date(Date.now() - 120_000);
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      now: () => new Date(),
+    });
+
+    await lifecycle.processReconciliation({ limit: 50 });
+
+    const submitMsgs = queue.of('submit');
+    expect(submitMsgs.length).toBeGreaterThan(0);
+    expect(
+      submitMsgs.some(
+        (m) =>
+          m.queue === 'submit' &&
+          'itemIds' in m.payload &&
+          m.payload.itemIds.includes(items[0]!.id),
+      ),
+    ).toBe(true);
+    expect(job.id).toBeTruthy();
+  });
+
+  it('rejects ambiguous providerMessageId without phone disambiguation', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const a = await seedJob(store, ['+79991111111']);
+    const b = await seedJob(store, ['+79992222222']);
+    for (const item of [a.items[0]!, b.items[0]!]) {
+      await store.claimItemForSubmit(item.id);
+      await store.updateItemAfterSubmit({
+        jobItemId: item.id,
+        status: 'PENDING',
+        providerMessageId: 'same-id',
+        providerCode: 'smsc',
+        sentAt: new Date(),
+      });
+    }
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider: { submitHlr: vi.fn(), submitPing: vi.fn(), fetchStatus: vi.fn() },
+    });
+
+    await expect(
+      lifecycle.applyProviderUpdate({
+        providerMessageId: 'same-id',
+        source: 'callback',
+        normalized: baseNormalized({
+          providerMessageId: 'same-id',
+          phoneE164: null,
+          lifecycleStatus: 'completed',
+          resultStatus: 'reachable',
+          isReachable: true,
+          providerStatusCode: '1',
+        }),
+      }),
+    ).rejects.toThrow(/Ambiguous providerMessageId/);
+
+    expect((await store.findItemById(a.items[0]!.id))?.status).toBe('PENDING');
+    expect((await store.findItemById(b.items[0]!.id))?.status).toBe('PENDING');
+  });
+
+  it('does not apply callback when phone does not match providerMessageId', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { items } = await seedJob(store, ['+79991234567']);
+    await store.claimItemForSubmit(items[0]!.id);
+    await store.updateItemAfterSubmit({
+      jobItemId: items[0]!.id,
+      status: 'PENDING',
+      providerMessageId: '42',
+      providerCode: 'smsc',
+      sentAt: new Date(),
+    });
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider: { submitHlr: vi.fn(), submitPing: vi.fn(), fetchStatus: vi.fn() },
+    });
+
+    await expect(
+      lifecycle.applyProviderUpdate({
+        providerMessageId: '42',
+        source: 'callback',
+        normalized: baseNormalized({
+          providerMessageId: '42',
+          phoneE164: '+79990000000',
+          lifecycleStatus: 'completed',
+          resultStatus: 'reachable',
+          isReachable: true,
+          providerStatusCode: '1',
+        }),
+      }),
+    ).rejects.toThrow(JobsNotFoundError);
+
+    expect((await store.findItemById(items[0]!.id))?.status).toBe('PENDING');
+  });
+
+  it('persists CAPTURE billingAction on provider-final terminal', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { items } = await seedJob(store, ['+79991234567']);
+    await store.claimItemForSubmit(items[0]!.id);
+    await store.updateItemAfterSubmit({
+      jobItemId: items[0]!.id,
+      status: 'PENDING',
+      providerMessageId: '42',
+      providerCode: 'smsc',
+      sentAt: new Date(),
+    });
+
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+    const lifecycle = new JobLifecycleService({ store, queue, provider });
+    await lifecycle.applyProviderUpdate({
+      jobItemId: items[0]!.id,
+      tenantId: items[0]!.tenantId,
+      providerMessageId: '42',
+      source: 'callback',
+      normalized: baseNormalized({
+        providerMessageId: '42',
+        phoneE164: items[0]!.phoneE164,
+        lifecycleStatus: 'completed',
+        resultStatus: 'reachable',
+        isReachable: true,
+        providerStatusCode: '1',
+      }),
+    });
+
+    const fresh = await store.findItemById(items[0]!.id);
+    expect(fresh?.status).toBe('COMPLETED');
+    expect(fresh?.billingAction).toBe('CAPTURE');
   });
 });

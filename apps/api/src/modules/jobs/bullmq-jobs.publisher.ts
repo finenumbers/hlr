@@ -15,6 +15,7 @@ import {
   type PollItemPayload,
   type ReconcileStalePayload,
   type SubmitBatchPayload,
+  type SubmitDlqHealPayload,
 } from '@finenumbers/jobs';
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
@@ -118,6 +119,24 @@ export class BullMqJobsPublisher
       },
       'JobsQueue',
     );
+  }
+
+  async enqueueSubmitDlqHeal(payload: SubmitDlqHealPayload): Promise<void> {
+    const queue = this.requireQueue(this.submitQueue, QUEUE_NAMES.JOBS_SUBMIT);
+    const fingerprint = hashIds(payload.itemIds);
+    const jobId = `dlq-heal:${payload.jobId}:${fingerprint}`;
+    try {
+      await queue.add(QUEUE_JOB_NAMES.SUBMIT_DLQ_HEAL, payload, {
+        jobId,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 2_000 },
+      });
+    } catch (error) {
+      if (isDuplicateJobIdError(error)) {
+        return;
+      }
+      throw error;
+    }
   }
 
   async enqueuePollItem(payload: PollItemPayload, delayMs = 0): Promise<void> {

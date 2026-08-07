@@ -5,10 +5,12 @@ import type {
   PollItemPayload,
   ReconcileStalePayload,
   SubmitBatchPayload,
+  SubmitDlqHealPayload,
 } from './types.js';
 
 export type QueuedMessage =
   | { queue: 'submit'; payload: SubmitBatchPayload; delayMs?: number }
+  | { queue: 'submit-dlq-heal'; payload: SubmitDlqHealPayload; delayMs?: number }
   | { queue: 'poll'; payload: PollItemPayload; delayMs?: number }
   | { queue: 'finalize'; payload: FinalizeJobPayload; delayMs?: number }
   | { queue: 'reconciliation'; payload: ReconcileStalePayload; delayMs?: number }
@@ -20,6 +22,10 @@ export class InMemoryJobsQueue implements JobsQueuePublisher {
 
   async enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void> {
     this.messages.push({ queue: 'submit', payload });
+  }
+
+  async enqueueSubmitDlqHeal(payload: SubmitDlqHealPayload): Promise<void> {
+    this.messages.push({ queue: 'submit-dlq-heal', payload });
   }
 
   async enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void> {

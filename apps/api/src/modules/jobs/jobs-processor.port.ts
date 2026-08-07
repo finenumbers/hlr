@@ -5,6 +5,7 @@ import type {
   JobsQueuePublisher,
   PollItemPayload,
   ReconcileStalePayload,
+  SubmitDlqHealPayload,
   SubmitBatchPayload,
 } from '@finenumbers/jobs';
 
@@ -14,6 +15,8 @@ import type {
  */
 export abstract class JobsProcessorPort implements JobsQueuePublisher {
   abstract enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void>;
+
+  abstract enqueueSubmitDlqHeal(payload: SubmitDlqHealPayload): Promise<void>;
 
   abstract enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void>;
 

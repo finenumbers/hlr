@@ -32,6 +32,7 @@ export {
 export type {
   JobRecord,
   JobItemRecord,
+  JobItemBillingAction,
   JobProgress,
   JobRuntimeSettings,
   JobPriceSnapshot,
@@ -39,6 +40,7 @@ export type {
   CreateJobResult,
   CsvParsePayload,
   SubmitBatchPayload,
+  SubmitDlqHealPayload,
   PollItemPayload,
   FinalizeJobPayload,
   ReconcileStalePayload,

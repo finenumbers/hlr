@@ -101,7 +101,7 @@ services:
     labels:
       # Bump schema.revision when adding Prisma migrations so Portainer recreates this one-shot.
       - "hlr.seed.email=${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}"
-      - "hlr.schema.revision=20260807093000_csv_previews"
+      - "hlr.schema.revision=20260807120000_job_item_billing_action"
     working_dir: /app/packages/db
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]
@@ -139,6 +139,8 @@ services:
       BODY_LIMIT_CSV: ${BODY_LIMIT_CSV:-52mb}
       REQUEST_TIMEOUT_CSV_MS: ${REQUEST_TIMEOUT_CSV_MS:-120000}
       METRICS_ENABLED: "true"
+      METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
+      JOB_ITEMS_EXPORT_MAX: ${JOB_ITEMS_EXPORT_MAX:-50000}
       SMSC_BASE_URL: https://smsc.ru
       SMSC_LOGIN: ${SMSC_LOGIN:-}
       SMSC_PASSWORD: ${SMSC_PASSWORD:-}
@@ -155,7 +157,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:3001/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+          "node -e \"fetch('http://127.0.0.1:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
         ]
       interval: 10s
       timeout: 5s
@@ -191,6 +193,16 @@ services:
       - "9091"
     networks:
       - hlr_net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:9091/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   web:
     image: ghcr.io/finenumbers/hlr-web:latest
@@ -207,6 +219,16 @@ services:
     networks:
       - hlr_net
       - proxy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
 networks:
   hlr_net:

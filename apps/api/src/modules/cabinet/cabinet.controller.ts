@@ -376,8 +376,8 @@ export class CabinetController {
   }
 
   @Get('billing/ledger')
-  ledger(@TenantId() tenantId: string) {
-    return this.cabinet.listLedger(tenantId);
+  ledger(@TenantId() tenantId: string, @Query() query: PaginationQueryDto) {
+    return this.cabinet.listLedger(tenantId, query.page, query.pageSize);
   }
 
   @Get('billing/tariff')

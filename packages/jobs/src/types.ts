@@ -33,6 +33,8 @@ export type JobRecord = {
   updatedAt: Date;
 };
 
+export type JobItemBillingAction = 'CAPTURE' | 'RELEASE';
+
 export type JobItemRecord = {
   id: string;
   jobId: string;
@@ -61,6 +63,8 @@ export type JobItemRecord = {
   normalizedResult: Record<string, unknown> | null;
   errorCode: string | null;
   errorMessage: string | null;
+  /** Set when item becomes terminal; drives finalize hold settle. */
+  billingAction: JobItemBillingAction | null;
   sentAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -142,6 +146,11 @@ export type SubmitBatchPayload = {
    * cannot collide with a retained failed submit job fingerprint.
    */
   enqueueNonce?: string;
+};
+
+/** Payload for durable submit dead-letter heal (BullMQ-retried). */
+export type SubmitDlqHealPayload = SubmitBatchPayload & {
+  reason: string;
 };
 
 export type PollItemPayload = {

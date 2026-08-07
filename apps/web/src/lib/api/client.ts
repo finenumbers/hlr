@@ -285,8 +285,10 @@ export const api = {
       apiRequest<Record<string, unknown>>(`/admin/jobs/${id}/finalize`, { method: 'POST' }),
     wallet: (tenantId: string) =>
       apiRequest<Record<string, unknown>>(`/admin/billing/wallets/${tenantId}`),
-    ledger: (tenantId: string) =>
-      apiRequest<unknown[]>(`/admin/billing/wallets/${tenantId}/ledger`),
+    ledger: (tenantId: string, q = 'page=1&pageSize=50') =>
+      apiRequest<Paginated<Record<string, unknown>>>(
+        `/admin/billing/wallets/${tenantId}/ledger?${q}`,
+      ),
     platformLedger: (q: string) =>
       apiRequest<Paginated<Record<string, unknown>>>(`/admin/billing/ledger?${q}`),
     topup: (body: {
@@ -430,7 +432,8 @@ export const api = {
         `/cabinet/jobs/${id}/items/export?locale=${encodeURIComponent(locale)}`,
       ),
     balance: () => apiRequest<Record<string, unknown>>('/cabinet/billing/balance'),
-    ledger: () => apiRequest<unknown[]>('/cabinet/billing/ledger'),
+    ledger: (q = 'page=1&pageSize=50') =>
+      apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/billing/ledger?${q}`),
     tariff: () =>
       apiRequest<{
         hlr: {

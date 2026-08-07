@@ -97,7 +97,7 @@ export function createBillingJobsHooks(
 
     async onJobFinalized(input) {
       const settled = await billing.settleUnsettledHoldsForJob(input.jobId);
-      if (settled.captured > 0) {
+      if (settled.captured > 0 || settled.released > 0) {
         logger.info('billing.hook.job_finalized_holds_settled', {
           tenantId: input.tenantId,
           jobId: input.jobId,

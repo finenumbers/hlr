@@ -54,6 +54,7 @@ export {
 } from './idempotency.js';
 
 export { createBillingJobsHooks } from './jobs-billing.hooks.js';
+export { resolveJobItemSettleAction } from './settle-action.js';
 export type { JobsBillingHooksLike } from './jobs-billing.hooks.js';
 
 export type {

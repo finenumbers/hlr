@@ -14,6 +14,7 @@ import type {
   JobRecord,
   JobRuntimeSettings,
 } from './types.js';
+import { JobsConflictError } from './types.js';
 
 function cloneJob(job: JobRecord): JobRecord {
   return { ...job, metadata: job.metadata ? { ...job.metadata } : null };
@@ -144,6 +145,7 @@ export class InMemoryJobsStore implements JobsStore {
         normalizedResult: null,
         errorCode: null,
         errorMessage: null,
+        billingAction: null,
         sentAt: null,
         completedAt: null,
         createdAt: now,
@@ -223,6 +225,7 @@ export class InMemoryJobsStore implements JobsStore {
         normalizedResult: null,
         errorCode: null,
         errorMessage: null,
+        billingAction: null,
         sentAt: null,
         completedAt: null,
         createdAt: now,
@@ -294,17 +297,27 @@ export class InMemoryJobsStore implements JobsStore {
     providerCode: string;
     providerMessageId: string;
     tenantId?: string;
+    phoneE164?: string | null;
   }): Promise<JobItemRecord | null> {
-    for (const item of this.items.values()) {
-      if (
+    const phoneDigits = input.phoneE164
+      ? input.phoneE164.replace(/\D/g, '')
+      : null;
+    const matched = [...this.items.values()].filter(
+      (item) =>
         item.providerCode === input.providerCode &&
         item.providerMessageId === input.providerMessageId &&
-        (!input.tenantId || item.tenantId === input.tenantId)
-      ) {
-        return cloneItem(item);
-      }
+        (!input.tenantId || item.tenantId === input.tenantId) &&
+        (!phoneDigits || item.phoneE164.replace(/\D/g, '') === phoneDigits),
+    );
+    if (matched.length === 0) {
+      return null;
     }
-    return null;
+    if (matched.length > 1) {
+      throw new JobsConflictError(
+        `Ambiguous providerMessageId ${input.providerMessageId} matches ${matched.length} items`,
+      );
+    }
+    return cloneItem(matched[0]!);
   }
 
   async claimItemForSubmit(jobItemId: string): Promise<JobItemRecord | null> {
@@ -360,6 +373,7 @@ export class InMemoryJobsStore implements JobsStore {
     actualCost?: string | null;
     errorCode?: string | null;
     errorMessage?: string | null;
+    billingAction?: JobItemRecord['billingAction'];
     sentAt?: Date | null;
     completedAt?: Date | null;
   }): Promise<JobItemRecord | null> {
@@ -392,6 +406,7 @@ export class InMemoryJobsStore implements JobsStore {
     if (input.actualCost !== undefined) item.actualCost = input.actualCost;
     if (input.errorCode !== undefined) item.errorCode = input.errorCode;
     if (input.errorMessage !== undefined) item.errorMessage = input.errorMessage;
+    if (input.billingAction !== undefined) item.billingAction = input.billingAction;
     if (input.sentAt !== undefined) item.sentAt = input.sentAt;
     if (input.completedAt !== undefined) item.completedAt = input.completedAt;
     item.updatedAt = new Date();
@@ -417,6 +432,7 @@ export class InMemoryJobsStore implements JobsStore {
       actualCost: string | null;
       errorCode: string | null;
       errorMessage: string | null;
+      billingAction: JobItemRecord['billingAction'];
       sentAt: Date | null;
       completedAt: Date | null;
     }>;
@@ -489,6 +505,17 @@ export class InMemoryJobsStore implements JobsStore {
           (item.updatedAt < input.olderThan ||
             (item.sentAt !== null && item.sentAt < input.olderThan)),
       )
+      .slice(0, input.limit)
+      .map(cloneItem);
+  }
+
+  async listStaleReservedItems(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobItemRecord[]> {
+    return [...this.items.values()]
+      .filter((i) => i.status === 'RESERVED' && i.updatedAt < input.olderThan)
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
       .slice(0, input.limit)
       .map(cloneItem);
   }

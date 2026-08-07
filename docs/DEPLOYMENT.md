@@ -177,13 +177,23 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 
 ## Safe deploy sequence
 
-1. Take Postgres **logical** dump (+ confirm WAL archive is advancing); see [BACKUP_RESTORE.md](./BACKUP_RESTORE.md).
-2. Portainer → **Pull and redeploy** (`:latest` + compose с `main`).
-3. `prisma migrate deploy` (never `migrate dev` in prod).
-4. Rolling restart: `worker` → `api` → `web` (workers drain BullMQ jobs on SIGTERM).
-5. Verify `GET /health/live`, `GET /health/ready`, Grafana “Finenumbers Overview” if obs is enabled.
-6. Smoke: login → submit check → webhook delivery.
-7. After risky schema changes: also take a fresh **base backup**.
+1. **Before any migrate / schema change:** take a Postgres **logical** dump and confirm WAL archive is advancing; see [BACKUP_RESTORE.md](./BACKUP_RESTORE.md). Do not skip this on Portainer stacks — `migrate` is a one-shot that runs on every redeploy when the schema revision label changes.
+2. Prefer pinned image tags (`:vX.Y.Z`) for go-live / rollback; `:latest` is fine for staging. Record the tag you deploy.
+3. Portainer → **Pull and redeploy** (or update stack with the pinned tag).
+4. Wait for `migrate` to complete successfully (`prisma migrate deploy` — never `migrate dev` in prod).
+5. Rolling restart order if you restart manually: `worker` → `api` → `web` (workers drain BullMQ jobs on SIGTERM). Compose `depends_on` already gates api/worker on migrate.
+6. Verify health: API `GET /health/ready`, worker `GET :9091/health/live`, web `/`, Grafana “Finenumbers Overview” if obs is enabled.
+7. Smoke: login → submit check → webhook delivery → XLSX export on a small job.
+8. After risky schema changes: also take a fresh **base backup**.
+
+### Go / no-go checklist (pilot)
+
+- [ ] Backup taken immediately before migrate with `billingAction` / providerMessageId unique index
+- [ ] Timeout / DLQ items never produce DEBIT via finalize settle; provider-final `resultStatus=error` still captures
+- [ ] Stale RESERVED resumes or fails+releases; submit DLQ heal is durable
+- [ ] SMSC callback with colliding `id` but different `phone` does not apply
+- [ ] `METRICS_SCRAPE_TOKEN` set (or NPM denies `/metrics`); callback IP RPM active
+- [ ] Pilot: tariff → org → topup → HLR → Silent SMS → webhook → XLSX
 
 ## CI
 
@@ -204,7 +214,9 @@ Non-production: `/docs` + `/openapi.json` available for local/staging; set `OPEN
 - Helmet: `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS (prod), API CSP `default-src 'none'`
 - CORS: allow-list from `CORS_ORIGINS` / `PUBLIC_WEB_URL` only; credentials on; rate-limit headers exposed
 - Set `CORS_ORIGINS=https://app.example.com` in production (do not leave localhost)
-- **NPM:** add a Custom Location (or deny rule) for ` /metrics` → 404/403. Prometheus scrapes `api:3001/metrics` on the Docker network only — do not expose metrics on the public API host.
+- **NPM:** add a Custom Location (or deny rule) for `/metrics` → 404/403. Prometheus scrapes `api:3001/metrics` on the Docker network only — do not expose metrics on the public API host.
+- **Metrics token:** set `METRICS_SCRAPE_TOKEN` so `GET /metrics` requires `Authorization: Bearer <token>` even on the internal network.
+- **XLSX export:** jobs larger than `JOB_ITEMS_EXPORT_MAX` (default 50000) return 413 — split the job or raise the limit deliberately.
 - **NPM body size:** set `client_max_body_size` (Custom Nginx Config on the API proxy host) to at least **52m** so cabinet CSV preview uploads are not rejected before the API. Align with `BODY_LIMIT_CSV` / proxy read timeouts ≥ `REQUEST_TIMEOUT_CSV_MS` (default 120s).
 - **After v0.3.28+:** run `prisma migrate deploy` so table `csv_previews` exists. Without it cabinet CSV upload returns 503 / errors on preview.
 

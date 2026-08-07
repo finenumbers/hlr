@@ -7,12 +7,14 @@ import type {
   CreateJobResult,
   CsvParsePayload,
   FinalizeJobPayload,
+  JobItemBillingAction,
   JobItemRecord,
   JobRecord,
   JobRuntimeSettings,
   PollItemPayload,
   ReconcileStalePayload,
   SubmitBatchPayload,
+  SubmitDlqHealPayload,
 } from './types.js';
 
 export type JobsLogger = {
@@ -98,6 +100,8 @@ export interface JobsStore {
     providerCode: string;
     providerMessageId: string;
     tenantId?: string;
+    /** When set, require exact phone match (SMSC callback). */
+    phoneE164?: string | null;
   }): Promise<JobItemRecord | null>;
 
   /**
@@ -128,6 +132,7 @@ export interface JobsStore {
     actualCost?: string | null;
     errorCode?: string | null;
     errorMessage?: string | null;
+    billingAction?: JobItemBillingAction | null;
     sentAt?: Date | null;
     completedAt?: Date | null;
   }): Promise<JobItemRecord | null>;
@@ -155,6 +160,7 @@ export interface JobsStore {
       actualCost: string | null;
       errorCode: string | null;
       errorMessage: string | null;
+      billingAction: JobItemBillingAction | null;
       sentAt: Date | null;
       completedAt: Date | null;
     }>;
@@ -173,6 +179,12 @@ export interface JobsStore {
   }): Promise<JobRecord | null>;
 
   listStalePendingItems(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobItemRecord[]>;
+
+  /** RESERVED items older than threshold (lost submit / DLQ gap). */
+  listStaleReservedItems(input: {
     olderThan: Date;
     limit: number;
   }): Promise<JobItemRecord[]>;
@@ -209,6 +221,8 @@ export type EnqueueCsvParseOptions = {
 
 export interface JobsQueuePublisher {
   enqueueSubmitBatch(payload: SubmitBatchPayload): Promise<void>;
+  /** Durable retries for markSubmitBatchDeadLetter after submit attempts exhausted. */
+  enqueueSubmitDlqHeal(payload: SubmitDlqHealPayload): Promise<void>;
   enqueuePollItem(payload: PollItemPayload, delayMs?: number): Promise<void>;
   enqueueFinalizeJob(payload: FinalizeJobPayload): Promise<void>;
   enqueueReconciliation(payload?: ReconcileStalePayload): Promise<void>;

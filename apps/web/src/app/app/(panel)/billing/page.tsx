@@ -25,7 +25,7 @@ export default function CabinetBillingPage() {
   });
   const ledger = useQuery({
     queryKey: ['cabinet', 'ledger', tenantId],
-    queryFn: () => api.cabinet.ledger(),
+    queryFn: () => api.cabinet.ledger('page=1&pageSize=50'),
     enabled: Boolean(tenantId),
   });
   const tariff = useQuery({
@@ -98,42 +98,38 @@ export default function CabinetBillingPage() {
         <Card className="mt-4">
           <h2 className="mb-3 font-semibold">{t('cabinetBilling.transactions')}</h2>
           <ul className="space-y-2 text-sm">
-            {((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])
-              .slice()
-              .reverse()
-              .slice(0, 50)
-              .map((row) => {
-                const typeLabel = formatLedgerType(t, String(row.type ?? ''));
-                const description = formatLedgerDescription(
-                  t,
-                  row.description == null ? null : String(row.description),
-                );
-                const amount = formatMoney(
-                  String(row.amount ?? '0'),
-                  String(row.currency ?? balance.data?.currency ?? 'RUB'),
-                );
-                return (
-                  <li
-                    key={String(row.id)}
-                    className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2"
-                  >
-                    <span className="min-w-0">
-                      <span className="font-medium">
-                        {typeLabel} · {amount}
+            {(ledger.data?.items ?? []).map((row) => {
+              const typeLabel = formatLedgerType(t, String(row.type ?? ''));
+              const description = formatLedgerDescription(
+                t,
+                row.description == null ? null : String(row.description),
+              );
+              const amount = formatMoney(
+                String(row.amount ?? '0'),
+                String(row.currency ?? balance.data?.currency ?? 'RUB'),
+              );
+              return (
+                <li
+                  key={String(row.id)}
+                  className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2"
+                >
+                  <span className="min-w-0">
+                    <span className="font-medium">
+                      {typeLabel} · {amount}
+                    </span>
+                    {description ? (
+                      <span className="mt-0.5 block text-xs text-[var(--color-ink-muted)]">
+                        {description}
                       </span>
-                      {description ? (
-                        <span className="mt-0.5 block text-xs text-[var(--color-ink-muted)]">
-                          {description}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="shrink-0 text-[var(--color-ink-muted)]">
-                      {formatDate(String(row.createdAt ?? ''), locale)}
-                    </span>
-                  </li>
-                );
-              })}
-            {!ledger.data?.length ? (
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 text-[var(--color-ink-muted)]">
+                    {formatDate(String(row.createdAt ?? ''), locale)}
+                  </span>
+                </li>
+              );
+            })}
+            {!ledger.data?.items?.length ? (
               <li className="text-[var(--color-ink-muted)]">{t('cabinetBilling.noTransactions')}</li>
             ) : null}
           </ul>

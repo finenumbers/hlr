@@ -16,6 +16,8 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 /** Job names within queues (BullMQ `job.name`). */
 export const QUEUE_JOB_NAMES = {
   SUBMIT_BATCH: 'submit-batch',
+  /** Durable heal after submit BullMQ attempts exhausted (not fire-and-forget). */
+  SUBMIT_DLQ_HEAL: 'submit-dlq-heal',
   POLL_ITEM: 'poll-item',
   FINALIZE_JOB: 'finalize-job',
   RECONCILE_STALE: 'reconcile-stale',

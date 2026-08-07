@@ -9,6 +9,7 @@ import type {
   JobRecord,
   JobRuntimeSettings,
 } from './types.js';
+import { JobsConflictError } from './types.js';
 
 type PrismaLike = Pick<
   PrismaClient,
@@ -117,6 +118,7 @@ function mapItem(row: {
   normalizedResult: Prisma.JsonValue | null;
   errorCode: string | null;
   errorMessage: string | null;
+  billingAction: JobItemRecord['billingAction'];
   sentAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -150,6 +152,7 @@ function mapItem(row: {
     normalizedResult: asRecord(row.normalizedResult),
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
+    billingAction: row.billingAction,
     sentAt: row.sentAt,
     completedAt: row.completedAt,
     createdAt: row.createdAt,
@@ -458,16 +461,35 @@ export class PrismaJobsStore implements JobsStore {
     providerCode: string;
     providerMessageId: string;
     tenantId?: string;
+    phoneE164?: string | null;
   }): Promise<JobItemRecord | null> {
-    const row = await this.prisma.jobItem.findFirst({
+    const phoneDigits = input.phoneE164
+      ? input.phoneE164.replace(/\D/g, '')
+      : null;
+    const rows = await this.prisma.jobItem.findMany({
       where: {
         providerCode: input.providerCode,
         providerMessageId: input.providerMessageId,
         ...(input.tenantId ? { tenantId: input.tenantId } : {}),
       },
       orderBy: { createdAt: 'desc' },
+      take: 5,
     });
-    return row ? mapItem(row) : null;
+    if (rows.length === 0) {
+      return null;
+    }
+    const matched = phoneDigits
+      ? rows.filter((row) => row.phoneE164.replace(/\D/g, '') === phoneDigits)
+      : rows;
+    if (matched.length === 0) {
+      return null;
+    }
+    if (matched.length > 1) {
+      throw new JobsConflictError(
+        `Ambiguous providerMessageId ${input.providerMessageId} matches ${matched.length} items`,
+      );
+    }
+    return mapItem(matched[0]!);
   }
 
   async claimItemForSubmit(jobItemId: string): Promise<JobItemRecord | null> {
@@ -515,6 +537,7 @@ export class PrismaJobsStore implements JobsStore {
     actualCost?: string | null;
     errorCode?: string | null;
     errorMessage?: string | null;
+    billingAction?: JobItemRecord['billingAction'];
     sentAt?: Date | null;
     completedAt?: Date | null;
   }): Promise<JobItemRecord | null> {
@@ -545,6 +568,7 @@ export class PrismaJobsStore implements JobsStore {
               : new Prisma.Decimal(input.actualCost),
         errorCode: input.errorCode,
         errorMessage: input.errorMessage,
+        billingAction: input.billingAction,
         sentAt: input.sentAt,
         completedAt: input.completedAt,
       },
@@ -574,6 +598,7 @@ export class PrismaJobsStore implements JobsStore {
       actualCost: string | null;
       errorCode: string | null;
       errorMessage: string | null;
+      billingAction: JobItemRecord['billingAction'];
       sentAt: Date | null;
       completedAt: Date | null;
     }>;
@@ -613,6 +638,9 @@ export class PrismaJobsStore implements JobsStore {
     if (input.patch.errorCode !== undefined) data.errorCode = input.patch.errorCode;
     if (input.patch.errorMessage !== undefined) {
       data.errorMessage = input.patch.errorMessage;
+    }
+    if (input.patch.billingAction !== undefined) {
+      data.billingAction = input.patch.billingAction;
     }
     if (input.patch.sentAt !== undefined) data.sentAt = input.patch.sentAt;
     if (input.patch.completedAt !== undefined) {
@@ -681,6 +709,21 @@ export class PrismaJobsStore implements JobsStore {
     const rows = await this.prisma.jobItem.findMany({
       where: {
         status: { in: ['PENDING', 'SENT'] },
+        updatedAt: { lt: input.olderThan },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: input.limit,
+    });
+    return rows.map(mapItem);
+  }
+
+  async listStaleReservedItems(input: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<JobItemRecord[]> {
+    const rows = await this.prisma.jobItem.findMany({
+      where: {
+        status: 'RESERVED',
         updatedAt: { lt: input.olderThan },
       },
       orderBy: { updatedAt: 'asc' },

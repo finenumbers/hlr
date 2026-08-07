@@ -92,3 +92,11 @@ export function getPublicRuntimeEnv(): PublicRuntimeEnv {
     apiUrl: getPublicApiUrl(),
   };
 }
+
+/**
+ * JSON for inline `<script>` — escape `</` so a crafted PUBLIC_API_URL cannot
+ * break out of the script tag (e.g. `</script><script>...`).
+ */
+export function serializeForHtmlScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}

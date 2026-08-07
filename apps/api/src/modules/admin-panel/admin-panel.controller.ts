@@ -449,8 +449,11 @@ export class AdminPanelController {
   }
 
   @Get('billing/wallets/:tenantId/ledger')
-  listLedger(@Param('tenantId') tenantId: string) {
-    return this.admin.listLedger(tenantId);
+  listLedger(
+    @Param('tenantId') tenantId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.admin.listLedger(tenantId, query.page, query.pageSize);
   }
 
   @Post('billing/topup')
