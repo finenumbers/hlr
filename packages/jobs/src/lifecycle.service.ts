@@ -1094,6 +1094,8 @@ export class JobLifecycleService {
       finalized: finalizedCount,
       needing: needing.length,
       submitResumed: resumedCount,
+      reservedResumed,
+      reservedFailed,
       csvHealed,
       csvAbandoned,
     });
