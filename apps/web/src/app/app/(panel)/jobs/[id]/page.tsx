@@ -16,6 +16,10 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { downloadBlob } from '@/lib/csv';
 import { useI18n, useT } from '@/lib/i18n';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
+import {
+  isSubmitTimeProviderFailure,
+  providerItemErrorLabel,
+} from '@/lib/smsc-err';
 import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
@@ -55,6 +59,19 @@ export default function CabinetJobDetailPage() {
     job.data?.errorCode || job.data?.errorMessage
       ? [job.data?.errorCode, job.data?.errorMessage].filter(Boolean).join(' — ')
       : null;
+
+  const itemRows = (items.data?.items ?? []) as Array<Record<string, unknown>>;
+  const uniformProviderError = (() => {
+    if (String(job.data?.status ?? '') !== 'FAILED' || itemRows.length === 0) {
+      return null;
+    }
+    const codes = itemRows.map((r) => String(r.errorCode ?? ''));
+    if (!codes.every((c) => c && c === codes[0])) return null;
+    const sample = itemRows[0]!;
+    return providerItemErrorLabel(codes[0], t, {
+      preferApi: isSubmitTimeProviderFailure(sample),
+    });
+  })();
 
   const exportCsv = async () => {
     if (!id) return;
@@ -132,6 +149,14 @@ export default function CabinetJobDetailPage() {
             <p className="mt-2 text-sm text-[var(--color-danger)]">{jobError}</p>
           </Card>
         ) : null}
+        {uniformProviderError ? (
+          <Card className="mb-4 border-[color-mix(in_oklab,var(--color-danger)_35%,transparent)]">
+            <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.jobError')}</p>
+            <p className="mt-2 text-sm text-[var(--color-danger)]">
+              {t('cabinetJobs.uniformItemError', { error: uniformProviderError })}
+            </p>
+          </Card>
+        ) : null}
         <QueryState
           isLoading={items.isLoading && !items.data}
           isError={items.isError}
@@ -149,8 +174,9 @@ export default function CabinetJobDetailPage() {
             columns={jobItemResultColumns(t, {
               prefix: 'cabinetJobs',
               includeHlr: isHlr,
+              includeError: true,
             })}
-            rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
+            rows={itemRows}
             rowKey={(r) => String(r.id)}
             rowClassName={(r) =>
               isHlr && r.resultStatus === 'unreachable'

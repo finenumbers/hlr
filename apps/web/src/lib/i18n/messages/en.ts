@@ -402,6 +402,8 @@ const enMessages = {
       'Rows: {rows} · valid: {valid} · invalid: {invalid} · duplicates: {dupes}',
     previewInvalid:
       'File has invalid numbers. Fix and re-upload — submit is disabled.',
+    nonMobileWarning:
+      '{count} numbers may not be mobile. Provider HLR often returns a delivery/lookup error for landlines.',
     orPaste: 'or paste numbers',
   },
   cabinetJobs: {
@@ -422,6 +424,7 @@ const enMessages = {
     exportCsv: 'Export CSV',
     exportFailed: 'Export failed',
     jobError: 'Job error',
+    uniformItemError: 'All numbers failed with the same provider error: {error}',
     status: 'Status',
     service: 'Service',
     progress: 'Progress',
@@ -441,6 +444,7 @@ const enMessages = {
     colRoamingCountry: 'Roaming country',
     colRoamingOperator: 'Roaming operator',
     colSmscErr: 'Errors',
+    colError: 'Details',
   },
   cabinetBilling: {
     title: 'Billing',
@@ -613,6 +617,18 @@ const enMessages = {
     '253': 'Blocked by spam filter',
     '254': 'Unregistered sender id',
     '255': 'Rejected by operator',
+  },
+  /** SMSC HTTP API error_code on send/status request (not delivery status err). */
+  smscApiErr: {
+    '1': 'Invalid request parameters',
+    '2': 'Provider authentication failed',
+    '3': 'Insufficient provider funds',
+    '4': 'IP address blocked by provider',
+    '5': 'Invalid date in request',
+    '6': 'Forbidden by provider',
+    '7': 'Invalid phone number',
+    '8': 'Cannot deliver / look up number',
+    '9': 'Too many identical requests',
   },
 } as const satisfies MessageTree;
 

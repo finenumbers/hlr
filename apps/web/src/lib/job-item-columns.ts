@@ -1,4 +1,7 @@
-import { smscErrLabel } from '@/lib/smsc-err';
+import {
+  isSubmitTimeProviderFailure,
+  providerItemErrorLabel,
+} from '@/lib/smsc-err';
 import {
   labelBool,
   labelJobItemStatus,
@@ -71,7 +74,13 @@ export function jobItemResultColumns(
       {
         key: 'smscErr',
         header: t(`${p}.colSmscErr`),
-        cell: (r) => text(t, smscErrLabel(r.errorCode, t)),
+        cell: (r) =>
+          text(
+            t,
+            providerItemErrorLabel(r.errorCode, t, {
+              preferApi: isSubmitTimeProviderFailure(r),
+            }),
+          ),
       },
     );
   }

@@ -22,6 +22,7 @@ type PreviewState = {
     validCount: number;
     invalidCount: number;
     deduplicatedCount: number;
+    nonMobileCount?: number;
   };
   unitSellPrice: string | null;
   currency: string;
@@ -355,6 +356,13 @@ export function ProductSubmitPanel({
                     dupes: preview.stats.deduplicatedCount,
                   })}
                 </p>
+                {(preview.stats.nonMobileCount ?? 0) > 0 ? (
+                  <p className="text-sm text-[var(--color-danger)]">
+                    {t('cabinetSubmit.nonMobileWarning', {
+                      count: preview.stats.nonMobileCount ?? 0,
+                    })}
+                  </p>
+                ) : null}
                 {preview.status === 'INVALID' ? (
                   <div className="space-y-1 text-sm text-[var(--color-danger)]">
                     <p>{t('cabinetSubmit.previewInvalid')}</p>

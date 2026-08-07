@@ -1,4 +1,5 @@
 import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import { parsePhoneNumberFromString as parsePhoneNumberWithType } from 'libphonenumber-js/max';
 
 import { JobsValidationError } from './types.js';
 
@@ -10,6 +11,21 @@ export type NormalizePhonesResult = {
   /** Original inputs that could not be normalized. */
   invalid: Array<{ input: string; reason: string }>;
 };
+
+/**
+ * Count E.164 numbers classified as fixed-line (landline).
+ * Uses full metadata (`libphonenumber-js/max`) so getType() works.
+ * HLR often fails on landlines at the provider — surface as preview warning.
+ */
+export function countNonMobilePhones(phones: string[]): number {
+  let count = 0;
+  for (const phone of phones) {
+    const parsed = parsePhoneNumberWithType(phone);
+    if (!parsed?.isValid()) continue;
+    if (parsed.getType() === 'FIXED_LINE') count += 1;
+  }
+  return count;
+}
 
 /**
  * Normalize a single phone to E.164.

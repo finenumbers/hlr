@@ -10,6 +10,7 @@ import {
 import { Prisma } from '@finenumbers/db';
 import {
   assertCsvByteLimit,
+  countNonMobilePhones,
   normalizeAndDeduplicatePhones,
   streamParsePhoneFile,
   JobsValidationError,
@@ -414,6 +415,7 @@ export class CsvPreviewService {
         validCount: preview.validCount,
         invalidCount: preview.invalidCount,
         deduplicatedCount: preview.deduplicatedCount,
+        nonMobileCount: countNonMobilePhones(phones),
       },
       unitSellPrice:
         preview.previewUnitSellPrice === null
