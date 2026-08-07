@@ -58,6 +58,8 @@ export function ProductSubmitPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const phoneScrollRef = useRef<HTMLDivElement>(null);
   const phoneLoadMoreRef = useRef<HTMLDivElement>(null);
+  const previewIdRef = useRef<string | null>(null);
+  const submittedPreviewIdRef = useRef<string | null>(null);
   const [phonesText, setPhonesText] = useState('');
   const [estimate, setEstimate] = useState<Record<string, unknown> | null>(null);
   const [csvEstimate, setCsvEstimate] = useState<Record<string, unknown> | null>(null);
@@ -66,6 +68,25 @@ export function ProductSubmitPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  useEffect(() => {
+    previewIdRef.current = preview?.id ?? null;
+  }, [preview?.id]);
+
+  /** Drop server-side preview when it leaves the screen (not after successful submit). */
+  const discardActivePreview = (id: string | null | undefined, keepalive = false) => {
+    if (!id || id === submittedPreviewIdRef.current) return;
+    void api.cabinet.discardCsvPreview(id, { keepalive }).catch(() => {
+      // best-effort — TTL also expires unused rows
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      discardActivePreview(previewIdRef.current, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only discard
+  }, []);
 
   const phones = useMemo(
     () =>
@@ -150,6 +171,9 @@ export function ProductSubmitPanel({
       return api.cabinet.submitCsvPreview(preview.id);
     },
     onSuccess: (job) => {
+      if (preview?.id) {
+        submittedPreviewIdRef.current = preview.id;
+      }
       const id =
         (job as { job?: { id?: string }; id?: string }).job?.id ??
         (job as { id?: string }).id;
@@ -172,6 +196,7 @@ export function ProductSubmitPanel({
       setCsvError(t('cabinetSubmit.csvTypeInvalid'));
       return;
     }
+    discardActivePreview(previewIdRef.current);
     setCsvFile(file);
     setPreview(null);
     setCsvEstimate(null);

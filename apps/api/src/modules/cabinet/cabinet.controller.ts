@@ -175,6 +175,14 @@ export class CabinetController {
     });
   }
 
+  @Delete('csv-previews/:id')
+  @ApiOperation({
+    summary: 'Discard CSV preview when it leaves the UI (no checks started)',
+  })
+  discardCsvPreview(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.csvPreviews.discard(tenantId, id);
+  }
+
   @Get('csv-previews/:id')
   @ApiOperation({ summary: 'CSV preview meta + first phones page' })
   getCsvPreview(@TenantId() tenantId: string, @Param('id') id: string) {

@@ -24,8 +24,8 @@ import { JobsService } from '../jobs/jobs.service';
 import { resolveLimits } from '../settings/resolve-limits';
 import { toCabinetJobView, toCabinetSellEstimate } from './cabinet-client-view';
 
-const PREVIEW_TTL_MS = 60 * 60 * 1000;
-const MAX_READY_PREVIEWS_PER_TENANT = 3;
+/** Safety net if the UI fails to discard; previews are session-scoped in the cabinet. */
+const PREVIEW_TTL_MS = 30 * 60 * 1000;
 const MAX_INVALID_SAMPLES = 50;
 const DEFAULT_PHONE_PAGE = 100;
 const MAX_PHONE_PAGE = 100;
@@ -79,33 +79,8 @@ export class CsvPreviewService {
     }
 
     try {
-      // Cap unused READY previews per tenant; new upload evicts oldest (do not block UI).
-      const readyPreviews = await this.prisma.csvPreview.findMany({
-        where: {
-          tenantId: input.tenantId,
-          status: 'READY',
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
-      const overflow =
-        readyPreviews.length - MAX_READY_PREVIEWS_PER_TENANT + 1;
-      if (overflow > 0) {
-        const evictIds = readyPreviews.slice(0, overflow).map((row) => row.id);
-        await this.prisma.csvPreview.updateMany({
-          where: { id: { in: evictIds } },
-          data: { status: 'EXPIRED', phonesJson: Prisma.DbNull },
-        });
-        this.logger.log(
-          {
-            message: 'cabinet.csv_preview.evicted_oldest',
-            tenantId: input.tenantId,
-            evicted: evictIds.length,
-          },
-          'Cabinet',
-        );
-      }
+      // Only one unused preview per tenant — new upload replaces whatever was on screen.
+      await this.expireUnusedForTenant(input.tenantId);
 
       let parsed;
       try {
@@ -172,6 +147,32 @@ export class CsvPreviewService {
   async getForTenant(tenantId: string, previewId: string) {
     const preview = await this.requirePreview(tenantId, previewId);
     return this.toPreviewView(preview, 1, DEFAULT_PHONE_PAGE);
+  }
+
+  /**
+   * Drop a preview that is no longer shown in the UI (navigate away / replace file).
+   * No-op for CONSUMED / CONSUMING / already expired.
+   */
+  async discard(tenantId: string, previewId: string) {
+    const result = await this.prisma.csvPreview.updateMany({
+      where: {
+        id: previewId,
+        tenantId,
+        status: { in: ['READY', 'INVALID'] },
+      },
+      data: { status: 'EXPIRED', phonesJson: Prisma.DbNull },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        {
+          message: 'cabinet.csv_preview.discarded',
+          previewId,
+          tenantId,
+        },
+        'Cabinet',
+      );
+    }
+    return { ok: true as const };
   }
 
   async listPhones(
@@ -312,6 +313,27 @@ export class CsvPreviewService {
         data: { status: 'READY' },
       });
       throw error;
+    }
+  }
+
+  /** Clear unused previews so only the currently displayed one retains phone data. */
+  private async expireUnusedForTenant(tenantId: string): Promise<void> {
+    const result = await this.prisma.csvPreview.updateMany({
+      where: {
+        tenantId,
+        status: { in: ['READY', 'INVALID'] },
+      },
+      data: { status: 'EXPIRED', phonesJson: Prisma.DbNull },
+    });
+    if (result.count > 0) {
+      this.logger.log(
+        {
+          message: 'cabinet.csv_preview.expired_unused',
+          tenantId,
+          count: result.count,
+        },
+        'Cabinet',
+      );
     }
   }
 

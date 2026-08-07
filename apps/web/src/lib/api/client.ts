@@ -46,6 +46,8 @@ type RequestOptions = {
   tenantId?: string | null;
   auth?: boolean;
   signal?: AbortSignal;
+  /** Survives page unload (discard preview on navigate away). */
+  keepalive?: boolean;
 };
 
 async function parseApiResponse<T>(res: Response, apiBase: string): Promise<T> {
@@ -101,6 +103,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: options.signal,
+      keepalive: options.keepalive,
     });
   } catch {
     throw new ApiError(
@@ -404,6 +407,11 @@ export const api = {
       apiRequest<{ items: string[]; page: number; pageSize: number; total: number }>(
         `/cabinet/csv-previews/${id}/phones?page=${page}&pageSize=${pageSize}`,
       ),
+    discardCsvPreview: (id: string, opts?: { keepalive?: boolean }) =>
+      apiRequest<{ ok: boolean }>(`/cabinet/csv-previews/${id}`, {
+        method: 'DELETE',
+        keepalive: opts?.keepalive,
+      }),
     estimateCsvPreview: (id: string) =>
       apiRequest<Record<string, unknown>>(`/cabinet/csv-previews/${id}/estimate`, {
         method: 'POST',
