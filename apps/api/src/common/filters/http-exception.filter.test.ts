@@ -175,4 +175,37 @@ describe('HttpExceptionFilter error envelope', () => {
       },
     });
   });
+
+  it('maps missing csv_previews Prisma error to SERVICE_UNAVAILABLE', () => {
+    const filter = createFilter('req-mig');
+    const err = Object.assign(
+      new Error('The table `public.csv_previews` does not exist in the current database.'),
+      { code: 'P2021', name: 'PrismaClientKnownRequestError' },
+    );
+    const { status, body } = catchJson(filter, err);
+    expect(status).toBe(503);
+    expect(body).toMatchObject({
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: expect.stringContaining('csv_previews'),
+        requestId: 'req-mig',
+      },
+    });
+  });
+
+  it('maps EACCES upload errors to SERVICE_UNAVAILABLE', () => {
+    const filter = createFilter('req-fs');
+    const err = Object.assign(new Error('EACCES: permission denied, mkdir'), {
+      code: 'EACCES',
+    });
+    const { status, body } = catchJson(filter, err);
+    expect(status).toBe(503);
+    expect(body).toMatchObject({
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: expect.stringContaining('Upload storage'),
+        requestId: 'req-fs',
+      },
+    });
+  });
 });

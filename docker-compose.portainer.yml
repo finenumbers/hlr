@@ -99,7 +99,9 @@ services:
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?Задайте SEED_SUPERADMIN_PASSWORD (≥16)}
       SEED_RESET_PASSWORD: ${SEED_RESET_PASSWORD:-false}
     labels:
+      # Bump schema.revision when adding Prisma migrations so Portainer recreates this one-shot.
       - "hlr.seed.email=${SEED_SUPERADMIN_EMAIL:-admin@finenumbers.local}"
+      - "hlr.schema.revision=20260807093000_csv_previews"
     working_dir: /app/packages/db
     user: "0:0"
     entrypoint: ["/bin/sh", "-c"]

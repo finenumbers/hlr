@@ -93,6 +93,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       };
     }
 
+    const ops = classifyOpsFailure(exception);
+    if (ops) {
+      return ops;
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       code: ErrorCodes.INTERNAL_ERROR,
@@ -171,4 +176,59 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
     return undefined;
   }
+}
+
+/** Map known deploy/ops failures to actionable 503 (not opaque Internal server error). */
+function classifyOpsFailure(exception: unknown): {
+  status: number;
+  code: string;
+  message: string;
+  details?: unknown;
+} | null {
+  const code =
+    typeof exception === 'object' &&
+    exception !== null &&
+    'code' in exception &&
+    typeof (exception as { code: unknown }).code === 'string'
+      ? (exception as { code: string }).code
+      : '';
+  const name =
+    typeof exception === 'object' &&
+    exception !== null &&
+    'name' in exception &&
+    typeof (exception as { name: unknown }).name === 'string'
+      ? (exception as { name: string }).name
+      : '';
+  const message = exception instanceof Error ? exception.message : String(exception);
+
+  const missingTable =
+    code === 'P2021' ||
+    (name === 'PrismaClientKnownRequestError' && /does not exist/i.test(message)) ||
+    (/csv_previews/i.test(message) && /does not exist/i.test(message));
+  if (missingTable) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+      message:
+        'CSV preview storage is not ready. Apply database migrations (csv_previews) and retry.',
+      details: { prismaCode: code || undefined },
+    };
+  }
+
+  const uploadFs =
+    code === 'EACCES' ||
+    code === 'EPERM' ||
+    (code === 'ENOENT' && /\.tmp|uploads/i.test(message)) ||
+    /permission denied/i.test(message);
+  if (uploadFs) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+      message:
+        'Upload storage is not writable. Check UPLOAD_DIR volume permissions and redeploy api.',
+      details: { fsCode: code || undefined },
+    };
+  }
+
+  return null;
 }

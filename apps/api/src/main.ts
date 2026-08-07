@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 
+import { mkdirSync, accessSync, constants as fsConstants } from 'node:fs';
+import { join } from 'node:path';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -30,6 +33,8 @@ async function bootstrap(): Promise<void> {
   const requestContext = app.get(RequestContextService);
   const logger = app.get(AppLogger).child('Bootstrap');
   app.useLogger(logger);
+
+  assertUploadDirWritable(config.uploadDir, logger);
 
   app.enableShutdownHooks();
 
@@ -197,6 +202,25 @@ function blockPath(app: NestExpressApplication, path: string): void {
     }
     response.end('Not Found');
   });
+}
+
+function assertUploadDirWritable(uploadDir: string, logger: AppLogger): void {
+  const tmpDir = join(uploadDir, '.tmp');
+  try {
+    mkdirSync(tmpDir, { recursive: true });
+    accessSync(tmpDir, fsConstants.W_OK);
+    logger.log(`Upload dir ready: ${tmpDir}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(
+      {
+        message: 'upload_dir_not_writable',
+        uploadDir,
+        error: message,
+      },
+      'Bootstrap',
+    );
+  }
 }
 
 void bootstrap();
