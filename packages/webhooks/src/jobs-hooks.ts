@@ -5,6 +5,12 @@ import { eventForItemStatus, WEBHOOK_EVENTS } from './events.js';
 import type { WebhookDeliveryService } from './delivery.service.js';
 import type { CheckWebhookData, JobWebhookData } from './payload.js';
 
+/** Strip supplier brand from client webhook payloads (EN). */
+function scrubErrorMessage(text: string | null): string | null {
+  if (text == null || text === '') return text;
+  return text.replace(/\bSMSC(?:\.ru)?\b/gi, 'provider');
+}
+
 /**
  * Bridge job lifecycle terminal events → webhook fan-out (async enqueue only).
  */
@@ -58,7 +64,7 @@ export function createJobsWebhookHooks(
         ported: item.ported,
         roaming: item.roaming,
         errorCode: item.errorCode,
-        errorMessage: item.errorMessage,
+        errorMessage: scrubErrorMessage(item.errorMessage),
         completedAt: item.completedAt?.toISOString() ?? null,
       };
 

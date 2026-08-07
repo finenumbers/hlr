@@ -115,12 +115,17 @@ export function mapProviderStatus(input: {
     lifecycleStatus = 'pending';
     resultStatus = 'pending';
   } else if (status === 1 || status === 2) {
-    lifecycleStatus = 'completed';
-    if (err === null || err === 0) {
+    // Delivered/read without err is incomplete for HLR — stay pending until err arrives.
+    if (err === null) {
+      lifecycleStatus = 'pending';
+      resultStatus = 'pending';
+      isReachable = null;
+    } else if (err === 0) {
+      lifecycleStatus = 'completed';
       resultStatus = 'reachable';
       isReachable = true;
     } else {
-      // Terminal delivery with HLR/Ping error → treat as completed unreachable.
+      lifecycleStatus = 'completed';
       resultStatus = 'unreachable';
       isReachable = false;
     }
@@ -128,7 +133,18 @@ export function mapProviderStatus(input: {
     lifecycleStatus = 'completed';
     resultStatus = 'unreachable';
     isReachable = false;
-  } else if (input.errorMessage || err !== null) {
+  } else if (err !== null) {
+    // err-only (no status): same semantics as status+err for HLR/PING.
+    if (err === 0) {
+      lifecycleStatus = 'completed';
+      resultStatus = 'reachable';
+      isReachable = true;
+    } else {
+      lifecycleStatus = 'completed';
+      resultStatus = 'unreachable';
+      isReachable = false;
+    }
+  } else if (input.errorMessage) {
     lifecycleStatus = 'failed';
     resultStatus = 'error';
   }
@@ -227,7 +243,23 @@ export function mapProviderResponse(input: {
     error_code?: number | string;
     cnt?: number | string;
     balance?: string | number;
+    _nonJson?: boolean;
+    text?: string;
   };
+
+  // Plain-text / non-JSON HTTP body from SMSC — fail fast (do not sit pending→timeout).
+  if (body._nonJson === true) {
+    return emptyNormalized(input.checkType, {
+      phoneE164: input.phoneE164 ?? null,
+      providerMessageId: input.providerMessageId ?? null,
+      lifecycleStatus: 'failed',
+      resultStatus: 'error',
+      providerErrorMessage:
+        typeof body.text === 'string' && body.text
+          ? `Non-JSON provider response: ${body.text.slice(0, 200)}`
+          : 'Non-JSON provider response',
+    });
+  }
 
   // API-level error (send/cost/status failure)
   if (body.error_code !== undefined && body.error_code !== null && body.error_code !== '') {

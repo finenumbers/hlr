@@ -128,10 +128,32 @@ export function createJobsWorkers(input: {
           started,
         });
         recordProviderThrow(metrics, error, 'submit');
+        // Await heal on last attempt inside the processor (Bull EventEmitter
+        // listeners are not awaited — do not rely on submit.on('failed')).
+        if (job.name === QUEUE_JOB_NAMES.SUBMIT_BATCH) {
+          const maxAttempts = job.opts.attempts ?? 1;
+          if (job.attemptsMade + 1 >= maxAttempts) {
+            const reason = error instanceof Error ? error.message : String(error);
+            try {
+              await queue.enqueueSubmitDlqHeal({
+                ...job.data,
+                reason,
+              });
+            } catch (deadLetterError: unknown) {
+              workerLogger.error('jobs.worker.submit.dead_letter_enqueue_failed', {
+                message:
+                  deadLetterError instanceof Error
+                    ? deadLetterError.message
+                    : String(deadLetterError),
+              });
+            }
+          }
+        }
         throw error;
       }
     },
-    { connection, concurrency },
+    // lockDuration 5m: slow SMSC must not stall (~30s default) into double-claim.
+    { connection, concurrency, lockDuration: 300_000 },
   );
 
   submit.on('failed', (job, error) => {
@@ -144,28 +166,6 @@ export function createJobsWorkers(input: {
       message: error.message,
       ...(job?.data?.requestId ? { requestId: job.data.requestId } : {}),
     });
-    const maxAttempts = job?.opts.attempts ?? 1;
-    // Only enqueue durable heal for submit-batch exhaustion (not for dlq-heal itself).
-    if (
-      job &&
-      job.name === QUEUE_JOB_NAMES.SUBMIT_BATCH &&
-      job.attemptsMade >= maxAttempts &&
-      job.data
-    ) {
-      void queue
-        .enqueueSubmitDlqHeal({
-          ...job.data,
-          reason: error.message,
-        })
-        .catch((deadLetterError: unknown) => {
-          workerLogger.error('jobs.worker.submit.dead_letter_enqueue_failed', {
-            message:
-              deadLetterError instanceof Error
-                ? deadLetterError.message
-                : String(deadLetterError),
-          });
-        });
-    }
   });
 
   const poll = new BullWorker(

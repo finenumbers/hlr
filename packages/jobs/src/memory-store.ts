@@ -382,9 +382,7 @@ export class InMemoryJobsStore implements JobsStore {
       return null;
     }
     if (item.status !== 'RESERVED' && item.status !== 'SENT') {
-      if (isTerminalJobItemStatus(item.status)) {
-        return cloneItem(item);
-      }
+      // Match prisma: CAS miss → null (do not return terminal clone for settle).
       return null;
     }
     assertJobItemTransition(item.status, input.status);

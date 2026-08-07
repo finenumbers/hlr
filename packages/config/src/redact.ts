@@ -69,3 +69,14 @@ export function sanitizeLogFields(
 ): Record<string, unknown> {
   return sanitizeLogValue(fields) as Record<string, unknown>;
 }
+
+/**
+ * Strip supplier brand from client-facing error text (public API / webhooks / cabinet).
+ */
+export function sanitizeProviderBrandText(
+  text: string | null | undefined,
+  replacement: 'provider' | 'провайдер' = 'provider',
+): string | null {
+  if (text == null || text === '') return text ?? null;
+  return text.replace(/\bSMSC(?:\.ru)?\b/gi, replacement);
+}

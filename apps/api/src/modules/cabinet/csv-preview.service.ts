@@ -12,6 +12,7 @@ import {
   assertCsvByteLimit,
   countNonMobilePhones,
   normalizeAndDeduplicatePhones,
+  RU_MOBILE_79_REQUIRED_MESSAGE,
   streamParsePhoneFile,
   JobsValidationError,
 } from '@finenumbers/jobs';
@@ -100,12 +101,24 @@ export class CsvPreviewService {
       }
 
       const normalized = normalizeAndDeduplicatePhones(parsed.phones);
+      const nonMobileCount = countNonMobilePhones(normalized.phones);
       const invalidSamples = normalized.invalid.slice(0, MAX_INVALID_SAMPLES).map((row) => ({
         input: row.input,
         reason: row.reason,
       }));
+      if (nonMobileCount > 0 && normalized.invalid.length === 0) {
+        invalidSamples.unshift({
+          input: `${nonMobileCount} number(s)`,
+          reason: RU_MOBILE_79_REQUIRED_MESSAGE,
+        });
+      }
+      // HLR/PING: any non-79 mobile → cannot submit (preview INVALID).
       const status =
-        normalized.invalid.length > 0 || normalized.phones.length === 0 ? 'INVALID' : 'READY';
+        normalized.invalid.length > 0 ||
+        normalized.phones.length === 0 ||
+        nonMobileCount > 0
+          ? 'INVALID'
+          : 'READY';
 
       const preview = await this.prisma.csvPreview.create({
         data: {
@@ -116,9 +129,13 @@ export class CsvPreviewService {
           originalFilename: input.file.originalname,
           rowCount: parsed.rowCount,
           validCount: normalized.phones.length,
-          invalidCount: normalized.invalid.length,
+          invalidCount: normalized.invalid.length + nonMobileCount,
           deduplicatedCount: normalized.deduplicatedCount,
-          phonesJson: status === 'READY' ? normalized.phones : [],
+          // Keep phones when only mobile-rule failed so UI can show the block message.
+          phonesJson:
+            status === 'READY' || (nonMobileCount > 0 && normalized.invalid.length === 0)
+              ? normalized.phones
+              : [],
           invalidJson: invalidSamples,
           previewUnitSellPrice: previewQuote.unitSellPrice,
           previewCurrency: previewQuote.currency,

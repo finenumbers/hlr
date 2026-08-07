@@ -1183,6 +1183,32 @@ export class BillingService {
   }
 
   /**
+   * Terminal job items that still have an open HOLD (no DEBIT/RELEASE).
+   * Used by reconcile open-hold reaper.
+   */
+  async listTerminalJobsWithOpenHolds(limit: number): Promise<
+    Array<{ jobId: string; tenantId: string }>
+  > {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ jobId: string; tenantId: string }>
+    >`
+      SELECT DISTINCT ji."jobId" AS "jobId", ji."tenantId" AS "tenantId"
+      FROM wallet_transactions h
+      INNER JOIN job_items ji ON ji.id = h."jobItemId"
+      WHERE h.type = 'HOLD'
+        AND ji.status IN ('COMPLETED', 'FAILED')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM wallet_transactions s
+          WHERE s."relatedHoldId" = h.id
+            AND s.type IN ('DEBIT', 'RELEASE')
+        )
+      LIMIT ${limit}
+    `;
+    return rows;
+  }
+
+  /**
    * Settle open HOLDs for terminal items (idempotent).
    * Honors JobItem.billingAction: CAPTURE vs RELEASE (Policy B).
    * Legacy null action uses resolveJobItemSettleAction heuristic.

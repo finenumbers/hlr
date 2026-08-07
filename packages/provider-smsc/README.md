@@ -35,7 +35,7 @@ Callback and status polling share `mapProviderResponse()` so both produce the sa
 
 ## Assumptions (conservative)
 
-1. **JSON only** (`fmt=3`). Non-JSON bodies are kept as `{ _nonJson, text }` and treated as opaque.
+1. **JSON only** (`fmt=3`). Non-JSON bodies are kept as `{ _nonJson, text }` and mapped to **failed** (not pending).
 2. **Normalized fields** are filled only when confidently interpretable (`status`, `err`, `imsi`, `mcc`, `mnc`, `cn`, `net`, roaming hints). Everything else stays in the raw payload.
 3. **Reachability**: `status` in `{1,2}` and `err` in `{null,0}` → `reachable`; terminal failure statuses / non-zero `err` → `unreachable` with `lifecycleStatus=completed` (billing can capture later).
 4. **Credentials** come from env (`SMSC_API_KEY` or `SMSC_LOGIN`+`SMSC_PASSWORD`). Never hardcoded; never logged.

@@ -107,7 +107,7 @@ export class PublicChecksController {
       });
       return {
         ...this.publicApi.mapJob(job),
-        items: items.items,
+        items: this.publicApi.mapItems(items.items),
       };
     }
 
@@ -115,7 +115,7 @@ export class PublicChecksController {
     const job = await this.jobs.getByIdForTenant(apiKey.tenantId, item.jobId);
     return {
       ...this.publicApi.mapJob(job),
-      items: [item],
+      items: this.publicApi.mapItems([item]),
     };
   }
 }

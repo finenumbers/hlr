@@ -115,6 +115,47 @@ describe('mapProviderStatus', () => {
     expect(result.resultStatus).toBe('unreachable');
     expect(result.isReachable).toBe(false);
   });
+
+  it('keeps status 1/2 without err as pending (do not guess reachable)', () => {
+    const result = mapProviderStatus({
+      checkType: 'HLR',
+      statusCode: 1,
+      providerMessageId: '9',
+    });
+    expect(result.lifecycleStatus).toBe('pending');
+    expect(result.resultStatus).toBe('pending');
+    expect(result.isReachable).toBeNull();
+  });
+
+  it('unifies err-only with status+err semantics', () => {
+    const errOnly = mapProviderStatus({
+      checkType: 'HLR',
+      errorCode: 23,
+      providerMessageId: '9',
+    });
+    expect(errOnly.lifecycleStatus).toBe('completed');
+    expect(errOnly.resultStatus).toBe('unreachable');
+
+    const errZero = mapProviderStatus({
+      checkType: 'HLR',
+      errorCode: 0,
+      providerMessageId: '9',
+    });
+    expect(errZero.lifecycleStatus).toBe('completed');
+    expect(errZero.resultStatus).toBe('reachable');
+  });
+});
+
+describe('mapProviderResponse edge cases', () => {
+  it('fails non-JSON provider bodies', () => {
+    const result = mapProviderResponse({
+      checkType: 'HLR',
+      raw: { _nonJson: true, text: 'ERROR temporary' },
+    });
+    expect(result.lifecycleStatus).toBe('failed');
+    expect(result.resultStatus).toBe('error');
+    expect(result.providerErrorMessage).toContain('Non-JSON');
+  });
 });
 
 describe('callback parsing helpers', () => {

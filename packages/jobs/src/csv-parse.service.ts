@@ -2,7 +2,12 @@ import { unlink } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-import { chunkArray, normalizeAndDeduplicatePhones } from './phone.js';
+import {
+  chunkArray,
+  countNonRuMobile79Phones,
+  normalizeAndDeduplicatePhones,
+  RU_MOBILE_79_REQUIRED_MESSAGE,
+} from './phone.js';
 import type { CreateJobServiceDeps, JobsLogger } from './ports.js';
 import { DEFAULT_JOB_RUNTIME_SETTINGS } from './queue-names.js';
 import type { CsvParsePayload, JobRecord, JobRuntimeSettings } from './types.js';
@@ -240,6 +245,26 @@ export class CsvParseService {
         status: 'FAILED',
         errorCode: 'CSV_EMPTY',
         errorMessage: 'No valid phones after normalization',
+      });
+      await safeUnlink(payload.filePath, this.logger);
+      return {
+        job: failed ?? job,
+        workUnits: 0,
+        batchesEnqueued: 0,
+        deduplicatedPhoneCount: normalized.deduplicatedCount,
+        failed: true,
+      };
+    }
+
+    if (
+      (job.checkType === 'HLR' || job.checkType === 'PING') &&
+      countNonRuMobile79Phones(normalized.phones) > 0
+    ) {
+      const failed = await this.deps.store.finalizeJob({
+        jobId: job.id,
+        status: 'FAILED',
+        errorCode: 'CSV_NON_MOBILE',
+        errorMessage: RU_MOBILE_79_REQUIRED_MESSAGE,
       });
       await safeUnlink(payload.filePath, this.logger);
       return {

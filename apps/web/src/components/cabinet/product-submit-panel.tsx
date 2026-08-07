@@ -14,6 +14,12 @@ import { cn, formatMoney } from '@/lib/utils';
 
 const PHONE_PAGE_SIZE = 100;
 
+/** RU mobile pilot rule: exactly 11 digits starting with 79. */
+function isRuMobile79(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('79');
+}
+
 type PreviewState = {
   id: string;
   status: string;
@@ -104,6 +110,11 @@ export function ProductSubmitPanel({
         .map((p) => p.trim())
         .filter(Boolean),
     [phonesText],
+  );
+
+  const pasteHasNonMobile = useMemo(
+    () => phones.some((phone) => !isRuMobile79(phone)),
+    [phones],
   );
 
   const title =
@@ -358,14 +369,14 @@ export function ProductSubmitPanel({
                 </p>
                 {(preview.stats.nonMobileCount ?? 0) > 0 ? (
                   <p className="text-sm text-[var(--color-danger)]">
-                    {t('cabinetSubmit.nonMobileWarning', {
-                      count: preview.stats.nonMobileCount ?? 0,
-                    })}
+                    {t('cabinetSubmit.nonMobileWarning')}
                   </p>
                 ) : null}
                 {preview.status === 'INVALID' ? (
                   <div className="space-y-1 text-sm text-[var(--color-danger)]">
-                    <p>{t('cabinetSubmit.previewInvalid')}</p>
+                    {(preview.stats.nonMobileCount ?? 0) === 0 ? (
+                      <p>{t('cabinetSubmit.previewInvalid')}</p>
+                    ) : null}
                     {preview.invalidSamples.slice(0, 5).map((sample, idx) => (
                       <p key={`${sample.input}-${idx}`}>
                         {sample.input}: {sample.reason}
@@ -438,7 +449,11 @@ export function ProductSubmitPanel({
                       </Button>
                       <Button
                         type="button"
-                        disabled={busy || preview.status !== 'READY'}
+                        disabled={
+                          busy ||
+                          preview.status !== 'READY' ||
+                          (preview.stats.nonMobileCount ?? 0) > 0
+                        }
                         onClick={() => {
                           setCsvError(null);
                           csvSubmitMut.mutate();
@@ -482,12 +497,17 @@ export function ProductSubmitPanel({
               })}
             </p>
           ) : null}
+          {pasteHasNonMobile && phones.length > 0 ? (
+            <p className="text-sm text-[var(--color-danger)]">
+              {t('cabinetSubmit.nonMobileWarning')}
+            </p>
+          ) : null}
           {error ? <p className="text-sm text-[var(--color-danger)]">{error}</p> : null}
           <div className="flex gap-2">
             <Button
               type="button"
               variant="secondary"
-              disabled={!phones.length || busy}
+              disabled={!phones.length || busy || pasteHasNonMobile}
               onClick={() => {
                 setError(null);
                 estimateMut.mutate();
@@ -497,7 +517,7 @@ export function ProductSubmitPanel({
             </Button>
             <Button
               type="button"
-              disabled={!phones.length || busy}
+              disabled={!phones.length || busy || pasteHasNonMobile}
               onClick={() => {
                 setError(null);
                 submitMut.mutate();

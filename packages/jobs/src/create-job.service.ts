@@ -1,4 +1,9 @@
-import { chunkArray, normalizeAndDeduplicatePhones } from './phone.js';
+import {
+  chunkArray,
+  countNonRuMobile79Phones,
+  normalizeAndDeduplicatePhones,
+  RU_MOBILE_79_REQUIRED_MESSAGE,
+} from './phone.js';
 import type { CreateJobServiceDeps, JobsLogger } from './ports.js';
 import { DEFAULT_JOB_RUNTIME_SETTINGS } from './queue-names.js';
 import type { CreateJobInput, CreateJobResult, JobRuntimeSettings } from './types.js';
@@ -92,6 +97,16 @@ export class CreateJobService {
     }
     if (normalized.phones.length === 0) {
       throw new JobsValidationError('No valid phone numbers after normalization');
+    }
+    // HLR + PING: only RU mobile 79XXXXXXXXX (pilot hard-block).
+    const nonRuMobileCount = countNonRuMobile79Phones(normalized.phones);
+    if (
+      (input.checkType === 'HLR' || input.checkType === 'PING') &&
+      nonRuMobileCount > 0
+    ) {
+      throw new JobsValidationError(RU_MOBILE_79_REQUIRED_MESSAGE, {
+        nonRuMobileCount,
+      });
     }
     if (normalized.phones.length > settings.maxBatchPhones) {
       throw new JobsValidationError('Phone count exceeds maxBatchPhones', {

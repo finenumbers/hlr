@@ -416,7 +416,7 @@ const enMessages = {
     previewInvalid:
       'File has invalid numbers. Fix and re-upload — submit is disabled.',
     nonMobileWarning:
-      '{count} numbers may not be mobile. Provider HLR often returns a delivery/lookup error for landlines.',
+      'The list contains numbers that cannot be reliably checked by HLR Lookup on mobile networks',
     orPaste: 'or paste numbers',
   },
   cabinetJobs: {

@@ -144,6 +144,43 @@ describe('CreateJobService', () => {
     ).rejects.toBeInstanceOf(JobsValidationError);
   });
 
+  it('rejects HLR and PING when any number is not RU mobile 79…', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const service = new CreateJobService({ store, queue });
+
+    for (const checkType of ['HLR', 'PING'] as const) {
+      await expect(
+        service.create({
+          tenantId: 'tenant-1',
+          checkType,
+          source: 'BULK',
+          phones: ['+74951234567'],
+          priceSnapshot: snap(checkType),
+        }),
+      ).rejects.toThrow(/мобильных сетях|HLR Lookup/);
+
+      await expect(
+        service.create({
+          tenantId: 'tenant-1',
+          checkType,
+          source: 'BULK',
+          phones: ['+79001234567', '+74951234567'],
+          priceSnapshot: snap(checkType),
+        }),
+      ).rejects.toBeInstanceOf(JobsValidationError);
+    }
+
+    const ok = await service.create({
+      tenantId: 'tenant-1',
+      checkType: 'HLR',
+      source: 'BULK',
+      phones: ['+79001234567'],
+      priceSnapshot: snap('HLR'),
+    });
+    expect(ok.workUnits).toBe(1);
+  });
+
   it('deletes the job when enqueueSubmitBatch fails (no junk history)', async () => {
     const store = new InMemoryJobsStore();
     const queue = new InMemoryJobsQueue();

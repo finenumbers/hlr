@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { chunkArray, normalizeAndDeduplicatePhones, normalizePhoneE164 } from './phone.js';
+import {
+  chunkArray,
+  countNonRuMobile79Phones,
+  isRuMobile79,
+  normalizeAndDeduplicatePhones,
+  normalizePhoneE164,
+} from './phone.js';
 import { JobsValidationError } from './types.js';
 
 describe('normalizePhoneE164', () => {
@@ -31,6 +37,23 @@ describe('normalizeAndDeduplicatePhones', () => {
     const result = normalizeAndDeduplicatePhones(['+79991234567', 'not-a-phone']);
     expect(result.phones).toEqual(['+79991234567']);
     expect(result.invalid).toHaveLength(1);
+  });
+});
+
+describe('isRuMobile79', () => {
+  it('accepts +79XXXXXXXXX', () => {
+    expect(isRuMobile79('+79001234567')).toBe(true);
+    expect(isRuMobile79('79001234567')).toBe(true);
+  });
+
+  it('rejects landline and non-RU', () => {
+    expect(isRuMobile79('+74951234567')).toBe(false);
+    expect(isRuMobile79('+380501234567')).toBe(false);
+    expect(isRuMobile79('+7900123456')).toBe(false);
+  });
+
+  it('counts non-79 mobiles', () => {
+    expect(countNonRuMobile79Phones(['+79001234567', '+74951234567'])).toBe(1);
   });
 });
 

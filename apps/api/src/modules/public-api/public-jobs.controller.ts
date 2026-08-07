@@ -177,12 +177,16 @@ export class PublicJobsController {
     @Param('id') id: string,
     @Query() query: ListItemsQueryDto,
   ) {
-    return this.jobs.listItemsForTenant({
+    const result = await this.jobs.listItemsForTenant({
       tenantId: apiKey.tenantId,
       jobId: id,
       page: query.page,
       pageSize: query.pageSize,
       status: query.status,
     });
+    return {
+      ...result,
+      items: this.publicApi.mapItems(result.items),
+    };
   }
 }

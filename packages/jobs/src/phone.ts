@@ -1,5 +1,4 @@
 import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
-import { parsePhoneNumberFromString as parsePhoneNumberWithType } from 'libphonenumber-js/max';
 
 import { JobsValidationError } from './types.js';
 
@@ -13,19 +12,32 @@ export type NormalizePhonesResult = {
 };
 
 /**
- * Count E.164 numbers classified as fixed-line (landline).
- * Uses full metadata (`libphonenumber-js/max`) so getType() works.
- * HLR often fails on landlines at the provider — surface as preview warning.
+ * RU mobile for HLR/PING pilot: exactly 11 digits starting with 79 (+79XXXXXXXXX).
  */
-export function countNonMobilePhones(phones: string[]): number {
+export function isRuMobile79(e164: string): boolean {
+  const digits = e164.replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('79');
+}
+
+/** Count numbers that are not RU mobile 79… (after E.164 normalization). */
+export function countNonRuMobile79Phones(phones: string[]): number {
   let count = 0;
   for (const phone of phones) {
-    const parsed = parsePhoneNumberWithType(phone);
-    if (!parsed?.isValid()) continue;
-    if (parsed.getType() === 'FIXED_LINE') count += 1;
+    if (!isRuMobile79(phone)) count += 1;
   }
   return count;
 }
+
+/**
+ * @deprecated Prefer countNonRuMobile79Phones for HLR/PING gate.
+ * Count E.164 numbers classified as fixed-line (landline).
+ */
+export function countNonMobilePhones(phones: string[]): number {
+  return countNonRuMobile79Phones(phones);
+}
+
+export const RU_MOBILE_79_REQUIRED_MESSAGE =
+  'В списке для проверки есть номера, проверка которых не может быть гарантирована HLR Lookup на мобильных сетях';
 
 /**
  * Normalize a single phone to E.164.

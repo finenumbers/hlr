@@ -9,6 +9,7 @@ export {
   redactSecretsInText,
   sanitizeLogFields,
   sanitizeLogValue,
+  sanitizeProviderBrandText,
 } from './redact.js';
 
 const nonempty = z.string().min(1);

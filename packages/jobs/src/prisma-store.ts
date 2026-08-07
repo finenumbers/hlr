@@ -573,8 +573,10 @@ export class PrismaJobsStore implements JobsStore {
         completedAt: input.completedAt,
       },
     });
+    // No-op: another worker already moved the item out of RESERVED/SENT.
+    // Return null so lifecycle does not re-run capture/release on a stale loser.
     if (updated.count === 0) {
-      return this.findItemById(input.jobItemId);
+      return null;
     }
     return this.findItemById(input.jobItemId);
   }

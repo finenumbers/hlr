@@ -25,6 +25,13 @@ export type JobsBillingHooksLike = {
     jobId: string;
     status: string;
   }): Promise<void>;
+
+  /** Reconcile: settle open HOLDs stranded on already-terminal jobs. */
+  reapOpenHolds?(input: { limit: number }): Promise<{
+    jobCount: number;
+    captured: number;
+    released: number;
+  }>;
 };
 
 const silentLogger: BillingLogger = {
@@ -112,6 +119,25 @@ export function createBillingJobsHooks(
         ...costs,
         ...settled,
       });
+    },
+
+    async reapOpenHolds(input) {
+      const jobs = await billing.listTerminalJobsWithOpenHolds(input.limit);
+      let captured = 0;
+      let released = 0;
+      for (const row of jobs) {
+        const settled = await billing.settleUnsettledHoldsForJob(row.jobId);
+        captured += settled.captured;
+        released += settled.released;
+      }
+      if (jobs.length > 0 || captured > 0 || released > 0) {
+        logger.info('billing.reaper.open_holds', {
+          jobCount: jobs.length,
+          captured,
+          released,
+        });
+      }
+      return { jobCount: jobs.length, captured, released };
     },
   };
 }

@@ -888,4 +888,126 @@ describe('JobLifecycleService', () => {
     expect(fresh?.status).toBe('COMPLETED');
     expect(fresh?.billingAction).toBe('CAPTURE');
   });
+
+  it('submit CAS loser does not release after winner captured', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await seedJob(store, ['+79991234567']);
+    const itemId = items[0]!.id;
+    await store.claimItemForSubmit(itemId);
+
+    const terminalCalls: Array<'capture' | 'release'> = [];
+    let submitCalls = 0;
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(async () => {
+        submitCalls += 1;
+        if (submitCalls === 1) {
+          // Simulate a concurrent winner that already terminalized as COMPLETED.
+          await store.updateItemAfterSubmit({
+            jobItemId: itemId,
+            status: 'COMPLETED',
+            providerMessageId: 'win-1',
+            providerCode: 'smsc',
+            resultStatus: 'reachable',
+            isReachable: true,
+            completedAt: new Date(),
+            billingAction: 'CAPTURE',
+          });
+        }
+        throw new ProviderError({
+          providerCode: 'smsc',
+          kind: 'network',
+          message: 'SMSC timeout',
+          retryable: false,
+        });
+      }),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      billing: {
+        async onItemReserved() {},
+        async onItemTerminal(input) {
+          terminalCalls.push(input.billingAction);
+        },
+        async onJobFinalized() {},
+      },
+    });
+
+    const result = await lifecycle.processSubmitBatch({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      itemIds: [itemId],
+    });
+
+    expect(result.failed).toBe(0);
+    expect(terminalCalls).toEqual([]);
+    const fresh = await store.findItemById(itemId);
+    expect(fresh?.status).toBe('COMPLETED');
+    expect(fresh?.billingAction).toBe('CAPTURE');
+  });
+
+  it('submit CAS loser does not capture after winner released', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    const { job, items } = await seedJob(store, ['+79991234567']);
+    const itemId = items[0]!.id;
+    await store.claimItemForSubmit(itemId);
+
+    const terminalCalls: Array<'capture' | 'release'> = [];
+    const provider: JobsProviderPort = {
+      submitHlr: vi.fn(async () => {
+        await store.updateItemAfterSubmit({
+          jobItemId: itemId,
+          status: 'FAILED',
+          providerMessageId: null,
+          providerCode: 'smsc',
+          errorCode: 'SUBMIT_FAILED',
+          errorMessage: 'winner failed first',
+          completedAt: new Date(),
+          billingAction: 'RELEASE',
+        });
+        return submitResult({
+          providerMessageId: 'late-1',
+          normalized: baseNormalized({
+            lifecycleStatus: 'completed',
+            resultStatus: 'reachable',
+            isReachable: true,
+            providerMessageId: 'late-1',
+          }),
+        });
+      }),
+      submitPing: vi.fn(),
+      fetchStatus: vi.fn(),
+    };
+
+    const lifecycle = new JobLifecycleService({
+      store,
+      queue,
+      provider,
+      billing: {
+        async onItemReserved() {},
+        async onItemTerminal(input) {
+          terminalCalls.push(input.billingAction);
+        },
+        async onJobFinalized() {},
+      },
+    });
+
+    const result = await lifecycle.processSubmitBatch({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      itemIds: [itemId],
+    });
+
+    expect(result.failed).toBe(0);
+    expect(terminalCalls).toEqual([]);
+    const fresh = await store.findItemById(itemId);
+    expect(fresh?.status).toBe('FAILED');
+    expect(fresh?.billingAction).toBe('RELEASE');
+  });
 });

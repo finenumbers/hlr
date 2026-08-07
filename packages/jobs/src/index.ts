@@ -12,7 +12,10 @@ export type { QueueName, QueueJobName } from './queue-names.js';
 export {
   normalizePhoneE164,
   normalizeAndDeduplicatePhones,
+  isRuMobile79,
+  countNonRuMobile79Phones,
   countNonMobilePhones,
+  RU_MOBILE_79_REQUIRED_MESSAGE,
   chunkArray,
 } from './phone.js';
 export type { NormalizePhonesResult } from './phone.js';

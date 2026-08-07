@@ -102,6 +102,18 @@ function preferString(
   return incoming ?? existing ?? null;
 }
 
+/** Prefer existing terminal statuses so HLR enrich cannot regress reachable→pending. */
+function preferResultStatus(
+  incoming: NormalizedResult['resultStatus'] | string | null | undefined,
+  existing: NormalizedResult['resultStatus'] | string | null | undefined,
+): NormalizedResult['resultStatus'] {
+  const terminal = new Set(['reachable', 'unreachable', 'error', 'unknown']);
+  if (existing && terminal.has(existing) && (!incoming || incoming === 'pending')) {
+    return existing as NormalizedResult['resultStatus'];
+  }
+  return (preferString(incoming, existing) ?? 'unknown') as NormalizedResult['resultStatus'];
+}
+
 function preferBool(
   incoming: boolean | null | undefined,
   existing: boolean | null | undefined,
@@ -330,9 +342,10 @@ export class JobLifecycleService {
           completedAt: this.now(),
           billingAction: 'RELEASE',
         });
-        failed += 1;
-        anyTerminal = true;
+        // null = CAS miss (another worker already terminalized) — do not settle/count.
         if (failedItem) {
+          failed += 1;
+          anyTerminal = true;
           await this.onItemBecameTerminal(failedItem, 'release');
         }
         this.logger.warn('jobs.submit.item_failed', {
@@ -774,10 +787,7 @@ export class JobLifecycleService {
         roaming: preferBool(rich.roaming, merged.roaming),
         ported: preferBool(rich.ported, merged.ported),
         isReachable: preferBool(rich.isReachable, merged.isReachable),
-        resultStatus: preferString(
-          rich.resultStatus,
-          merged.resultStatus,
-        ) as NormalizedResult['resultStatus'],
+        resultStatus: preferResultStatus(rich.resultStatus, merged.resultStatus),
         providerErrorCode: preferString(
           rich.providerErrorCode,
           merged.providerErrorCode,
@@ -786,9 +796,10 @@ export class JobLifecycleService {
           rich.providerErrorMessage,
           merged.providerErrorMessage,
         ),
+        // Prefer existing status code when enrich returns empty/pending noise.
         providerStatusCode: preferString(
-          rich.providerStatusCode,
           merged.providerStatusCode,
+          rich.providerStatusCode,
         ),
         extras: mergeExtras(rich.extras, merged.extras),
         cost: preferString(merged.cost, rich.cost),
@@ -1089,6 +1100,18 @@ export class JobLifecycleService {
       }
     }
 
+    let openHoldsReaped = 0;
+    if (this.billing.reapOpenHolds) {
+      try {
+        const reaped = await this.billing.reapOpenHolds({ limit: Math.min(limit, 50) });
+        openHoldsReaped = reaped.jobCount;
+      } catch (error) {
+        this.logger.error('jobs.reconcile.open_hold_reaper_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     this.logger.info('jobs.reconcile.tick', {
       polled: stale.length,
       finalized: finalizedCount,
@@ -1098,6 +1121,7 @@ export class JobLifecycleService {
       reservedFailed,
       csvHealed,
       csvAbandoned,
+      openHoldsReaped,
     });
 
     return { polled: stale.length, finalized: finalizedCount };

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { sanitizeProviderBrandText } from '@finenumbers/config';
 
 import { AppConfigService } from '../../common/config/app-config.service';
 import { RequestContextService } from '../../common/request-context/request-context.service';
@@ -218,7 +219,7 @@ export class PublicApiService {
           : String(result.job.actualCost),
       currency: result.job.currency,
       errorCode: result.job.errorCode ?? null,
-      errorMessage: result.job.errorMessage ?? null,
+      errorMessage: sanitizeProviderBrandText(result.job.errorMessage ?? null),
       createdAt: result.job.createdAt,
       progress: result.progress,
     };
@@ -262,9 +263,17 @@ export class PublicApiService {
       actualCost: job.actualCost,
       currency: job.currency,
       errorCode: job.errorCode ?? null,
-      errorMessage: job.errorMessage ?? null,
+      errorMessage: sanitizeProviderBrandText(job.errorMessage ?? null),
       createdAt: job.createdAt,
       ...(job.progress ? { progress: job.progress } : {}),
     };
+  }
+
+  /** Scrub supplier brand from public item payloads. */
+  mapItems<T extends { errorMessage?: string | null }>(items: T[]): T[] {
+    return items.map((item) => ({
+      ...item,
+      errorMessage: sanitizeProviderBrandText(item.errorMessage ?? null),
+    }));
   }
 }

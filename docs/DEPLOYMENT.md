@@ -91,7 +91,7 @@ Deploy. Сеть `hlr_net` создаётся автоматически; сет
 
 Сервис **`migrate`** в стеке сам делает `prisma migrate deploy` + seed (создание админа). Отдельно запускать не нужно.
 
-Если логин не работает после старого деплоя: **Pull and redeploy** стека (пересоздаст seed-пароль из `SEED_*`) и проверьте, что `PUBLIC_API_URL` в env — тот же HTTPS-хост, что у API в NPM.
+Если логин не работает после старого деплоя: проверьте, что `PUBLIC_API_URL` в env — тот же HTTPS-хост, что у API в NPM. Seed **не** перезаписывает пароль при обычном redeploy — сброс только через одноразовый `SEED_RESET_PASSWORD=true` (см. выше), затем верните `false`.
 
 ### 4. Update
 
@@ -188,11 +188,14 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 
 ### Go / no-go checklist (pilot)
 
-- [ ] Backup taken immediately before migrate with `billingAction` / providerMessageId unique index
-- [ ] Timeout / DLQ items never produce DEBIT via finalize settle; provider-final `resultStatus=error` still captures
-- [ ] Stale RESERVED resumes or fails+releases; submit DLQ heal is durable
-- [ ] SMSC callback with colliding `id` but different `phone` does not apply
-- [ ] `METRICS_SCRAPE_TOKEN` set (or NPM denies `/metrics`); callback IP RPM active
+- [ ] Postgres **logical dump** before migrate / redeploy (see Backup above)
+- [ ] Migration `billingAction` / unique `providerMessageId` applied
+- [ ] `SMSC_CALLBACK_SECRET` set (required in production); callback URL wired in SMSC
+- [ ] `METRICS_SCRAPE_TOKEN` set **and** NPM denies public `/metrics`
+- [ ] `checkTimeoutSec` ≥ SMSC SLA (seed default **3600**). Policy B: after timeout RELEASE, a late provider success does **not** reopen the item or capture
+- [ ] HLR and PING reject non-`79XXXXXXXXX` numbers (paste/CSV/`/v1`)
+- [ ] Live SMSC smoke: known reachable + unreachable + API error → UI/XLSX/ledger CAPTURE ok; no SMSC brand in `/v1` or webhooks
+- [ ] Open HOLD reaper / submit DLQ heal / submit `lockDuration` 5m in worker
 - [ ] Pilot: tariff → org → topup → HLR → Silent SMS → webhook → XLSX
 
 ## CI

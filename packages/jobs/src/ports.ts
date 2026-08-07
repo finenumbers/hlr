@@ -255,6 +255,13 @@ export interface JobsBillingHooks {
     jobId: string;
     status: JobRecord['status'];
   }): Promise<void>;
+
+  /** Optional: settle stranded open HOLDs on terminal jobs (reconcile reaper). */
+  reapOpenHolds?(input: { limit: number }): Promise<{
+    jobCount: number;
+    captured: number;
+    released: number;
+  }>;
 }
 
 /**
