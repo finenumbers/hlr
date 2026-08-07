@@ -15,6 +15,7 @@ import { serviceLabel } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { downloadBlob } from '@/lib/csv';
 import { useI18n, useT } from '@/lib/i18n';
+import { hlrResultRowClassName } from '@/lib/hlr-row-tone';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
 import {
   isSubmitTimeProviderFailure,
@@ -178,11 +179,7 @@ export default function CabinetJobDetailPage() {
             })}
             rows={itemRows}
             rowKey={(r) => String(r.id)}
-            rowClassName={(r) =>
-              isHlr && r.resultStatus === 'unreachable'
-                ? 'bg-[color-mix(in_oklab,var(--color-danger)_12%,transparent)] hover:bg-[color-mix(in_oklab,var(--color-danger)_18%,transparent)]'
-                : undefined
-            }
+            rowClassName={(r) => (isHlr ? hlrResultRowClassName(r) : undefined)}
             page={page}
             pageSize={50}
             total={items.data?.total ?? 0}

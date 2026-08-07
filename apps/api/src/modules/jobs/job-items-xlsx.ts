@@ -1,3 +1,4 @@
+import { hlrRowTone, type HlrRowTone } from '@finenumbers/provider-core';
 import ExcelJS from 'exceljs';
 
 import {
@@ -20,9 +21,22 @@ const CENTER: Partial<ExcelJS.Alignment> = {
   wrapText: true,
 };
 
+/** Classic Excel conditional-format pastels (ARGB). */
+const HLR_ROW_FILLS: Record<HlrRowTone, string> = {
+  success: 'FFC6EFCE',
+  fail: 'FFFFC7CE',
+  error: 'FFFFEB9C',
+};
+
+function excelColumnWidth(maxChars: number): number {
+  // Excel column width unit ≈ character width; pad + clamp to Excel max.
+  return Math.min(255, Math.max(10, maxChars + 2));
+}
+
 /**
  * Build a styled XLSX workbook for job item results.
  * Header: bold + center. All cells: center + thin borders over used range.
+ * HLR data rows: success/fail/error fills matching UI tones.
  */
 export async function buildJobItemsXlsxBuffer(input: {
   checkType: string;
@@ -30,6 +44,7 @@ export async function buildJobItemsXlsxBuffer(input: {
   items: ExportItem[];
 }): Promise<Buffer> {
   const { checkType, locale, items } = input;
+  const isHlr = checkType === 'HLR';
   const header = buildJobItemsExportHeader(checkType, locale);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Finenumbers HLR';
@@ -44,6 +59,22 @@ export async function buildJobItemsXlsxBuffer(input: {
   for (const item of items) {
     const row = sheet.addRow(buildJobItemsExportRow(checkType, locale, item));
     row.alignment = CENTER;
+    if (isHlr) {
+      const tone = hlrRowTone({
+        resultStatus: item.resultStatus,
+        status: item.status,
+      });
+      if (tone) {
+        const argb = HLR_ROW_FILLS[tone];
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb },
+          };
+        });
+      }
+    }
   }
 
   const rowCount = Math.max(1, items.length + 1);
@@ -61,12 +92,12 @@ export async function buildJobItemsXlsxBuffer(input: {
 
   for (let c = 1; c <= colCount; c += 1) {
     const col = sheet.getColumn(c);
-    let max = 10;
+    let max = String(header[c - 1] ?? '').length;
     col.eachCell({ includeEmpty: true }, (cell) => {
       const len = String(cell.value ?? '').length;
       if (len > max) max = len;
     });
-    col.width = Math.min(40, Math.max(12, max + 2));
+    col.width = excelColumnWidth(max);
   }
 
   const raw = await workbook.xlsx.writeBuffer();

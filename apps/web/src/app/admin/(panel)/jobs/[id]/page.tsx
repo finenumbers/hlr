@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card';
 import { api, ApiError } from '@/lib/api/client';
 import { downloadBlob } from '@/lib/csv';
 import { useI18n, useT } from '@/lib/i18n';
+import { hlrResultRowClassName } from '@/lib/hlr-row-tone';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
 import { labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
@@ -173,11 +174,7 @@ export default function AdminJobDetailPage() {
             })}
             rows={(items.data?.items ?? []) as Array<Record<string, unknown>>}
             rowKey={(r) => String(r.id)}
-            rowClassName={(r) =>
-              isHlr && r.resultStatus === 'unreachable'
-                ? 'bg-[color-mix(in_oklab,var(--color-danger)_12%,transparent)] hover:bg-[color-mix(in_oklab,var(--color-danger)_18%,transparent)]'
-                : undefined
-            }
+            rowClassName={(r) => (isHlr ? hlrResultRowClassName(r) : undefined)}
             page={page}
             pageSize={20}
             total={items.data?.total ?? 0}

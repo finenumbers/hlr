@@ -147,6 +147,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@finenumbers/provider-core':
+        specifier: workspace:*
+        version: link:../../packages/provider-core
       '@hookform/resolvers':
         specifier: ^5.5.7
         version: 5.5.7(@standard-schema/spec@1.1.0)(ajv-formats@2.1.1(ajv@8.20.0))(ajv@8.20.0)(class-transformer@0.5.1)(class-validator@0.15.1)(effect@3.21.0)(react-hook-form@7.83.0(react@19.2.8))(zod@3.25.76)
@@ -399,6 +402,9 @@ importers:
       typescript:
         specifier: ^5.8.2
         version: 5.9.3
+      vitest:
+        specifier: ^3.0.9
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.49.0)(tsx@4.23.1)
 
   packages/provider-smsc:
     dependencies:

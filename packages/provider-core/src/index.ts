@@ -15,6 +15,9 @@ export type {
   SubmitCheckResult,
 } from './types.js';
 
+export { hlrRowTone } from './hlr-row-tone.js';
+export type { HlrRowTone } from './hlr-row-tone.js';
+
 export { ProviderError, isProviderError } from './errors.js';
 export type { ProviderErrorDetails, ProviderErrorKind } from './errors.js';
 
