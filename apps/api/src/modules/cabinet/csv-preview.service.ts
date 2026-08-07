@@ -79,19 +79,32 @@ export class CsvPreviewService {
     }
 
     try {
-      const readyCount = await this.prisma.csvPreview.count({
+      // Cap unused READY previews per tenant; new upload evicts oldest (do not block UI).
+      const readyPreviews = await this.prisma.csvPreview.findMany({
         where: {
           tenantId: input.tenantId,
           status: 'READY',
           expiresAt: { gt: new Date() },
         },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
       });
-      if (readyCount >= MAX_READY_PREVIEWS_PER_TENANT) {
-        await safeUnlink(input.file.path);
-        throw new BadRequestException({
-          errorCode: ErrorCodes.VALIDATION_FAILED,
-          message: `Too many active CSV previews (max ${MAX_READY_PREVIEWS_PER_TENANT}). Submit or wait for expiry.`,
+      const overflow =
+        readyPreviews.length - MAX_READY_PREVIEWS_PER_TENANT + 1;
+      if (overflow > 0) {
+        const evictIds = readyPreviews.slice(0, overflow).map((row) => row.id);
+        await this.prisma.csvPreview.updateMany({
+          where: { id: { in: evictIds } },
+          data: { status: 'EXPIRED', phonesJson: Prisma.DbNull },
         });
+        this.logger.log(
+          {
+            message: 'cabinet.csv_preview.evicted_oldest',
+            tenantId: input.tenantId,
+            evicted: evictIds.length,
+          },
+          'Cabinet',
+        );
       }
 
       let parsed;
