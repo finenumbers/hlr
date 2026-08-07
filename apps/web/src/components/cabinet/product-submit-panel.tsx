@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { ApiError, api } from '@/lib/api/client';
 import type { CheckType } from '@/lib/check-type';
 import { useT } from '@/lib/i18n';
-import { formatMoney } from '@/lib/utils';
+import { cn, formatMoney } from '@/lib/utils';
 
 type PreviewState = {
   id: string;
@@ -26,6 +26,16 @@ type PreviewState = {
   invalidSamples: Array<{ input?: string; reason?: string }>;
   phones: { items: string[]; page: number; pageSize: number; total: number };
 };
+
+function isAllowedCsvFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.csv') ||
+    name.endsWith('.txt') ||
+    file.type === 'text/csv' ||
+    file.type === 'text/plain'
+  );
+}
 
 export function ProductSubmitPanel({
   checkType,
@@ -43,6 +53,7 @@ export function ProductSubmitPanel({
 }) {
   const t = useT();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [phonesText, setPhonesText] = useState('');
   const [estimate, setEstimate] = useState<Record<string, unknown> | null>(null);
   const [csvEstimate, setCsvEstimate] = useState<Record<string, unknown> | null>(null);
@@ -51,6 +62,7 @@ export function ProductSubmitPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [phonePage, setPhonePage] = useState(1);
+  const [dragOver, setDragOver] = useState(false);
 
   const phones = useMemo(
     () =>
@@ -103,10 +115,7 @@ export function ProductSubmitPanel({
   });
 
   const previewMut = useMutation({
-    mutationFn: async () => {
-      if (!csvFile) throw new Error('No file');
-      return api.cabinet.createCsvPreview(checkType, csvFile);
-    },
+    mutationFn: async (file: File) => api.cabinet.createCsvPreview(checkType, file),
     onSuccess: (data) => {
       setPreview(data as PreviewState);
       setPhonePage(1);
@@ -149,6 +158,28 @@ export function ProductSubmitPanel({
     submitMut.isPending ||
     estimateMut.isPending;
 
+  const startPreview = (file: File | null | undefined) => {
+    if (!file) return;
+    if (!isAllowedCsvFile(file)) {
+      setCsvError(t('cabinetSubmit.csvTypeInvalid'));
+      return;
+    }
+    setCsvFile(file);
+    setPreview(null);
+    setCsvEstimate(null);
+    setCsvError(null);
+    previewMut.mutate(file);
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragOver(false);
+    if (busy) return;
+    const file = event.dataTransfer.files?.[0];
+    startPreview(file);
+  };
+
   const phoneItems =
     (phonesQuery.data?.items as string[] | undefined) ?? preview?.phones.items ?? [];
   const phoneTotal = phonesQuery.data?.total ?? preview?.phones.total ?? 0;
@@ -179,26 +210,63 @@ export function ProductSubmitPanel({
           <div>
             <Label>{t('cabinetSubmit.csvFile')}</Label>
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv,.txt,text/csv,text/plain"
-              className="mt-1 block w-full text-sm"
+              className="sr-only"
+              tabIndex={-1}
               disabled={busy}
               onChange={(e) => {
-                setCsvFile(e.target.files?.[0] ?? null);
-                setPreview(null);
-                setCsvEstimate(null);
-                setCsvError(null);
+                const file = e.target.files?.[0] ?? null;
+                e.target.value = '';
+                startPreview(file);
               }}
             />
-            <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{t('cabinetSubmit.csvHint')}</p>
+            <div
+              role="button"
+              tabIndex={0}
+              className={cn(
+                'mt-1 rounded-md border border-dashed border-[var(--color-line)] bg-[var(--color-panel)] px-4 py-6 text-center transition',
+                dragOver && 'border-[var(--color-accent)] bg-[var(--color-accent-soft)]',
+                busy ? 'pointer-events-none opacity-60' : 'cursor-pointer hover:bg-[var(--color-panel-elevated)]',
+              )}
+              onClick={() => {
+                if (!busy) fileInputRef.current?.click();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!busy) fileInputRef.current?.click();
+                }
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDragOver(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDragOver(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setDragOver(false);
+              }}
+              onDrop={onDrop}
+            >
+              <p className="text-sm font-medium">{t('cabinetSubmit.csvDropTitle')}</p>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{t('cabinetSubmit.csvHint')}</p>
+              {csvFile ? (
+                <p className="mt-2 text-sm font-mono">{csvFile.name}</p>
+              ) : null}
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={!csvFile || busy}
-                onClick={() => {
-                  setCsvError(null);
-                  previewMut.mutate();
-                }}
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
               >
                 {previewMut.isPending
                   ? t('cabinetSubmit.loadingPreview')

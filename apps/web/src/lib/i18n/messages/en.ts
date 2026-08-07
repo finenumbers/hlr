@@ -357,7 +357,9 @@ const enMessages = {
     submitFailed: 'Submit failed',
     csvFile: 'CSV / TXT file',
     csvHint:
-      'One phone per line or first column. Upload previews the draft; checks start only after Submit.',
+      'One phone per line or first column. Drop a file here or click Upload. Checks start only after Submit.',
+    csvDropTitle: 'Drop CSV/TXT here',
+    csvTypeInvalid: 'Please choose a .csv or .txt file',
     submitCsv: 'Submit CSV',
     uploadCsv: 'Upload file',
     loadingPreview: 'Loading…',

@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@finenumbers/db';
 import {
@@ -77,77 +78,82 @@ export class CsvPreviewService {
       throw error;
     }
 
-    const readyCount = await this.prisma.csvPreview.count({
-      where: {
-        tenantId: input.tenantId,
-        status: 'READY',
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (readyCount >= MAX_READY_PREVIEWS_PER_TENANT) {
-      await safeUnlink(input.file.path);
-      throw new BadRequestException({
-        errorCode: ErrorCodes.VALIDATION_FAILED,
-        message: `Too many active CSV previews (max ${MAX_READY_PREVIEWS_PER_TENANT}). Submit or wait for expiry.`,
-      });
-    }
-
-    let parsed;
     try {
-      parsed = await streamParsePhoneFile(input.file.path, {
-        maxRows: limits.maxCsvRows,
+      const readyCount = await this.prisma.csvPreview.count({
+        where: {
+          tenantId: input.tenantId,
+          status: 'READY',
+          expiresAt: { gt: new Date() },
+        },
       });
-    } finally {
+      if (readyCount >= MAX_READY_PREVIEWS_PER_TENANT) {
+        await safeUnlink(input.file.path);
+        throw new BadRequestException({
+          errorCode: ErrorCodes.VALIDATION_FAILED,
+          message: `Too many active CSV previews (max ${MAX_READY_PREVIEWS_PER_TENANT}). Submit or wait for expiry.`,
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = await streamParsePhoneFile(input.file.path, {
+          maxRows: limits.maxCsvRows,
+        });
+      } finally {
+        await safeUnlink(input.file.path);
+      }
+
+      if (parsed.truncated || parsed.rowCount > limits.maxCsvRows) {
+        throw new BadRequestException({
+          errorCode: ErrorCodes.VALIDATION_FAILED,
+          message: `CSV exceeds maxCsvRows (${limits.maxCsvRows})`,
+        });
+      }
+
+      const normalized = normalizeAndDeduplicatePhones(parsed.phones);
+      const invalidSamples = normalized.invalid.slice(0, MAX_INVALID_SAMPLES).map((row) => ({
+        input: row.input,
+        reason: row.reason,
+      }));
+      const status =
+        normalized.invalid.length > 0 || normalized.phones.length === 0 ? 'INVALID' : 'READY';
+
+      const preview = await this.prisma.csvPreview.create({
+        data: {
+          tenantId: input.tenantId,
+          createdByUserId: input.createdByUserId,
+          checkType: input.checkType,
+          status,
+          originalFilename: input.file.originalname,
+          rowCount: parsed.rowCount,
+          validCount: normalized.phones.length,
+          invalidCount: normalized.invalid.length,
+          deduplicatedCount: normalized.deduplicatedCount,
+          phonesJson: status === 'READY' ? normalized.phones : [],
+          invalidJson: invalidSamples,
+          previewUnitSellPrice: previewQuote.unitSellPrice,
+          previewCurrency: previewQuote.currency,
+          expiresAt: new Date(Date.now() + PREVIEW_TTL_MS),
+        },
+      });
+
+      this.logger.log(
+        {
+          message: 'cabinet.csv_preview.created',
+          previewId: preview.id,
+          tenantId: preview.tenantId,
+          status: preview.status,
+          validCount: preview.validCount,
+          invalidCount: preview.invalidCount,
+        },
+        'Cabinet',
+      );
+
+      return this.toPreviewView(preview, 1, DEFAULT_PHONE_PAGE);
+    } catch (error) {
       await safeUnlink(input.file.path);
+      this.rethrowPreviewStorageError(error, 'cabinet.csv_preview.create_failed');
     }
-
-    if (parsed.truncated || parsed.rowCount > limits.maxCsvRows) {
-      throw new BadRequestException({
-        errorCode: ErrorCodes.VALIDATION_FAILED,
-        message: `CSV exceeds maxCsvRows (${limits.maxCsvRows})`,
-      });
-    }
-
-    const normalized = normalizeAndDeduplicatePhones(parsed.phones);
-    const invalidSamples = normalized.invalid.slice(0, MAX_INVALID_SAMPLES).map((row) => ({
-      input: row.input,
-      reason: row.reason,
-    }));
-    const status =
-      normalized.invalid.length > 0 || normalized.phones.length === 0 ? 'INVALID' : 'READY';
-
-    const preview = await this.prisma.csvPreview.create({
-      data: {
-        tenantId: input.tenantId,
-        createdByUserId: input.createdByUserId,
-        checkType: input.checkType,
-        status,
-        originalFilename: input.file.originalname,
-        rowCount: parsed.rowCount,
-        validCount: normalized.phones.length,
-        invalidCount: normalized.invalid.length,
-        deduplicatedCount: normalized.deduplicatedCount,
-        phonesJson: status === 'READY' ? normalized.phones : [],
-        invalidJson: invalidSamples,
-        previewUnitSellPrice: previewQuote.unitSellPrice,
-        previewCurrency: previewQuote.currency,
-        expiresAt: new Date(Date.now() + PREVIEW_TTL_MS),
-      },
-    });
-
-    this.logger.log(
-      {
-        message: 'cabinet.csv_preview.created',
-        previewId: preview.id,
-        tenantId: preview.tenantId,
-        status: preview.status,
-        validCount: preview.validCount,
-        invalidCount: preview.invalidCount,
-      },
-      'Cabinet',
-    );
-
-    return this.toPreviewView(preview, 1, DEFAULT_PHONE_PAGE);
   }
 
   async getForTenant(tenantId: string, previewId: string) {
@@ -370,6 +376,51 @@ export class CsvPreviewService {
         total: phones.length,
       },
     };
+  }
+
+  private rethrowPreviewStorageError(error: unknown, logMessage: string): never {
+    if (
+      error instanceof BadRequestException ||
+      error instanceof ConflictException ||
+      error instanceof GoneException ||
+      error instanceof NotFoundException ||
+      error instanceof PayloadTooLargeException ||
+      error instanceof ServiceUnavailableException
+    ) {
+      throw error;
+    }
+
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof (error as { code: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : '';
+    const message = error instanceof Error ? error.message : String(error);
+    const missingTable =
+      code === 'P2021' ||
+      /csv_previews/i.test(message) ||
+      /does not exist/i.test(message);
+
+    this.logger.error(
+      {
+        message: logMessage,
+        prismaCode: code || undefined,
+        error: message,
+      },
+      'Cabinet',
+    );
+
+    if (missingTable) {
+      throw new ServiceUnavailableException({
+        errorCode: ErrorCodes.SERVICE_UNAVAILABLE,
+        message:
+          'CSV preview storage is not ready. Apply database migrations (csv_previews) and retry.',
+      });
+    }
+
+    throw error;
   }
 }
 
