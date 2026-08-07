@@ -5,7 +5,6 @@ import {
   assertJobItemTransition,
   assertJobTransition,
   computeProgress,
-  isTerminalJobItemStatus,
 } from './state-machine.js';
 import type { JobsStore } from './ports.js';
 import type {
