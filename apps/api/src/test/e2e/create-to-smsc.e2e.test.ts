@@ -30,6 +30,7 @@ import { RequestContextService } from '../../common/request-context/request-cont
 import { ApiKeysService } from '../../modules/api-keys/api-keys.service';
 import { NestBillingService } from '../../modules/billing/billing.service';
 import { CabinetController } from '../../modules/cabinet/cabinet.controller';
+import { CsvPreviewService } from '../../modules/cabinet/csv-preview.service';
 import { CabinetService } from '../../modules/cabinet/cabinet.service';
 import { JobsService } from '../../modules/jobs/jobs.service';
 import { WalletsService } from '../../modules/wallets/wallets.service';
@@ -193,6 +194,7 @@ async function createCabinetApp(input: {
       { provide: WebhooksService, useValue: {} },
       { provide: RequestContextService, useValue: { requestId: 'e2e-req' } },
       { provide: PrismaService, useValue: {} },
+      { provide: CsvPreviewService, useValue: {} },
     ],
   }).compile();
 
