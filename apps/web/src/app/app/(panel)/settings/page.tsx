@@ -14,8 +14,9 @@ export default function SettingsPage() {
     <div>
       <PageHeader title={t('cabinetSettings.title')} description={t('cabinetSettings.description')} />
       <Card className="w-full space-y-2 text-sm">
-        <p>
-          <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.email')}</span> {user?.email}
+        <p className="font-bold">
+          <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.tenant')}</span>{' '}
+          {membership?.tenant.name ?? t('common.dash')} ({membership?.tenant.slug ?? t('common.dash')})
         </p>
         <p>
           <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.name')}</span>{' '}
@@ -26,8 +27,7 @@ export default function SettingsPage() {
           {membership?.role ?? t('common.dash')}
         </p>
         <p>
-          <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.tenant')}</span>{' '}
-          {membership?.tenant.name ?? t('common.dash')} ({membership?.tenant.slug ?? t('common.dash')})
+          <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.email')}</span> {user?.email}
         </p>
       </Card>
     </div>

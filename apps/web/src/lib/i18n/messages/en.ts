@@ -486,7 +486,7 @@ const enMessages = {
     title: 'Settings',
     description: 'Profile and active client context.',
     email: 'Email:',
-    name: 'Name:',
+    name: 'User:',
     role: 'Role:',
     tenant: 'Client:',
   },

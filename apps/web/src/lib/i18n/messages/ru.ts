@@ -482,7 +482,7 @@ export const ru: EnMessages = {
     title: 'Настройки',
     description: 'Профиль и активный клиент.',
     email: 'Email:',
-    name: 'Имя:',
+    name: 'Пользователь:',
     role: 'Роль:',
     tenant: 'Клиент:',
   },
