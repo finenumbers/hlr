@@ -39,6 +39,11 @@ function isAllowedCsvFile(file: File): boolean {
   );
 }
 
+function formatCsvApiError(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback;
+  return err.code ? `${err.message} (${err.code})` : err.message;
+}
+
 export function ProductSubmitPanel({
   checkType,
   available,
@@ -154,8 +159,7 @@ export function ProductSubmitPanel({
       setCsvEstimate(null);
       setCsvError(null);
     },
-    onError: (err) =>
-      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
+    onError: (err) => setCsvError(formatCsvApiError(err, t('cabinetSubmit.submitFailed'))),
   });
 
   const csvEstimateMut = useMutation({
@@ -164,8 +168,7 @@ export function ProductSubmitPanel({
       return api.cabinet.estimateCsvPreview(preview.id);
     },
     onSuccess: (data) => setCsvEstimate(data),
-    onError: (err) =>
-      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.estimateFailed')),
+    onError: (err) => setCsvError(formatCsvApiError(err, t('cabinetSubmit.estimateFailed'))),
   });
 
   const csvSubmitMut = useMutation({
@@ -182,8 +185,7 @@ export function ProductSubmitPanel({
         (job as { id?: string }).id;
       if (id) router.push(`/app/jobs/${id}`);
     },
-    onError: (err) =>
-      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
+    onError: (err) => setCsvError(formatCsvApiError(err, t('cabinetSubmit.submitFailed'))),
   });
 
   const busy =

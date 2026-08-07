@@ -246,6 +246,13 @@ export class InMemoryJobsStore implements JobsStore {
     return { job: cloneJob(job), items };
   }
 
+  async deleteJobCascade(jobId: string): Promise<void> {
+    for (const [id, item] of this.items) {
+      if (item.jobId === jobId) this.items.delete(id);
+    }
+    this.jobs.delete(jobId);
+  }
+
   async patchJobMetadata(
     jobId: string,
     patch: Record<string, unknown>,

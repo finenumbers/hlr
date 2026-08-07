@@ -143,4 +143,26 @@ describe('CreateJobService', () => {
       }),
     ).rejects.toBeInstanceOf(JobsValidationError);
   });
+
+  it('deletes the job when enqueueSubmitBatch fails (no junk history)', async () => {
+    const store = new InMemoryJobsStore();
+    const queue = new InMemoryJobsQueue();
+    queue.enqueueSubmitBatch = async () => {
+      throw new Error('redis down');
+    };
+    const service = new CreateJobService({ store, queue });
+
+    await expect(
+      service.create({
+        tenantId: 'tenant-1',
+        checkType: 'HLR',
+        source: 'BULK',
+        phones: ['+79991234567', '+79997654321'],
+        priceSnapshot: snap('HLR'),
+      }),
+    ).rejects.toThrow('redis down');
+
+    expect(store.jobs.size).toBe(0);
+    expect(store.items.size).toBe(0);
+  });
 });

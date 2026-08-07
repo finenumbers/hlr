@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JobsService } from './jobs.service';
 
 describe('JobsService.createFromPreviewPhones', () => {
-  it('creates job with items and enqueues submit batches (no csv-parse / disk)', async () => {
+  it('uses CreateJobService.create (same path as paste) with maxCsvRows override', async () => {
     const job = {
       id: 'job-1',
       tenantId: 'tenant-1',
@@ -19,44 +19,16 @@ describe('JobsService.createFromPreviewPhones', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       metadata: { fromPreviewId: 'preview-1' },
     };
-    const items = [
-      { id: 'item-1', jobId: job.id, tenantId: job.tenantId },
-      { id: 'item-2', jobId: job.id, tenantId: job.tenantId },
-    ];
 
-    const createJobWithItems = vi.fn(async () => ({ job, items }));
-    const createJobShell = vi.fn();
-    const enqueueCsvParse = vi.fn();
-    const enqueueSubmitBatch = vi.fn(async () => undefined);
-    const getRuntimeSettings = vi.fn(async () => ({ submitBatchSize: 50 }));
+    const create = vi.fn(async () => ({
+      job,
+      deduplicated: false,
+      deduplicatedPhoneCount: 0,
+      workUnits: 2,
+      batchesEnqueued: 1,
+    }));
 
     const service = Object.create(JobsService.prototype) as JobsService;
-    Object.assign(service, {
-      prisma: {},
-      logger: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-      billing: {
-        assertCanAfford: vi.fn(async () => ({
-          currency: 'RUB',
-          unitSellPrice: '2.500000',
-          unitProviderCost: '0.500000',
-          tariff: {
-            tariffPlanId: 'plan-1',
-            tariffPlanCode: 'hlr-std',
-          },
-        })),
-      },
-      store: {
-        createJobWithItems,
-        createJobShell,
-        getRuntimeSettings,
-      },
-      processor: {
-        enqueueSubmitBatch,
-        enqueueCsvParse,
-      },
-    });
-
-    // resolveLimits is imported — mock via prisma platform/tenant reads
     Object.assign(service, {
       prisma: {
         tenant: {
@@ -76,6 +48,21 @@ describe('JobsService.createFromPreviewPhones', () => {
           })),
         },
       },
+      logger: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+      billing: {
+        assertCanAfford: vi.fn(async () => ({
+          currency: 'RUB',
+          unitSellPrice: '2.500000',
+          unitProviderCost: '0.500000',
+          tariff: {
+            tariffPlanId: 'plan-1',
+            tariffPlanCode: 'hlr-std',
+          },
+        })),
+      },
+      createJobService: { create },
+      store: { deleteJobCascade: vi.fn() },
+      processor: {},
     });
 
     const result = await service.createFromPreviewPhones({
@@ -89,22 +76,15 @@ describe('JobsService.createFromPreviewPhones', () => {
     });
 
     expect(result.job.id).toBe('job-1');
-    expect(createJobWithItems).toHaveBeenCalledTimes(1);
-    expect(createJobWithItems.mock.calls[0]![0]).toMatchObject({
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![0]).toMatchObject({
       tenantId: 'tenant-1',
       checkType: 'HLR',
       source: 'BULK',
       phones: ['+79991111111', '+79992222222'],
       originalFilename: 'test.csv',
       metadata: { fromPreviewId: 'preview-1' },
-    });
-    expect(createJobShell).not.toHaveBeenCalled();
-    expect(enqueueCsvParse).not.toHaveBeenCalled();
-    expect(enqueueSubmitBatch).toHaveBeenCalledTimes(1);
-    expect(enqueueSubmitBatch).toHaveBeenCalledWith({
-      jobId: 'job-1',
-      tenantId: 'tenant-1',
-      itemIds: ['item-1', 'item-2'],
+      runtimeSettings: { maxBatchPhones: 100_000 },
       requestId: 'req-1',
     });
   });

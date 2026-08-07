@@ -283,6 +283,7 @@ export class CsvPreviewService {
       });
     }
 
+    let createdJobId: string | null = null;
     try {
       const result = await this.jobs.createFromPreviewPhones({
         tenantId: input.tenantId,
@@ -293,6 +294,7 @@ export class CsvPreviewService {
         previewId: preview.id,
         requestId: input.requestId,
       });
+      createdJobId = result.job.id;
 
       await this.prisma.csvPreview.update({
         where: { id: preview.id },
@@ -313,11 +315,19 @@ export class CsvPreviewService {
           message: 'jobs.csv_preview.submit_failed',
           previewId: preview.id,
           tenantId: input.tenantId,
+          jobId: createdJobId,
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
         },
         'CsvPreview',
       );
+      if (createdJobId) {
+        try {
+          await this.jobs.deleteJobCascade(createdJobId);
+        } catch {
+          // best-effort — do not mask the original error
+        }
+      }
       await this.prisma.csvPreview.update({
         where: { id: preview.id },
         data: { status: 'READY' },

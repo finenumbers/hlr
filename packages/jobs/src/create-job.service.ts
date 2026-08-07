@@ -157,13 +157,30 @@ export class CreateJobService {
 
     const requestId = input.requestId?.trim() || undefined;
 
-    for (const itemIds of batches) {
-      await this.deps.queue.enqueueSubmitBatch({
-        jobId: job.id,
-        tenantId: job.tenantId,
-        itemIds,
-        ...(requestId ? { requestId } : {}),
-      });
+    try {
+      for (const itemIds of batches) {
+        await this.deps.queue.enqueueSubmitBatch({
+          jobId: job.id,
+          tenantId: job.tenantId,
+          itemIds,
+          ...(requestId ? { requestId } : {}),
+        });
+      }
+    } catch (error) {
+      // Do not leave a half-created job in history when enqueue fails.
+      try {
+        await this.deps.store.deleteJobCascade(job.id);
+      } catch (rollbackError) {
+        this.logger.error('jobs.create.rollback_failed', {
+          jobId: job.id,
+          tenantId: job.tenantId,
+          error:
+            rollbackError instanceof Error
+              ? rollbackError.message
+              : String(rollbackError),
+        });
+      }
+      throw error;
     }
 
     this.logger.info('jobs.create.enqueued', {

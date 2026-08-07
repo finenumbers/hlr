@@ -7,10 +7,8 @@ import {
 } from '@nestjs/common';
 import {
   assertCsvByteLimit,
-  chunkArray,
   computeProgress,
   CreateJobService,
-  DEFAULT_JOB_RUNTIME_SETTINGS,
   JobLifecycleService,
   JobsNotFoundError,
   JobsValidationError,
@@ -460,9 +458,8 @@ export class JobsService {
   }
 
   /**
-   * Cabinet Submit after CSV preview: full afford for N, persist Job+items, enqueue submit.
-   * Phones are already normalized in preview — no disk rewrite / csv-parse.
-   * Checks start only here (not at preview upload).
+   * Cabinet Submit after CSV preview — same CreateJobService path as paste/BULK.
+   * On enqueue failure CreateJobService deletes the job (no junk history row).
    */
   async createFromPreviewPhones(input: {
     tenantId: string;
@@ -488,60 +485,56 @@ export class JobsService {
       });
     }
 
-    const estimate = await this.billing.assertCanAfford({
-      tenantId: input.tenantId,
-      checkType: input.checkType,
-      unitCount: input.phones.length,
-    });
-
-    const priceSnapshot = jobPriceSnapshotFromEstimate(estimate);
-    const { job, items } = await this.store.createJobWithItems({
-      tenantId: input.tenantId,
-      checkType: input.checkType,
-      source: 'BULK',
-      phones: input.phones,
-      idempotencyKey: null,
-      createdByUserId: input.createdByUserId ?? null,
-      apiKeyId: null,
-      originalFilename: input.originalFilename ?? null,
-      currency: estimate.currency,
-      priceSnapshot,
-      metadata: {
-        fromPreviewId: input.previewId,
-      },
-    });
-
-    const storedSettings = await this.store.getRuntimeSettings(input.tenantId);
-    const submitBatchSize =
-      storedSettings.submitBatchSize ?? DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
-    const batches = chunkArray(
-      items.map((item) => item.id),
-      submitBatchSize,
-    );
-    const requestId = input.requestId?.trim() || undefined;
-
-    for (const itemIds of batches) {
-      await this.processor.enqueueSubmitBatch({
-        jobId: job.id,
-        tenantId: job.tenantId,
-        itemIds,
-        ...(requestId ? { requestId } : {}),
+    try {
+      const estimate = await this.billing.assertCanAfford({
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        unitCount: input.phones.length,
       });
+
+      const result = await this.createJobService.create({
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        source: 'BULK',
+        phones: input.phones,
+        createdByUserId: input.createdByUserId ?? null,
+        originalFilename: input.originalFilename ?? null,
+        requestId: input.requestId,
+        currency: estimate.currency,
+        priceSnapshot: jobPriceSnapshotFromEstimate(estimate),
+        metadata: { fromPreviewId: input.previewId },
+        // Preview already validated against maxCsvRows (not paste maxBatchPhones).
+        runtimeSettings: { maxBatchPhones: limits.maxCsvRows },
+      });
+
+      this.logger.log(
+        {
+          message: 'jobs.csv_preview.submitted',
+          jobId: result.job.id,
+          tenantId: result.job.tenantId,
+          previewId: input.previewId,
+          phoneCount: input.phones.length,
+          batchesEnqueued: result.batchesEnqueued,
+        },
+        'Jobs',
+      );
+
+      return { job: result.job, progress: computeProgress(result.job) };
+    } catch (error) {
+      if (error instanceof JobsValidationError) {
+        throw new BadRequestException({
+          errorCode: ErrorCodes.VALIDATION_FAILED,
+          message: error.message,
+          details: error.details,
+        });
+      }
+      throw error;
     }
+  }
 
-    this.logger.log(
-      {
-        message: 'jobs.csv_preview.submitted',
-        jobId: job.id,
-        tenantId: job.tenantId,
-        previewId: input.previewId,
-        phoneCount: input.phones.length,
-        batchesEnqueued: batches.length,
-      },
-      'Jobs',
-    );
-
-    return { job, progress: computeProgress(job) };
+  /** Best-effort rollback when post-create steps fail (e.g. mark preview CONSUMED). */
+  async deleteJobCascade(jobId: string): Promise<void> {
+    await this.store.deleteJobCascade(jobId);
   }
 
   /**

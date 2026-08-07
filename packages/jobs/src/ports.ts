@@ -79,6 +79,12 @@ export interface JobsStore {
     patch: Record<string, unknown>,
   ): Promise<JobRecord | null>;
 
+  /**
+   * Hard-delete a job and its items (submit rollback when enqueue fails).
+   * No-op if the job is already gone.
+   */
+  deleteJobCascade(jobId: string): Promise<void>;
+
   listItemsByIds(itemIds: string[]): Promise<JobItemRecord[]>;
 
   listItemsByJobId(jobId: string): Promise<JobItemRecord[]>;

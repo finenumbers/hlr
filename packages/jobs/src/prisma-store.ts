@@ -393,6 +393,23 @@ export class PrismaJobsStore implements JobsStore {
     return { job, items: allItems };
   }
 
+  async deleteJobCascade(jobId: string): Promise<void> {
+    try {
+      await this.prisma.job.delete({ where: { id: jobId } });
+    } catch (error) {
+      // Already gone (P2025) — treat as success for rollback callers.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === 'P2025'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
   async patchJobMetadata(
     jobId: string,
     patch: Record<string, unknown>,
