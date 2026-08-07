@@ -58,8 +58,8 @@ export function AppShell({
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[192px_1fr]">
       <aside className="flex flex-col border-b border-[var(--color-nav-line)] bg-[var(--color-nav)] lg:min-h-screen lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-3 px-3 py-5">
-          <BrandLogo variant="dark" priority className="h-[2.1rem] w-auto" />
+        <div className="w-full py-4">
+          <BrandLogo variant="dark" priority className="h-auto w-full" />
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-4 lg:flex-1 lg:flex-col">
           {items.map((item) => {
