@@ -83,9 +83,12 @@ export function ProductSubmitPanel({
 
   useEffect(() => {
     return () => {
-      discardActivePreview(previewIdRef.current, true);
+      const id = previewIdRef.current;
+      if (!id || id === submittedPreviewIdRef.current) return;
+      void api.cabinet.discardCsvPreview(id, { keepalive: true }).catch(() => {
+        // best-effort — TTL also expires unused rows
+      });
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount-only discard
   }, []);
 
   const phones = useMemo(
