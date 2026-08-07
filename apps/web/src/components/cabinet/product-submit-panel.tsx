@@ -300,12 +300,26 @@ export function ProductSubmitPanel({
                 ) : (
                   <>
                     <div className="max-h-64 overflow-auto rounded border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
-                      <ol className="list-decimal px-6 py-2 text-sm">
-                        {phoneItems.map((phone) => (
-                          <li key={phone} className="py-0.5 font-mono">
-                            {phone}
-                          </li>
-                        ))}
+                      <ol className="space-y-0.5 px-3 py-2 text-sm">
+                        {phoneItems.map((phone, idx) => {
+                          const n = (phonePage - 1) * phonePageSize + idx + 1;
+                          return (
+                            <li
+                              key={`${n}-${phone}`}
+                              className="flex gap-3 font-mono tabular-nums"
+                            >
+                              <span
+                                className="shrink-0 text-right text-[var(--color-ink-muted)]"
+                                style={{
+                                  width: `${String(Math.max(phoneTotal, 1)).length + 1}ch`,
+                                }}
+                              >
+                                {n}.
+                              </span>
+                              <span>{phone}</span>
+                            </li>
+                          );
+                        })}
                       </ol>
                     </div>
                     {phonePageCount > 1 ? (
