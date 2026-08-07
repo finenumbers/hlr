@@ -359,6 +359,8 @@ export const ru: EnMessages = {
     submitCsv: 'Отправить CSV',
     uploadCsv: 'Загрузить файл',
     loadingPreview: 'Загрузка…',
+    loadingMorePhones: 'Загрузка…',
+    previewShown: 'Показано {loaded} из {total}',
     preparedJob: 'Подготовленное задание',
     previewStats:
       'Строк: {rows} · валидных: {valid} · невалидных: {invalid} · дублей: {dupes}',

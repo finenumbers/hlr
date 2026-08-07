@@ -1,8 +1,8 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,6 +11,8 @@ import { ApiError, api } from '@/lib/api/client';
 import type { CheckType } from '@/lib/check-type';
 import { useT } from '@/lib/i18n';
 import { cn, formatMoney } from '@/lib/utils';
+
+const PHONE_PAGE_SIZE = 100;
 
 type PreviewState = {
   id: string;
@@ -54,6 +56,8 @@ export function ProductSubmitPanel({
   const t = useT();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const phoneScrollRef = useRef<HTMLDivElement>(null);
+  const phoneLoadMoreRef = useRef<HTMLDivElement>(null);
   const [phonesText, setPhonesText] = useState('');
   const [estimate, setEstimate] = useState<Record<string, unknown> | null>(null);
   const [csvEstimate, setCsvEstimate] = useState<Record<string, unknown> | null>(null);
@@ -61,7 +65,6 @@ export function ProductSubmitPanel({
   const [csvError, setCsvError] = useState<string | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [phonePage, setPhonePage] = useState(1);
   const [dragOver, setDragOver] = useState(false);
 
   const phones = useMemo(
@@ -80,9 +83,15 @@ export function ProductSubmitPanel({
       ? t('cabinetSubmit.hlrUnavailable')
       : t('cabinetSubmit.pingUnavailable');
 
-  const phonesQuery = useQuery({
-    queryKey: ['cabinet', 'csv-preview-phones', preview?.id, phonePage],
-    queryFn: () => api.cabinet.csvPreviewPhones(preview!.id, phonePage, 50),
+  const phonesQuery = useInfiniteQuery({
+    queryKey: ['cabinet', 'csv-preview-phones', preview?.id, PHONE_PAGE_SIZE],
+    queryFn: ({ pageParam }) =>
+      api.cabinet.csvPreviewPhones(preview!.id, pageParam, PHONE_PAGE_SIZE),
+    initialPageParam: 1,
+    getNextPageParam: (last) => {
+      if (last.page * last.pageSize >= last.total) return undefined;
+      return last.page + 1;
+    },
     enabled: Boolean(preview?.id && preview.status === 'READY'),
   });
 
@@ -118,7 +127,6 @@ export function ProductSubmitPanel({
     mutationFn: async (file: File) => api.cabinet.createCsvPreview(checkType, file),
     onSuccess: (data) => {
       setPreview(data as PreviewState);
-      setPhonePage(1);
       setCsvEstimate(null);
       setCsvError(null);
     },
@@ -181,10 +189,39 @@ export function ProductSubmitPanel({
   };
 
   const phoneItems =
-    (phonesQuery.data?.items as string[] | undefined) ?? preview?.phones.items ?? [];
-  const phoneTotal = phonesQuery.data?.total ?? preview?.phones.total ?? 0;
-  const phonePageSize = phonesQuery.data?.pageSize ?? preview?.phones.pageSize ?? 50;
-  const phonePageCount = Math.max(1, Math.ceil(phoneTotal / phonePageSize));
+    phonesQuery.data?.pages.flatMap((page) => page.items) ??
+    preview?.phones.items ??
+    [];
+  const phoneTotal =
+    phonesQuery.data?.pages[0]?.total ?? preview?.phones.total ?? 0;
+
+  useEffect(() => {
+    const root = phoneScrollRef.current;
+    const target = phoneLoadMoreRef.current;
+    if (!root || !target || preview?.status !== 'READY') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0]?.isIntersecting &&
+          phonesQuery.hasNextPage &&
+          !phonesQuery.isFetchingNextPage
+        ) {
+          void phonesQuery.fetchNextPage();
+        }
+      },
+      { root, rootMargin: '120px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [
+    preview?.id,
+    preview?.status,
+    phoneItems.length,
+    phonesQuery.hasNextPage,
+    phonesQuery.isFetchingNextPage,
+    phonesQuery.fetchNextPage,
+  ]);
 
   return (
     <Card className={`space-y-4 ${available ? '' : 'opacity-70'}`}>
@@ -299,10 +336,13 @@ export function ProductSubmitPanel({
                   </div>
                 ) : (
                   <>
-                    <div className="max-h-64 overflow-auto rounded border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
+                    <div
+                      ref={phoneScrollRef}
+                      className="max-h-64 overflow-auto rounded border border-[var(--color-line)] bg-[var(--color-panel-elevated)]"
+                    >
                       <ol className="space-y-0.5 px-3 py-2 text-sm">
                         {phoneItems.map((phone, idx) => {
-                          const n = (phonePage - 1) * phonePageSize + idx + 1;
+                          const n = idx + 1;
                           return (
                             <li
                               key={`${n}-${phone}`}
@@ -321,31 +361,20 @@ export function ProductSubmitPanel({
                           );
                         })}
                       </ol>
+                      <div ref={phoneLoadMoreRef} className="h-1" aria-hidden />
+                      {phonesQuery.isFetchingNextPage ? (
+                        <p className="px-3 pb-2 text-xs text-[var(--color-ink-muted)]">
+                          {t('cabinetSubmit.loadingMorePhones')}
+                        </p>
+                      ) : null}
                     </div>
-                    {phonePageCount > 1 ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={phonePage <= 1 || phonesQuery.isFetching}
-                          onClick={() => setPhonePage((p) => Math.max(1, p - 1))}
-                        >
-                          {t('common.prev')}
-                        </Button>
-                        <span>
-                          {phonePage}/{phonePageCount}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={phonePage >= phonePageCount || phonesQuery.isFetching}
-                          onClick={() => setPhonePage((p) => p + 1)}
-                        >
-                          {t('common.next')}
-                        </Button>
-                      </div>
+                    {phoneTotal > 0 ? (
+                      <p className="text-xs text-[var(--color-ink-muted)]">
+                        {t('cabinetSubmit.previewShown', {
+                          loaded: phoneItems.length,
+                          total: phoneTotal,
+                        })}
+                      </p>
                     ) : null}
                     {csvEstimate ? (
                       <p className="text-sm">

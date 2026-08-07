@@ -363,6 +363,8 @@ const enMessages = {
     submitCsv: 'Submit CSV',
     uploadCsv: 'Upload file',
     loadingPreview: 'Loading…',
+    loadingMorePhones: 'Loading…',
+    previewShown: 'Showing {loaded} of {total}',
     preparedJob: 'Prepared job',
     previewStats:
       'Rows: {rows} · valid: {valid} · invalid: {invalid} · duplicates: {dupes}',

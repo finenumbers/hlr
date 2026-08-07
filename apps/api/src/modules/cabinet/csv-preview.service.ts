@@ -27,8 +27,8 @@ import { toCabinetJobView, toCabinetSellEstimate } from './cabinet-client-view';
 const PREVIEW_TTL_MS = 60 * 60 * 1000;
 const MAX_READY_PREVIEWS_PER_TENANT = 3;
 const MAX_INVALID_SAMPLES = 50;
-const DEFAULT_PHONE_PAGE = 50;
-const MAX_PHONE_PAGE = 200;
+const DEFAULT_PHONE_PAGE = 100;
+const MAX_PHONE_PAGE = 100;
 
 @Injectable()
 export class CsvPreviewService {

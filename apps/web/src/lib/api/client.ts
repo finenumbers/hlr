@@ -400,7 +400,7 @@ export const api = {
     },
     csvPreview: (id: string) =>
       apiRequest<Record<string, unknown>>(`/cabinet/csv-previews/${id}`),
-    csvPreviewPhones: (id: string, page: number, pageSize = 50) =>
+    csvPreviewPhones: (id: string, page: number, pageSize = 100) =>
       apiRequest<{ items: string[]; page: number; pageSize: number; total: number }>(
         `/cabinet/csv-previews/${id}/phones?page=${page}&pageSize=${pageSize}`,
       ),

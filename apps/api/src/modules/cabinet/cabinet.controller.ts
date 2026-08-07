@@ -192,7 +192,7 @@ export class CabinetController {
       tenantId,
       id,
       query.page ?? 1,
-      query.pageSize ?? 50,
+      query.pageSize ?? 100,
     );
   }
 
