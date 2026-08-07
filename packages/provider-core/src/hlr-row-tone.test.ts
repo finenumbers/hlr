@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { hlrRowTone } from './hlr-row-tone';
+import { hlrRowTone } from './hlr-row-tone.js';
 
 describe('hlrRowTone', () => {
   it('maps reachable → success', () => {
