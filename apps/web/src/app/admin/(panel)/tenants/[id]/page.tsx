@@ -16,6 +16,7 @@ import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
+import { formatLedgerDescription, formatLedgerType } from '@/lib/billing/ledger-labels';
 import { useT } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/utils';
 
@@ -464,7 +465,10 @@ export default function AdminTenantDetailPage() {
                 {
                   key: 'type',
                   header: t('adminTenants.colLedgerType'),
-                  cell: (row) => String(row.type ?? t('common.dash')),
+                  cell: (row) =>
+                    row.type == null
+                      ? t('common.dash')
+                      : formatLedgerType(t, String(row.type)),
                 },
                 {
                   key: 'amount',
@@ -486,7 +490,11 @@ export default function AdminTenantDetailPage() {
                 {
                   key: 'description',
                   header: t('adminTenants.colLedgerDesc'),
-                  cell: (row) => String(row.description ?? t('common.dash')),
+                  cell: (row) =>
+                    formatLedgerDescription(
+                      t,
+                      row.description == null ? null : String(row.description),
+                    ) ?? t('common.dash'),
                 },
               ]}
               rows={[...((ledger.data as Array<Record<string, unknown>> | undefined) ?? [])]

@@ -8,8 +8,8 @@ import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 import {
-  formatCabinetLedgerDescription,
-  formatCabinetLedgerType,
+  formatLedgerDescription,
+  formatLedgerType,
 } from '@/lib/billing/ledger-labels';
 import { useI18n, useT } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/utils';
@@ -103,8 +103,8 @@ export default function CabinetBillingPage() {
               .reverse()
               .slice(0, 50)
               .map((row) => {
-                const typeLabel = formatCabinetLedgerType(t, String(row.type ?? ''));
-                const description = formatCabinetLedgerDescription(
+                const typeLabel = formatLedgerType(t, String(row.type ?? ''));
+                const description = formatLedgerDescription(
                   t,
                   row.description == null ? null : String(row.description),
                 );

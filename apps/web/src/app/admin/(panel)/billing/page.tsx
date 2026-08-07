@@ -8,6 +8,7 @@ import { DataTable } from '@/components/data/data-table';
 import { PageHeader } from '@/components/data/page-header';
 import { QueryState } from '@/components/data/query-state';
 import { api } from '@/lib/api/client';
+import { formatLedgerDescription, formatLedgerType } from '@/lib/billing/ledger-labels';
 import { useT } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/utils';
 
@@ -96,7 +97,10 @@ export default function AdminBillingPage() {
             {
               key: 'type',
               header: t('adminBilling.colType'),
-              cell: (row) => String(row.type ?? t('common.dash')),
+              cell: (row) =>
+                row.type == null
+                  ? t('common.dash')
+                  : formatLedgerType(t, String(row.type)),
             },
             {
               key: 'amount',
@@ -118,7 +122,11 @@ export default function AdminBillingPage() {
             {
               key: 'description',
               header: t('adminBilling.colDesc'),
-              cell: (row) => String(row.description ?? t('common.dash')),
+              cell: (row) =>
+                formatLedgerDescription(
+                  t,
+                  row.description == null ? null : String(row.description),
+                ) ?? t('common.dash'),
             },
           ]}
           rows={(ledger.data?.items ?? []) as Array<Record<string, unknown>>}

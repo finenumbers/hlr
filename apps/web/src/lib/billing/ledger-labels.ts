@@ -14,10 +14,10 @@ function isLedgerType(value: string): value is LedgerType {
   return (LEDGER_TYPES as readonly string[]).includes(value);
 }
 
-/** Localized wallet transaction type label for cabinet billing. */
-export function formatCabinetLedgerType(t: Translate, type: string): string {
+/** Localized wallet transaction type label (cabinet + admin). */
+export function formatLedgerType(t: Translate, type: string): string {
   if (isLedgerType(type)) {
-    return t(`cabinetBilling.types.${type}`);
+    return t(`ledger.types.${type}`);
   }
   return type;
 }
@@ -26,7 +26,7 @@ export function formatCabinetLedgerType(t: Translate, type: string): string {
  * Localized ledger description. Known English backend templates are mapped;
  * custom admin text is shown as-is.
  */
-export function formatCabinetLedgerDescription(
+export function formatLedgerDescription(
   t: Translate,
   description: string | null | undefined,
 ): string | null {
@@ -35,20 +35,20 @@ export function formatCabinetLedgerDescription(
 
   const reserve = /^Reserve for (HLR|PING) check$/.exec(text);
   if (reserve) {
-    return t(`cabinetBilling.descriptions.reserve${reserve[1]}`);
+    return t(`ledger.descriptions.reserve${reserve[1]}`);
   }
 
   if (text === 'Capture reserved funds') {
-    return t('cabinetBilling.descriptions.capture');
+    return t('ledger.descriptions.capture');
   }
   if (text === 'Release unused reserved funds after partial capture') {
-    return t('cabinetBilling.descriptions.releasePartial');
+    return t('ledger.descriptions.releasePartial');
   }
   if (text === 'Release reserved funds') {
-    return t('cabinetBilling.descriptions.release');
+    return t('ledger.descriptions.release');
   }
   if (text === 'Manual top-up') {
-    return t('cabinetBilling.descriptions.manualTopup');
+    return t('ledger.descriptions.manualTopup');
   }
 
   const adjustment = /^Manual adjustment \((credit|debit)\)$/i.exec(text);
@@ -56,13 +56,13 @@ export function formatCabinetLedgerDescription(
     const dir = adjustment[1]!.toLowerCase();
     return t(
       dir === 'credit'
-        ? 'cabinetBilling.descriptions.manualAdjustmentCredit'
-        : 'cabinetBilling.descriptions.manualAdjustmentDebit',
+        ? 'ledger.descriptions.manualAdjustmentCredit'
+        : 'ledger.descriptions.manualAdjustmentDebit',
     );
   }
 
   if (/^job_item_/i.test(text)) {
-    return t('cabinetBilling.descriptions.jobItemRelease');
+    return t('ledger.descriptions.jobItemRelease');
   }
 
   return text;
