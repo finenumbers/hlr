@@ -52,11 +52,14 @@ async function bootstrap(): Promise<void> {
     createPayloadSizeMiddleware({
       bodyLimit: config.bodyLimit,
       bodyLimitSubmit: config.bodyLimitSubmit,
+      bodyLimitCsv: config.bodyLimitCsv,
+      requestTimeoutCsvMs: config.requestTimeoutCsvMs || config.requestTimeoutMs,
     }),
   );
   const parserLimitBytes = Math.max(
     parseSizeToBytes(config.bodyLimit),
     parseSizeToBytes(config.bodyLimitSubmit),
+    parseSizeToBytes(config.bodyLimitCsv),
   );
   app.useBodyParser('json', { limit: parserLimitBytes });
   app.useBodyParser('urlencoded', {

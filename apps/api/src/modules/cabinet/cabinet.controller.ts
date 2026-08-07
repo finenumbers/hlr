@@ -49,6 +49,8 @@ import { csvUploadInterceptor } from '../jobs/csv-upload.interceptor';
 import { CreateWebhookDto } from '../webhooks/dto/create-webhook.dto';
 import { UpdateWebhookDto } from '../webhooks/dto/update-webhook.dto';
 import { CabinetService } from './cabinet.service';
+import { CsvPreviewService } from './csv-preview.service';
+import { RequestContextService } from '../../common/request-context/request-context.service';
 
 class CabinetSubmitDto {
   @ApiProperty({ enum: ['HLR', 'PING'] })
@@ -110,7 +112,11 @@ class CabinetDeliveriesQueryDto extends PaginationQueryDto {
 @Roles('OWNER', 'ADMIN', 'MEMBER')
 @Controller('cabinet')
 export class CabinetController {
-  constructor(private readonly cabinet: CabinetService) {}
+  constructor(
+    private readonly cabinet: CabinetService,
+    private readonly csvPreviews: CsvPreviewService,
+    private readonly requestContext: RequestContextService,
+  ) {}
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Tenant ops dashboard' })
@@ -121,6 +127,96 @@ export class CabinetController {
   @Post('billing/estimate')
   estimate(@TenantId() tenantId: string, @Body() dto: CabinetEstimateDto) {
     return this.cabinet.estimate(tenantId, dto.checkType, dto.unitCount);
+  }
+
+  @Post('csv-previews')
+  @UseInterceptors(csvUploadInterceptor())
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'checkType'],
+      properties: {
+        checkType: { type: 'string', enum: ['HLR', 'PING'] },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload CSV for preview only (no checks until Submit)',
+  })
+  createCsvPreview(
+    @TenantId() tenantId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('checkType') checkType: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file?.path) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'file is required (multipart field "file")',
+      });
+    }
+    if (checkType !== 'HLR' && checkType !== 'PING') {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'checkType must be HLR or PING',
+      });
+    }
+    return this.csvPreviews.createFromUpload({
+      tenantId,
+      checkType,
+      file: {
+        path: file.path,
+        originalname: file.originalname,
+        size: file.size,
+      },
+      createdByUserId: user.userId,
+    });
+  }
+
+  @Get('csv-previews/:id')
+  @ApiOperation({ summary: 'CSV preview meta + first phones page' })
+  getCsvPreview(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.csvPreviews.getForTenant(tenantId, id);
+  }
+
+  @Get('csv-previews/:id/phones')
+  @ApiOperation({ summary: 'Paginated phones for a CSV preview' })
+  listCsvPreviewPhones(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.csvPreviews.listPhones(
+      tenantId,
+      id,
+      query.page ?? 1,
+      query.pageSize ?? 50,
+    );
+  }
+
+  @Post('csv-previews/:id/estimate')
+  @ApiOperation({ summary: 'Estimate cost for a READY CSV preview' })
+  estimateCsvPreview(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.csvPreviews.estimate(tenantId, id);
+  }
+
+  @Post('csv-previews/:id/submit')
+  @ApiOperation({
+    summary: 'Submit CSV preview — only point that starts checks',
+  })
+  submitCsvPreview(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.csvPreviews.submit({
+      tenantId,
+      previewId: id,
+      createdByUserId: user.userId,
+      requestId: this.requestContext.requestId,
+    });
   }
 
   @Post('checks')

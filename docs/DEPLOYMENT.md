@@ -205,6 +205,7 @@ Non-production: `/docs` + `/openapi.json` available for local/staging; set `OPEN
 - CORS: allow-list from `CORS_ORIGINS` / `PUBLIC_WEB_URL` only; credentials on; rate-limit headers exposed
 - Set `CORS_ORIGINS=https://app.example.com` in production (do not leave localhost)
 - **NPM:** add a Custom Location (or deny rule) for ` /metrics` → 404/403. Prometheus scrapes `api:3001/metrics` on the Docker network only — do not expose metrics on the public API host.
+- **NPM body size:** set `client_max_body_size` (Custom Nginx Config on the API proxy host) to at least **52m** so cabinet CSV preview uploads are not rejected before the API. Align with `BODY_LIMIT_CSV` / proxy read timeouts ≥ `REQUEST_TIMEOUT_CSV_MS` (default 120s).
 
 ### Web hardening
 

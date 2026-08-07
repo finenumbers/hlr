@@ -21,7 +21,7 @@ import {
 } from '@finenumbers/jobs';
 import { createJobsWebhookHooks } from '@finenumbers/webhooks';
 import type { NormalizedResult } from '@finenumbers/provider-core';
-import { mkdir, rename } from 'node:fs/promises';
+import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -455,6 +455,84 @@ export class JobsService {
     );
 
     return { job, progress: computeProgress(job) };
+  }
+
+  /**
+   * Cabinet Submit after CSV preview: full afford for N, write phones file, shell + csv-parse.
+   * Checks start only here (not at preview upload).
+   */
+  async createFromPreviewPhones(input: {
+    tenantId: string;
+    checkType: 'HLR' | 'PING';
+    phones: string[];
+    originalFilename?: string | null;
+    createdByUserId?: string | null;
+    previewId: string;
+    requestId?: string | null;
+  }): Promise<{ job: JobRecord; progress: JobProgress }> {
+    if (input.phones.length === 0) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: 'No phones to submit',
+      });
+    }
+
+    const estimate = await this.billing.assertCanAfford({
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      unitCount: input.phones.length,
+    });
+
+    const tenantDir = join(this.config.uploadDir, input.tenantId);
+    await mkdir(tenantDir, { recursive: true });
+    const destPath = join(tenantDir, `${randomUUID()}.csv`);
+    await writeFile(destPath, `${input.phones.join('\n')}\n`, 'utf8');
+
+    try {
+      const job = await this.store.createJobShell({
+        tenantId: input.tenantId,
+        checkType: input.checkType,
+        source: 'BULK',
+        idempotencyKey: null,
+        createdByUserId: input.createdByUserId ?? null,
+        apiKeyId: null,
+        originalFilename: input.originalFilename ?? null,
+        currency: estimate.currency,
+        priceSnapshot: jobPriceSnapshotFromEstimate(estimate),
+        metadata: {
+          csvPending: true,
+          csvFilePath: destPath,
+          fromPreviewId: input.previewId,
+        },
+      });
+
+      await this.processor.enqueueCsvParse({
+        jobId: job.id,
+        tenantId: job.tenantId,
+        filePath: destPath,
+        ...(input.requestId ? { requestId: input.requestId } : {}),
+      });
+
+      this.logger.log(
+        {
+          message: 'jobs.csv_preview.submitted',
+          jobId: job.id,
+          tenantId: job.tenantId,
+          previewId: input.previewId,
+          phoneCount: input.phones.length,
+        },
+        'Jobs',
+      );
+
+      return { job, progress: computeProgress(job) };
+    } catch (error) {
+      try {
+        await unlink(destPath);
+      } catch {
+        // best-effort
+      }
+      throw error;
+    }
   }
 
   /**

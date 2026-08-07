@@ -100,6 +100,15 @@ enum ActorType {
   SYSTEM
 }
 
+/// Cabinet CSV draft: parse-only until explicit Submit (no SMSC enqueue).
+enum CsvPreviewStatus {
+  READY
+  INVALID
+  CONSUMING
+  CONSUMED
+  EXPIRED
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & identity
 // ---------------------------------------------------------------------------
@@ -132,6 +141,7 @@ model Tenant {
   walletTransactions  WalletTransaction[]
   auditLogs           AuditLog[]
   idempotencyRecords  IdempotencyRecord[]
+  csvPreviews         CsvPreview[]
 
   @@index([status, createdAt])
   @@map("tenants")
@@ -154,6 +164,7 @@ model User {
   walletTransactionsCreated WalletTransaction[] @relation("WalletTxCreatedBy")
   auditLogsAsActor         AuditLog[]          @relation("AuditActorUser")
   jobsCreated              Job[]               @relation("JobCreatedBy")
+  csvPreviewsCreated       CsvPreview[]        @relation("CsvPreviewCreatedBy")
 
   @@index([platformRole])
   @@map("users")
@@ -324,6 +335,40 @@ model TenantTariff {
   @@unique([tenantId, checkType])
   @@index([tariffPlanId])
   @@map("tenant_tariffs")
+}
+
+// ---------------------------------------------------------------------------
+// Cabinet CSV preview drafts (no checks until Submit)
+// ---------------------------------------------------------------------------
+
+model CsvPreview {
+  id                   String           @id @default(cuid())
+  tenantId             String
+  createdByUserId      String?
+  checkType            CheckType
+  status               CsvPreviewStatus @default(READY)
+  originalFilename     String?
+  rowCount             Int              @default(0)
+  validCount           Int              @default(0)
+  invalidCount         Int              @default(0)
+  deduplicatedCount    Int              @default(0)
+  /// Valid E.164 phones; cleared after CONSUMED.
+  phonesJson           Json?
+  /// Up to 50 invalid samples { input, reason }.
+  invalidJson          Json?
+  previewUnitSellPrice Decimal?         @db.Decimal(18, 6)
+  previewCurrency      String           @default("RUB") @db.Char(3)
+  expiresAt            DateTime
+  consumedJobId        String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdByUser User?  @relation("CsvPreviewCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([expiresAt])
+  @@map("csv_previews")
 }
 
 // ---------------------------------------------------------------------------

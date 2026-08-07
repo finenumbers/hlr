@@ -7,6 +7,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { CabinetController } from './cabinet.controller';
 import { CabinetService } from './cabinet.service';
+import { CsvPreviewService } from './csv-preview.service';
 
 @Module({
   imports: [
@@ -17,6 +18,6 @@ import { CabinetService } from './cabinet.service';
     WebhooksModule,
   ],
   controllers: [CabinetController],
-  providers: [CabinetService],
+  providers: [CabinetService, CsvPreviewService],
 })
 export class CabinetModule {}

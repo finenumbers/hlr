@@ -356,8 +356,16 @@ const enMessages = {
     estimateFailed: 'Estimate failed',
     submitFailed: 'Submit failed',
     csvFile: 'CSV / TXT file',
-    csvHint: 'One phone per line or first column. Parsing runs in the queue.',
+    csvHint:
+      'One phone per line or first column. Upload previews the draft; checks start only after Submit.',
     submitCsv: 'Submit CSV',
+    uploadCsv: 'Upload file',
+    loadingPreview: 'Loading…',
+    preparedJob: 'Prepared job',
+    previewStats:
+      'Rows: {rows} · valid: {valid} · invalid: {invalid} · duplicates: {dupes}',
+    previewInvalid:
+      'File has invalid numbers. Fix and re-upload — submit is disabled.',
     orPaste: 'or paste numbers',
   },
   cabinetJobs: {
@@ -383,6 +391,7 @@ const enMessages = {
     progress: 'Progress',
     created: 'Created',
     emptyItems: 'No item results yet',
+    csvQueuing: 'Job is being queued…',
     colPhone: 'Phone',
     colResult: 'Result',
     colReachable: 'Reachable',

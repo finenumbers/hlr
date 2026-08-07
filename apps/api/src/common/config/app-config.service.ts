@@ -78,8 +78,16 @@ export class AppConfigService {
     return this.env.BODY_LIMIT_SUBMIT;
   }
 
+  get bodyLimitCsv(): string {
+    return this.env.BODY_LIMIT_CSV;
+  }
+
   get requestTimeoutMs(): number {
     return this.env.REQUEST_TIMEOUT_MS;
+  }
+
+  get requestTimeoutCsvMs(): number {
+    return this.env.REQUEST_TIMEOUT_CSV_MS;
   }
 
   get authLoginRpm(): number {

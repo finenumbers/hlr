@@ -947,8 +947,10 @@ export class JobLifecycleService {
     }
 
     // Empty CSV shells: re-enqueue parse or fail when file is gone / heal budget exhausted.
+    // Use a longer age gate than poll interval so long stream-parses are not killed.
+    const csvShellOlderThan = new Date(this.now().getTime() - 5 * 60 * 1000);
     const emptyShells = await this.deps.store.listEmptyCsvShellsNeedingHeal({
-      olderThan,
+      olderThan: csvShellOlderThan,
       limit,
     });
     let csvHealed = 0;

@@ -340,43 +340,46 @@ export class PrismaJobsStore implements JobsStore {
       throw new Error(`Job ${input.jobId} not found`);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      for (let i = 0; i < input.phones.length; i += CHUNK) {
-        const slice = input.phones.slice(i, i + CHUNK);
-        await tx.jobItem.createMany({
-          data: slice.map((phoneE164) => ({
-            jobId: input.jobId,
-            tenantId: input.tenantId,
-            checkType: input.checkType,
-            status: 'QUEUED' as const,
-            phoneE164,
-            currency: input.currency,
-            unitSellPrice: jobRow.unitSellPrice,
-            unitProviderCost: jobRow.unitProviderCost,
-            tariffPlanId: jobRow.tariffPlanId,
-            tariffPlanCode: jobRow.tariffPlanCode,
-            estimatedCost: jobRow.unitSellPrice,
-          })),
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (let i = 0; i < input.phones.length; i += CHUNK) {
+          const slice = input.phones.slice(i, i + CHUNK);
+          await tx.jobItem.createMany({
+            data: slice.map((phoneE164) => ({
+              jobId: input.jobId,
+              tenantId: input.tenantId,
+              checkType: input.checkType,
+              status: 'QUEUED' as const,
+              phoneE164,
+              currency: input.currency,
+              unitSellPrice: jobRow.unitSellPrice,
+              unitProviderCost: jobRow.unitProviderCost,
+              tariffPlanId: jobRow.tariffPlanId,
+              tariffPlanCode: jobRow.tariffPlanCode,
+              estimatedCost: jobRow.unitSellPrice,
+            })),
+          });
+        }
+        const prevMeta = asRecord(jobRow.metadata) ?? {};
+        await tx.job.update({
+          where: { id: input.jobId },
+          data: {
+            itemCount: input.phones.length,
+            status: 'QUEUED',
+            estimatedCost:
+              jobRow.unitSellPrice !== null
+                ? jobRow.unitSellPrice.mul(input.phones.length)
+                : null,
+            metadata: toJson({
+              ...prevMeta,
+              csvPending: false,
+              csvAttachedAt: new Date().toISOString(),
+            }),
+          },
         });
-      }
-      const prevMeta = asRecord(jobRow.metadata) ?? {};
-      await tx.job.update({
-        where: { id: input.jobId },
-        data: {
-          itemCount: input.phones.length,
-          status: 'QUEUED',
-          estimatedCost:
-            jobRow.unitSellPrice !== null
-              ? jobRow.unitSellPrice.mul(input.phones.length)
-              : null,
-          metadata: toJson({
-            ...prevMeta,
-            csvPending: false,
-            csvAttachedAt: new Date().toISOString(),
-          }),
-        },
-      });
-    });
+      },
+      { timeout: 120_000, maxWait: 20_000 },
+    );
 
     const rows = await this.prisma.jobItem.findMany({
       where: { jobId: input.jobId },

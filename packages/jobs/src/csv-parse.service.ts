@@ -45,7 +45,7 @@ export async function streamParsePhoneFile(
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    const firstCell = splitCsvFirstCell(trimmed);
+    const firstCell = splitCsvFirstCell(trimmed).replace(/^\uFEFF/, '');
     if (!firstCell) continue;
 
     if (isFirst) {

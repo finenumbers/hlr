@@ -26,6 +26,15 @@ describe('streamParsePhoneFile', () => {
     expect(result.phones).toEqual(['+79991234567', '79997654321']);
   });
 
+  it('strips UTF-8 BOM from the first phone cell', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fn-csv-'));
+    const path = join(dir, 'bom.csv');
+    await writeFile(path, '\uFEFF+79991234567\n79997654321\n', 'utf8');
+
+    const result = await streamParsePhoneFile(path, { maxRows: 100 });
+    expect(result.phones).toEqual(['+79991234567', '79997654321']);
+  });
+
   it('flags truncation past maxRows', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fn-csv-'));
     const path = join(dir, 'phones.csv');

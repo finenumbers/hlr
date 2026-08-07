@@ -14,7 +14,7 @@ const DARK_SRC = '/branding/logo-horizontal-dark.png?v=20260730';
  */
 export function BrandLogo({
   variant = 'light',
-  className = 'h-[2.4rem] w-auto',
+  className = 'h-[2.16rem] w-auto',
   priority = false,
 }: {
   variant?: 'dark' | 'light';

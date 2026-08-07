@@ -30,6 +30,19 @@ export function isSubmitWritePath(method: string, path: string): boolean {
   return false;
 }
 
+/** Multipart CSV upload / preview routes (POST only) — use BODY_LIMIT_CSV. */
+export function isCsvUploadPath(method: string, path: string): boolean {
+  if (method.toUpperCase() !== 'POST') {
+    return false;
+  }
+  const normalized = path.split('?')[0] || '/';
+  return (
+    normalized === '/cabinet/csv-previews' ||
+    normalized === '/cabinet/jobs/csv' ||
+    normalized === '/v1/jobs/csv'
+  );
+}
+
 /**
  * Parse express-style size strings: 1mb, 256kb, 1024, etc.
  */

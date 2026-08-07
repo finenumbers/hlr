@@ -137,7 +137,12 @@ export default function CabinetJobDetailPage() {
           isError={items.isError}
           error={items.error}
           isEmpty={!items.data?.items.length}
-          emptyTitle={t('cabinetJobs.emptyItems')}
+          emptyTitle={
+            Number(job.data?.itemCount ?? 0) === 0 &&
+            (job.data?.status === 'QUEUED' || job.data?.status === 'PROCESSING')
+              ? t('cabinetJobs.csvQueuing')
+              : t('cabinetJobs.emptyItems')
+          }
           onRetry={() => void items.refetch()}
         >
           <DataTable

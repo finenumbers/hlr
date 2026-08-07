@@ -1,7 +1,7 @@
 import { readdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { PrismaClient } from '@finenumbers/db';
+import { Prisma, type PrismaClient } from '@finenumbers/db';
 
 import { workerLogger } from './logger';
 
@@ -60,12 +60,28 @@ export async function runRetentionSweep(
     protectedPaths,
   });
 
+  // Expire / purge cabinet CSV preview drafts (PII phonesJson).
+  const now = new Date();
+  await prisma.csvPreview.updateMany({
+    where: { status: 'READY', expiresAt: { lt: now } },
+    data: { status: 'EXPIRED', phonesJson: Prisma.DbNull },
+  });
+  const csvPreviewsDeleted = await prisma.csvPreview.deleteMany({
+    where: {
+      OR: [
+        { status: { in: ['EXPIRED', 'CONSUMED', 'INVALID'] }, expiresAt: { lt: now } },
+        { createdAt: { lt: cutoff } },
+      ],
+    },
+  });
+
   const result = {
     providerRequestsDeleted: providerRequests.count,
     providerCallbacksDeleted: providerCallbacks.count,
     webhookPayloadsRedacted: webhookUpdate.count,
     idempotencyDeleted: idempotency.count,
     uploadFilesDeleted,
+    csvPreviewsDeleted: csvPreviewsDeleted.count,
     cutoffIso: cutoff.toISOString(),
   };
 

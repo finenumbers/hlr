@@ -392,6 +392,26 @@ export const api = {
       form.set('file', file);
       return apiFormRequest('/cabinet/jobs/csv', form);
     },
+    createCsvPreview: (checkType: 'HLR' | 'PING', file: File) => {
+      const form = new FormData();
+      form.set('checkType', checkType);
+      form.set('file', file);
+      return apiFormRequest<Record<string, unknown>>('/cabinet/csv-previews', form);
+    },
+    csvPreview: (id: string) =>
+      apiRequest<Record<string, unknown>>(`/cabinet/csv-previews/${id}`),
+    csvPreviewPhones: (id: string, page: number, pageSize = 50) =>
+      apiRequest<{ items: string[]; page: number; pageSize: number; total: number }>(
+        `/cabinet/csv-previews/${id}/phones?page=${page}&pageSize=${pageSize}`,
+      ),
+    estimateCsvPreview: (id: string) =>
+      apiRequest<Record<string, unknown>>(`/cabinet/csv-previews/${id}/estimate`, {
+        method: 'POST',
+      }),
+    submitCsvPreview: (id: string) =>
+      apiRequest<Record<string, unknown>>(`/cabinet/csv-previews/${id}/submit`, {
+        method: 'POST',
+      }),
     jobs: (q: string) => apiRequest<Paginated<Record<string, unknown>>>(`/cabinet/jobs?${q}`),
     job: (id: string) => apiRequest<Record<string, unknown>>(`/cabinet/jobs/${id}`),
     jobItems: (id: string, q: string) =>

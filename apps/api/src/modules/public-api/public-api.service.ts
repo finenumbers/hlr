@@ -71,6 +71,7 @@ export class PublicApiService {
         maxPageSize: 100,
         bodyLimit: this.config.bodyLimit,
         bodyLimitSubmit: this.config.bodyLimitSubmit,
+        bodyLimitCsv: this.config.bodyLimitCsv,
       },
     };
   }

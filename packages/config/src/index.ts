@@ -111,8 +111,16 @@ export const apiEnvSchema = baseEnvSchema
     BODY_LIMIT: nonempty.default('256kb'),
     /** Max body size for POST /v1/checks and POST /v1/jobs. */
     BODY_LIMIT_SUBMIT: nonempty.default('1mb'),
+    /**
+     * Max multipart body for CSV upload/preview routes
+     * (POST /cabinet/csv-previews, /cabinet/jobs/csv, /v1/jobs/csv).
+     * Align with multer / maxCsvBytes (~50 MiB).
+     */
+    BODY_LIMIT_CSV: nonempty.default('52mb'),
     /** Request socket idle timeout (ms). 0 disables. */
     REQUEST_TIMEOUT_MS: z.coerce.number().int().min(0).default(30_000),
+    /** Idle timeout for CSV multipart routes (ms). 0 = use REQUEST_TIMEOUT_MS. */
+    REQUEST_TIMEOUT_CSV_MS: z.coerce.number().int().min(0).default(120_000),
     /** Login attempts per IP per minute (auth zone). */
     AUTH_LOGIN_RPM: z.coerce.number().int().positive().default(20),
     /** Logout attempts per IP per minute (auth zone). */

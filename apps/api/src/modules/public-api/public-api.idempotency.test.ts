@@ -135,6 +135,7 @@ describe('PublicApiService submit idempotency', () => {
       rateLimitWebhookMultiplier: 1,
       bodyLimit: '256kb',
       bodyLimitSubmit: '1mb',
+      bodyLimitCsv: '52mb',
     };
     const requestContext = { requestId: 'req-test-1' };
     const service = new PublicApiService(

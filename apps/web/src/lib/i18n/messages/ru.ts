@@ -352,8 +352,16 @@ export const ru: EnMessages = {
     estimateFailed: 'Не удалось оценить',
     submitFailed: 'Не удалось отправить',
     csvFile: 'CSV / TXT файл',
-    csvHint: 'Один номер на строку или в первом столбце. Парсинг идёт в очереди.',
+    csvHint:
+      'Один номер на строку или в первом столбце. Сначала загрузка и просмотр, проверки — только после «Отправить».',
     submitCsv: 'Отправить CSV',
+    uploadCsv: 'Загрузить файл',
+    loadingPreview: 'Загрузка…',
+    preparedJob: 'Подготовленное задание',
+    previewStats:
+      'Строк: {rows} · валидных: {valid} · невалидных: {invalid} · дублей: {dupes}',
+    previewInvalid:
+      'Файл содержит невалидные номера. Исправьте файл и загрузите снова — отправка недоступна.',
     orPaste: 'или вставьте номера',
   },
   cabinetJobs: {
@@ -379,6 +387,7 @@ export const ru: EnMessages = {
     progress: 'Прогресс',
     created: 'Создано',
     emptyItems: 'Пока нет результатов по номерам',
+    csvQueuing: 'Задание ставится в очередь…',
     colPhone: 'Телефон',
     colResult: 'Результат',
     colReachable: 'Доступен',

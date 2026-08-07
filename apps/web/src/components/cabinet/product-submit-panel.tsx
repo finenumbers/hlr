@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
@@ -11,6 +11,21 @@ import { ApiError, api } from '@/lib/api/client';
 import type { CheckType } from '@/lib/check-type';
 import { useT } from '@/lib/i18n';
 import { formatMoney } from '@/lib/utils';
+
+type PreviewState = {
+  id: string;
+  status: string;
+  stats: {
+    rowCount: number;
+    validCount: number;
+    invalidCount: number;
+    deduplicatedCount: number;
+  };
+  unitSellPrice: string | null;
+  currency: string;
+  invalidSamples: Array<{ input?: string; reason?: string }>;
+  phones: { items: string[]; page: number; pageSize: number; total: number };
+};
 
 export function ProductSubmitPanel({
   checkType,
@@ -30,8 +45,12 @@ export function ProductSubmitPanel({
   const router = useRouter();
   const [phonesText, setPhonesText] = useState('');
   const [estimate, setEstimate] = useState<Record<string, unknown> | null>(null);
+  const [csvEstimate, setCsvEstimate] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [phonePage, setPhonePage] = useState(1);
 
   const phones = useMemo(
     () =>
@@ -48,6 +67,12 @@ export function ProductSubmitPanel({
     checkType === 'HLR'
       ? t('cabinetSubmit.hlrUnavailable')
       : t('cabinetSubmit.pingUnavailable');
+
+  const phonesQuery = useQuery({
+    queryKey: ['cabinet', 'csv-preview-phones', preview?.id, phonePage],
+    queryFn: () => api.cabinet.csvPreviewPhones(preview!.id, phonePage, 50),
+    enabled: Boolean(preview?.id && preview.status === 'READY'),
+  });
 
   const estimateMut = useMutation({
     mutationFn: () =>
@@ -77,10 +102,35 @@ export function ProductSubmitPanel({
       setError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
   });
 
-  const csvMut = useMutation({
+  const previewMut = useMutation({
     mutationFn: async () => {
       if (!csvFile) throw new Error('No file');
-      return api.cabinet.submitJobCsv(checkType, csvFile);
+      return api.cabinet.createCsvPreview(checkType, csvFile);
+    },
+    onSuccess: (data) => {
+      setPreview(data as PreviewState);
+      setPhonePage(1);
+      setCsvEstimate(null);
+      setCsvError(null);
+    },
+    onError: (err) =>
+      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
+  });
+
+  const csvEstimateMut = useMutation({
+    mutationFn: async () => {
+      if (!preview?.id) throw new Error('No preview');
+      return api.cabinet.estimateCsvPreview(preview.id);
+    },
+    onSuccess: (data) => setCsvEstimate(data),
+    onError: (err) =>
+      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.estimateFailed')),
+  });
+
+  const csvSubmitMut = useMutation({
+    mutationFn: async () => {
+      if (!preview?.id) throw new Error('No preview');
+      return api.cabinet.submitCsvPreview(preview.id);
     },
     onSuccess: (job) => {
       const id =
@@ -89,8 +139,21 @@ export function ProductSubmitPanel({
       if (id) router.push(`/app/jobs/${id}`);
     },
     onError: (err) =>
-      setError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
+      setCsvError(err instanceof ApiError ? err.message : t('cabinetSubmit.submitFailed')),
   });
+
+  const busy =
+    previewMut.isPending ||
+    csvEstimateMut.isPending ||
+    csvSubmitMut.isPending ||
+    submitMut.isPending ||
+    estimateMut.isPending;
+
+  const phoneItems =
+    (phonesQuery.data?.items as string[] | undefined) ?? preview?.phones.items ?? [];
+  const phoneTotal = phonesQuery.data?.total ?? preview?.phones.total ?? 0;
+  const phonePageSize = phonesQuery.data?.pageSize ?? preview?.phones.pageSize ?? 50;
+  const phonePageCount = Math.max(1, Math.ceil(phoneTotal / phonePageSize));
 
   return (
     <Card className={`space-y-4 ${available ? '' : 'opacity-70'}`}>
@@ -119,21 +182,128 @@ export function ProductSubmitPanel({
               type="file"
               accept=".csv,.txt,text/csv,text/plain"
               className="mt-1 block w-full text-sm"
-              onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+              disabled={busy}
+              onChange={(e) => {
+                setCsvFile(e.target.files?.[0] ?? null);
+                setPreview(null);
+                setCsvEstimate(null);
+                setCsvError(null);
+              }}
             />
             <p className="mt-1 text-xs text-[var(--color-ink-muted)]">{t('cabinetSubmit.csvHint')}</p>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <Button
                 type="button"
-                disabled={!csvFile || csvMut.isPending}
+                disabled={!csvFile || busy}
                 onClick={() => {
-                  setError(null);
-                  csvMut.mutate();
+                  setCsvError(null);
+                  previewMut.mutate();
                 }}
               >
-                {csvMut.isPending ? t('cabinetSubmit.submitting') : t('cabinetSubmit.submitCsv')}
+                {previewMut.isPending
+                  ? t('cabinetSubmit.loadingPreview')
+                  : t('cabinetSubmit.uploadCsv')}
               </Button>
             </div>
+            {csvError ? (
+              <p className="mt-2 text-sm text-[var(--color-danger)]">{csvError}</p>
+            ) : null}
+
+            {preview ? (
+              <div className="mt-4 space-y-3 rounded-md border border-[var(--color-line)] bg-[var(--color-panel)] p-3">
+                <p className="text-sm font-semibold">{t('cabinetSubmit.preparedJob')}</p>
+                <p className="text-sm text-[var(--color-ink-muted)]">
+                  {t('cabinetSubmit.previewStats', {
+                    rows: preview.stats.rowCount,
+                    valid: preview.stats.validCount,
+                    invalid: preview.stats.invalidCount,
+                    dupes: preview.stats.deduplicatedCount,
+                  })}
+                </p>
+                {preview.status === 'INVALID' ? (
+                  <div className="space-y-1 text-sm text-[var(--color-danger)]">
+                    <p>{t('cabinetSubmit.previewInvalid')}</p>
+                    {preview.invalidSamples.slice(0, 5).map((sample, idx) => (
+                      <p key={`${sample.input}-${idx}`}>
+                        {sample.input}: {sample.reason}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="max-h-64 overflow-auto rounded border border-[var(--color-line)] bg-[var(--color-panel-elevated)]">
+                      <ol className="list-decimal px-6 py-2 text-sm">
+                        {phoneItems.map((phone) => (
+                          <li key={phone} className="py-0.5 font-mono">
+                            {phone}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    {phonePageCount > 1 ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={phonePage <= 1 || phonesQuery.isFetching}
+                          onClick={() => setPhonePage((p) => Math.max(1, p - 1))}
+                        >
+                          {t('common.prev')}
+                        </Button>
+                        <span>
+                          {phonePage}/{phonePageCount}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={phonePage >= phonePageCount || phonesQuery.isFetching}
+                          onClick={() => setPhonePage((p) => p + 1)}
+                        >
+                          {t('common.next')}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {csvEstimate ? (
+                      <p className="text-sm">
+                        {t('cabinetSubmit.estimated', {
+                          amount: formatMoney(
+                            String(csvEstimate.estimatedSellTotal ?? '0'),
+                            String(csvEstimate.currency ?? currency),
+                          ),
+                        })}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          setCsvError(null);
+                          csvEstimateMut.mutate();
+                        }}
+                      >
+                        {t('cabinetSubmit.estimatePrice')}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={busy || preview.status !== 'READY'}
+                        onClick={() => {
+                          setCsvError(null);
+                          csvSubmitMut.mutate();
+                        }}
+                      >
+                        {csvSubmitMut.isPending
+                          ? t('cabinetSubmit.submitting')
+                          : t('cabinetSubmit.submit')}
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <p className="text-center text-xs font-bold text-[var(--color-ink-muted)]">
@@ -145,6 +315,7 @@ export function ProductSubmitPanel({
             <textarea
               className="min-h-32 w-full rounded-md border border-[var(--color-line)] bg-[var(--color-panel-elevated)] px-3 py-2 text-sm"
               value={phonesText}
+              disabled={busy}
               onChange={(e) => setPhonesText(e.target.value)}
               placeholder={t('cabinetSubmit.phonesPlaceholder')}
             />
@@ -167,7 +338,7 @@ export function ProductSubmitPanel({
             <Button
               type="button"
               variant="secondary"
-              disabled={!phones.length || estimateMut.isPending}
+              disabled={!phones.length || busy}
               onClick={() => {
                 setError(null);
                 estimateMut.mutate();
@@ -177,7 +348,7 @@ export function ProductSubmitPanel({
             </Button>
             <Button
               type="button"
-              disabled={!phones.length || submitMut.isPending}
+              disabled={!phones.length || busy}
               onClick={() => {
                 setError(null);
                 submitMut.mutate();
