@@ -116,14 +116,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 }
 
 /** Multipart upload (do not set Content-Type — browser sets boundary). */
-/** Authenticated binary download (CSV export, etc.). */
+/** Authenticated binary download (XLSX export, etc.). */
 export async function apiDownload(
   path: string,
   options: Omit<RequestOptions, 'body'> = {},
 ): Promise<{ blob: Blob; filename: string | null }> {
   const apiBase = await resolvePublicApiUrl();
   const headers: Record<string, string> = {
-    Accept: 'text/csv,application/octet-stream,*/*',
+    Accept:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream,text/csv,*/*',
   };
   if (options.auth !== false) {
     const token = getToken();

@@ -73,13 +73,13 @@ export default function CabinetJobDetailPage() {
     });
   })();
 
-  const exportCsv = async () => {
+  const exportXlsx = async () => {
     if (!id) return;
     setExporting(true);
     setExportError(null);
     try {
       const { blob, filename } = await api.cabinet.jobItemsExport(id, locale);
-      downloadBlob(filename ?? `job-${id}.csv`, blob);
+      downloadBlob(filename ?? `job-${id}.xlsx`, blob);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : t('cabinetJobs.exportFailed'));
     } finally {
@@ -107,10 +107,10 @@ export default function CabinetJobDetailPage() {
             type="button"
             variant="secondary"
             size="sm"
-            onClick={() => void exportCsv()}
+            onClick={() => void exportXlsx()}
             disabled={!job.data || exporting}
           >
-            {exporting ? t('common.loading') : t('cabinetJobs.exportCsv')}
+            {exporting ? t('common.loading') : t('cabinetJobs.exportXlsx')}
           </Button>
         }
       />

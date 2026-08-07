@@ -39,7 +39,10 @@ import type { ProviderSmscService } from '../provider-smsc/provider-smsc.service
 import { NestWebhookDeliveryService } from '../webhooks/nest-webhook-delivery.service';
 import type { CreateJobDto } from './dto/create-job.dto';
 import type { JobResponseDto } from './dto/job-response.dto';
-import { createJobItemsCsvStream } from './job-items-csv';
+import {
+  buildJobItemsXlsxBuffer,
+  jobItemsXlsxFilename,
+} from './job-items-xlsx';
 import { JOBS_PROCESSOR, JobsProcessorPort } from './jobs-processor.port';
 import { JOBS_STORE } from './jobs-store.port';
 
@@ -259,51 +262,42 @@ export class JobsService {
   }
 
   /**
-   * Stream all job items as Excel-friendly CSV (BOM + `;`).
-   * Chunked cursor reads — safe for 100k-row jobs.
+   * Export all job items as a styled XLSX workbook.
+   * Chunked cursor reads — safe for large jobs (materialized into one buffer).
    */
-  async streamItemsCsvForTenant(input: {
+  async exportItemsXlsxForTenant(input: {
     tenantId: string;
     jobId: string;
     locale: 'en' | 'ru';
   }) {
     const job = await this.getByIdForTenant(input.tenantId, input.jobId);
     const pageSize = 500;
-    const prisma = this.prisma;
-    const tenantId = input.tenantId;
-    const jobId = input.jobId;
-
-    async function* iterate() {
-      let cursor: string | undefined;
-      for (;;) {
-        const rows = await prisma.jobItem.findMany({
-          where: { tenantId, jobId },
-          take: pageSize,
-          ...(cursor
-            ? { skip: 1, cursor: { id: cursor } }
-            : {}),
-          orderBy: { id: 'asc' },
-          select: jobItemListSelect,
-        });
-        if (rows.length === 0) break;
-        for (const row of rows) {
-          yield mapJobItemListRow(row);
-        }
-        cursor = rows[rows.length - 1]?.id;
-        if (rows.length < pageSize) break;
+    const items: ReturnType<typeof mapJobItemListRow>[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const rows = await this.prisma.jobItem.findMany({
+        where: { tenantId: input.tenantId, jobId: input.jobId },
+        take: pageSize,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        orderBy: { id: 'asc' },
+        select: jobItemListSelect,
+      });
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        items.push(mapJobItemListRow(row));
       }
+      cursor = rows[rows.length - 1]?.id;
+      if (rows.length < pageSize) break;
     }
 
-    const stream = createJobItemsCsvStream({
+    const buffer = await buildJobItemsXlsxBuffer({
       checkType: job.checkType,
       locale: input.locale,
-      iterate,
+      items,
     });
-    const slug =
-      job.checkType === 'PING' ? 'ping-sms' : job.checkType === 'HLR' ? 'hlr' : 'job';
     return {
-      stream,
-      filename: `${slug}-${job.id}.csv`,
+      buffer,
+      filename: jobItemsXlsxFilename(job.checkType, job.id),
       job,
     };
   }

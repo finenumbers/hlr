@@ -869,7 +869,7 @@ export class AdminPanelService {
     });
   }
 
-  async exportJobItemsCsv(jobId: string, locale: 'en' | 'ru') {
+  async exportJobItemsXlsx(jobId: string, locale: 'en' | 'ru') {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) {
       throw new NotFoundException({
@@ -877,7 +877,7 @@ export class AdminPanelService {
         message: `Job ${jobId} not found`,
       });
     }
-    return this.jobs.streamItemsCsvForTenant({
+    return this.jobs.exportItemsXlsxForTenant({
       tenantId: job.tenantId,
       jobId,
       locale,

@@ -331,8 +331,11 @@ export class CabinetController {
   }
 
   @Get('jobs/:id/items/export')
-  @ApiOperation({ summary: 'Download all job item results as CSV' })
-  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @ApiOperation({ summary: 'Download all job item results as XLSX' })
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
   async exportItems(
     @TenantId() tenantId: string,
     @Param('id') id: string,
@@ -340,7 +343,7 @@ export class CabinetController {
     @Res({ passthrough: true }) res: import('express').Response,
   ) {
     const locale = localeRaw === 'ru' ? 'ru' : 'en';
-    const { stream, filename } = await this.cabinet.exportJobItemsCsv(
+    const { buffer, filename } = await this.cabinet.exportJobItemsXlsx(
       tenantId,
       id,
       locale,
@@ -349,7 +352,7 @@ export class CabinetController {
       'Content-Disposition',
       `attachment; filename="${filename}"`,
     );
-    return new StreamableFile(stream);
+    return new StreamableFile(buffer);
   }
 
   @Get('jobs/:id/items')

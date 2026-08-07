@@ -30,6 +30,7 @@
     "bullmq": "^5.41.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "exceljs": "^4.4.0",
     "helmet": "^8.3.0",
     "ioredis": "^5.5.0",
     "multer": "^2.2.0",

@@ -410,17 +410,20 @@ export class AdminPanelController {
   }
 
   @Get('jobs/:id/items/export')
-  @ApiOperation({ summary: 'Download all job item results as CSV' })
-  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @ApiOperation({ summary: 'Download all job item results as XLSX' })
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
   async exportJobItems(
     @Param('id') id: string,
     @Query('locale') localeRaw: string | undefined,
     @Res({ passthrough: true }) res: import('express').Response,
   ) {
     const locale = localeRaw === 'ru' ? 'ru' : 'en';
-    const { stream, filename } = await this.admin.exportJobItemsCsv(id, locale);
+    const { buffer, filename } = await this.admin.exportJobItemsXlsx(id, locale);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return new StreamableFile(stream);
+    return new StreamableFile(buffer);
   }
 
   @Get('jobs/:id/items')

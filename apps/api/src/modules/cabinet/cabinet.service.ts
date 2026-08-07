@@ -165,12 +165,12 @@ export class CabinetService {
     };
   }
 
-  exportJobItemsCsv(
+  exportJobItemsXlsx(
     tenantId: string,
     jobId: string,
     locale: 'en' | 'ru',
   ) {
-    return this.jobs.streamItemsCsvForTenant({ tenantId, jobId, locale });
+    return this.jobs.exportItemsXlsxForTenant({ tenantId, jobId, locale });
   }
 
   getBalance(tenantId: string) {
