@@ -13,6 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError, api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
+import {
+  labelProviderRequestKind,
+  labelProviderRequestStatus,
+} from '@/lib/status-labels';
 import { formatMoney } from '@/lib/utils';
 
 export default function AdminMonitoringPage() {
@@ -107,8 +111,8 @@ export default function AdminMonitoringPage() {
                   onChange={(e) => setCheckType(e.target.value as 'HLR' | 'PING')}
                   disabled={!configured}
                 >
-                  <option value="HLR">HLR</option>
-                  <option value="PING">Silent SMS</option>
+                  <option value="HLR">{t('common.serviceHlr')}</option>
+                  <option value="PING">{t('common.servicePing')}</option>
                 </select>
               </div>
               <div className="space-y-1">
@@ -183,7 +187,8 @@ export default function AdminMonitoringPage() {
             {(m?.recentProviderRequests ?? []).slice(0, 15).map((row) => (
               <li key={String(row.id)} className="flex justify-between gap-3 border-b border-[var(--color-line)] py-2">
                 <span>
-                  {String(row.kind ?? row.type ?? 'REQ')} · {String(row.status)}
+                  {labelProviderRequestKind(row.kind ?? row.type ?? 'REQ', t)} ·{' '}
+                  {labelProviderRequestStatus(row.status, t)}
                 </span>
                 <span className="text-[var(--color-ink-muted)]">{String(row.createdAt)}</span>
               </li>

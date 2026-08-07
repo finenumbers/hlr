@@ -61,6 +61,18 @@ const enMessages = {
       FAILED: 'FAILED',
       CANCELLED: 'CANCELLED',
     },
+    providerRequestKind: {
+      SEND: 'Send',
+      STATUS: 'Status',
+      COST: 'Cost',
+      BALANCE: 'Balance',
+      OTHER: 'Other',
+    },
+    providerRequestStatus: {
+      PENDING: 'Pending',
+      SUCCEEDED: 'Succeeded',
+      FAILED: 'Failed',
+    },
   },
   nav: {
     dashboard: 'Dashboard',

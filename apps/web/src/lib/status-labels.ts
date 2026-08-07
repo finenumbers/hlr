@@ -27,6 +27,16 @@ const RESULT_STATUSES = new Set([
   'unknown',
 ]);
 
+const PROVIDER_REQUEST_KINDS = new Set([
+  'SEND',
+  'STATUS',
+  'COST',
+  'BALANCE',
+  'OTHER',
+]);
+
+const PROVIDER_REQUEST_STATUSES = new Set(['PENDING', 'SUCCEEDED', 'FAILED']);
+
 function dash(t: Translate): string {
   return t('common.dash');
 }
@@ -61,4 +71,20 @@ export function labelBool(value: unknown, t: Translate): string {
   if (value === true || value === 'true') return t('labels.bool.yes');
   if (value === false || value === 'false') return t('labels.bool.no');
   return String(value);
+}
+
+/** Provider request kind (SEND / STATUS / COST / …). */
+export function labelProviderRequestKind(value: unknown, t: Translate): string {
+  if (value == null || value === '') return dash(t);
+  const code = String(value);
+  if (!PROVIDER_REQUEST_KINDS.has(code)) return code;
+  return t(`labels.providerRequestKind.${code}`);
+}
+
+/** Provider request status (PENDING / SUCCEEDED / FAILED). */
+export function labelProviderRequestStatus(value: unknown, t: Translate): string {
+  if (value == null || value === '') return dash(t);
+  const code = String(value);
+  if (!PROVIDER_REQUEST_STATUSES.has(code)) return code;
+  return t(`labels.providerRequestStatus.${code}`);
 }

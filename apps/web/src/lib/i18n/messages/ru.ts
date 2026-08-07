@@ -57,6 +57,18 @@ export const ru: EnMessages = {
       FAILED: 'ошибка',
       CANCELLED: 'отменён',
     },
+    providerRequestKind: {
+      SEND: 'Отправка',
+      STATUS: 'Статус',
+      COST: 'Стоимость',
+      BALANCE: 'Баланс',
+      OTHER: 'Прочее',
+    },
+    providerRequestStatus: {
+      PENDING: 'Ожидание',
+      SUCCEEDED: 'Успех',
+      FAILED: 'Ошибка',
+    },
   },
   nav: {
     dashboard: 'Дашборд',
