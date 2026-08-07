@@ -56,7 +56,7 @@ export default function AdminLoginPage() {
           <BrandLogo className="h-[2.7rem] w-auto" priority />
           <LocaleSwitcher />
         </div>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">
+        <h1 className="text-2xl font-semibold">
           {t('auth.adminTitle')}
         </h1>
         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{t('auth.adminSubtitle')}</p>

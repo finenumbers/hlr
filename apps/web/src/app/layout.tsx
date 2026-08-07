@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { IBM_Plex_Sans, Source_Serif_4 } from 'next/font/google';
+import { IBM_Plex_Sans } from 'next/font/google';
 import type { ReactElement, ReactNode } from 'react';
 
 import { Providers } from '@/app/providers';
@@ -15,12 +15,6 @@ const sans = IBM_Plex_Sans({
   variable: '--font-sans',
 });
 
-const display = Source_Serif_4({
-  subsets: ['latin', 'cyrillic'],
-  weight: ['500', '600', '700'],
-  variable: '--font-display',
-});
-
 export const metadata: Metadata = {
   title: 'Finenumbers HLR Lookup Service',
   description: 'Admin panel and client cabinet for HLR / Silent SMS checks',
@@ -33,7 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }): React
   const publicEnv = getPublicRuntimeEnv();
 
   return (
-    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${display.variable}`}>
+    <html lang="en" suppressHydrationWarning className={sans.variable}>
       <body className="font-sans antialiased">
         <script
           dangerouslySetInnerHTML={{

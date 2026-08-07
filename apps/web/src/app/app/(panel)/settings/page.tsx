@@ -13,7 +13,7 @@ export default function SettingsPage() {
   return (
     <div>
       <PageHeader title={t('cabinetSettings.title')} description={t('cabinetSettings.description')} />
-      <Card className="max-w-xl space-y-2 text-sm">
+      <Card className="w-full space-y-2 text-sm">
         <p>
           <span className="text-[var(--color-ink-muted)]">{t('cabinetSettings.email')}</span> {user?.email}
         </p>

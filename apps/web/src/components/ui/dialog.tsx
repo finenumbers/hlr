@@ -36,7 +36,7 @@ export function Dialog({
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">{title}</h2>
+          <h2 className="text-xl font-semibold">{title}</h2>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             {t('common.close')}
           </Button>

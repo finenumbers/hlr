@@ -38,7 +38,7 @@ export function RequireAuth({
   if (!can(accessPerm)) {
     return (
       <div className="mx-auto max-w-lg p-10">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-semibold">
+        <h1 className="text-2xl font-semibold">
           {t('common.accessDeniedTitle')}
         </h1>
         <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
