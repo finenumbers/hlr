@@ -13,7 +13,7 @@ import { api } from '@/lib/api/client';
 import { isCheckType, serviceLabel, type CheckType } from '@/lib/check-type';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useT } from '@/lib/i18n';
-import { labelJobStatus } from '@/lib/status-labels';
+import { jobStatusTone, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 function LoadingFallback() {
@@ -123,7 +123,9 @@ function CabinetJobsPage() {
             {
               key: 'status',
               header: t('cabinetJobs.colStatus'),
-              cell: (row) => <Badge>{labelJobStatus(row.status, t)}</Badge>,
+              cell: (row) => (
+                <Badge tone={jobStatusTone(row.status)}>{labelJobStatus(row.status, t)}</Badge>
+              ),
             },
             {
               key: 'progress',

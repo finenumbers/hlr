@@ -41,6 +41,27 @@ function dash(t: Translate): string {
   return t('common.dash');
 }
 
+export type StatusBadgeTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'accent';
+
+/**
+ * Badge tone for job-level status:
+ * готов → green, ошибка → red, в работе → yellow.
+ */
+export function jobStatusTone(value: unknown): StatusBadgeTone {
+  switch (String(value ?? '')) {
+    case 'COMPLETED':
+      return 'ok';
+    case 'FAILED':
+      return 'danger';
+    case 'PROCESSING':
+      return 'warn';
+    case 'COMPLETED_WITH_ERRORS':
+      return 'warn';
+    default:
+      return 'neutral';
+  }
+}
+
 /** Job-level status (list filters + job card). */
 export function labelJobStatus(value: unknown, t: Translate): string {
   if (value == null || value === '') return dash(t);

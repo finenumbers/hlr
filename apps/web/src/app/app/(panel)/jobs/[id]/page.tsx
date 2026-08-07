@@ -21,7 +21,7 @@ import {
   isSubmitTimeProviderFailure,
   providerItemErrorLabel,
 } from '@/lib/smsc-err';
-import { labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
+import { jobStatusTone, labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -124,7 +124,9 @@ export default function CabinetJobDetailPage() {
         <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.status')}</p>
-            <Badge className="mt-2">{labelJobStatus(job.data?.status, t)}</Badge>
+            <Badge className="mt-2" tone={jobStatusTone(job.data?.status)}>
+              {labelJobStatus(job.data?.status, t)}
+            </Badge>
           </Card>
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('cabinetJobs.service')}</p>

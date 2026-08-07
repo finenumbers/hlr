@@ -15,7 +15,7 @@ import { downloadBlob } from '@/lib/csv';
 import { useI18n, useT } from '@/lib/i18n';
 import { hlrResultRowClassName } from '@/lib/hlr-row-tone';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
-import { labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
+import { jobStatusTone, labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
@@ -126,7 +126,9 @@ export default function AdminJobDetailPage() {
         <div className="mb-4 grid items-stretch gap-4 sm:grid-cols-4">
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.status')}</p>
-            <Badge className="mt-2">{labelJobStatus(j?.status, t)}</Badge>
+            <Badge className="mt-2" tone={jobStatusTone(j?.status)}>
+              {labelJobStatus(j?.status, t)}
+            </Badge>
           </Card>
           <Card className="h-full">
             <p className="text-xs text-[var(--color-ink-muted)]">{t('adminJobs.typeSource')}</p>

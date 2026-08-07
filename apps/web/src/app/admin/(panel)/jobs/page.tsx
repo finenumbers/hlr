@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api/client';
 import { useT } from '@/lib/i18n';
-import { labelJobStatus } from '@/lib/status-labels';
+import { jobStatusTone, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 function LoadingFallback() {
@@ -106,15 +106,7 @@ function AdminJobsPage() {
               key: 'status',
               header: t('adminJobs.colStatus'),
               cell: (row) => (
-                <Badge
-                  tone={
-                    String(row.status).includes('FAIL')
-                      ? 'danger'
-                      : String(row.status) === 'PROCESSING'
-                        ? 'warn'
-                        : 'neutral'
-                  }
-                >
+                <Badge tone={jobStatusTone(row.status)}>
                   {labelJobStatus(row.status, t)}
                 </Badge>
               ),
