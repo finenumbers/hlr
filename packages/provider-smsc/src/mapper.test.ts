@@ -130,6 +130,7 @@ describe('mapProviderStatus', () => {
   it('unifies err-only with status+err semantics', () => {
     const errOnly = mapProviderStatus({
       checkType: 'HLR',
+      statusCode: null,
       errorCode: 23,
       providerMessageId: '9',
     });
@@ -138,6 +139,7 @@ describe('mapProviderStatus', () => {
 
     const errZero = mapProviderStatus({
       checkType: 'HLR',
+      statusCode: null,
       errorCode: 0,
       providerMessageId: '9',
     });
