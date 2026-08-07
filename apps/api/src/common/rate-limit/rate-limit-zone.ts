@@ -30,7 +30,7 @@ export function isSubmitWritePath(method: string, path: string): boolean {
   return false;
 }
 
-/** Multipart CSV upload / preview routes (POST only) — use BODY_LIMIT_CSV. */
+/** Multipart CSV upload / preview / preview-submit routes (POST only) — use BODY_LIMIT_CSV + longer timeout. */
 export function isCsvUploadPath(method: string, path: string): boolean {
   if (method.toUpperCase() !== 'POST') {
     return false;
@@ -39,7 +39,8 @@ export function isCsvUploadPath(method: string, path: string): boolean {
   return (
     normalized === '/cabinet/csv-previews' ||
     normalized === '/cabinet/jobs/csv' ||
-    normalized === '/v1/jobs/csv'
+    normalized === '/v1/jobs/csv' ||
+    /^\/cabinet\/csv-previews\/[^/]+\/submit$/.test(normalized)
   );
 }
 

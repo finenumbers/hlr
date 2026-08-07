@@ -21,8 +21,12 @@ describe('isCsvUploadPath', () => {
     expect(isCsvUploadPath('POST', '/cabinet/csv-previews')).toBe(true);
     expect(isCsvUploadPath('POST', '/cabinet/jobs/csv')).toBe(true);
     expect(isCsvUploadPath('POST', '/v1/jobs/csv')).toBe(true);
+    expect(isCsvUploadPath('POST', '/cabinet/csv-previews/abc/submit')).toBe(true);
     expect(isCsvUploadPath('GET', '/cabinet/csv-previews')).toBe(false);
     expect(isCsvUploadPath('POST', '/v1/jobs')).toBe(false);
+    expect(isCsvUploadPath('POST', '/cabinet/csv-previews/abc/estimate')).toBe(
+      false,
+    );
   });
 });
 

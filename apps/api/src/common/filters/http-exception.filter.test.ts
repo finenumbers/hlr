@@ -208,4 +208,33 @@ describe('HttpExceptionFilter error envelope', () => {
       },
     });
   });
+
+  it('maps Redis / BullMQ errors to SERVICE_UNAVAILABLE', () => {
+    const filter = createFilter('req-redis');
+    const refused = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:6379'), {
+      code: 'ECONNREFUSED',
+    });
+    expect(catchJson(filter, refused)).toMatchObject({
+      status: 503,
+      body: {
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: expect.stringContaining('Job queue'),
+          requestId: 'req-redis',
+        },
+      },
+    });
+
+    expect(
+      catchJson(filter, new Error('BullMQ queue jobs-submit is not initialized')),
+    ).toMatchObject({
+      status: 503,
+      body: {
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: expect.stringContaining('Job queue'),
+        },
+      },
+    });
+  });
 });

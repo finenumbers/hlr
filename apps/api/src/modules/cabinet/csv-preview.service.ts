@@ -308,6 +308,16 @@ export class CsvPreviewService {
         progress: result.progress,
       };
     } catch (error) {
+      this.logger.error(
+        {
+          message: 'jobs.csv_preview.submit_failed',
+          previewId: preview.id,
+          tenantId: input.tenantId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        'CsvPreview',
+      );
       await this.prisma.csvPreview.update({
         where: { id: preview.id },
         data: { status: 'READY' },

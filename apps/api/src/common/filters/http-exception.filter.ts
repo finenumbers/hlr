@@ -230,5 +230,26 @@ function classifyOpsFailure(exception: unknown): {
     };
   }
 
+  const redisOrQueue =
+    code === 'ECONNREFUSED' ||
+    code === 'ENOTFOUND' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    /BullMQ queue .+ is not initialized/i.test(message) ||
+    /Connection is closed/i.test(message) ||
+    /Stream isn't writeable/i.test(message) ||
+    /connect ECONNREFUSED/i.test(message) ||
+    /Redis/i.test(name) ||
+    (/redis/i.test(message) && /connect|connection|ECONN/i.test(message));
+  if (redisOrQueue) {
+    return {
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      code: ErrorCodes.SERVICE_UNAVAILABLE,
+      message:
+        'Job queue is unavailable. Check Redis connectivity for api and retry.',
+      details: { redisCode: code || undefined },
+    };
+  }
+
   return null;
 }

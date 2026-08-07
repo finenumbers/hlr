@@ -7,8 +7,10 @@ import {
 } from '@nestjs/common';
 import {
   assertCsvByteLimit,
+  chunkArray,
   computeProgress,
   CreateJobService,
+  DEFAULT_JOB_RUNTIME_SETTINGS,
   JobLifecycleService,
   JobsNotFoundError,
   JobsValidationError,
@@ -21,7 +23,7 @@ import {
 } from '@finenumbers/jobs';
 import { createJobsWebhookHooks } from '@finenumbers/webhooks';
 import type { NormalizedResult } from '@finenumbers/provider-core';
-import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -458,7 +460,8 @@ export class JobsService {
   }
 
   /**
-   * Cabinet Submit after CSV preview: full afford for N, write phones file, shell + csv-parse.
+   * Cabinet Submit after CSV preview: full afford for N, persist Job+items, enqueue submit.
+   * Phones are already normalized in preview — no disk rewrite / csv-parse.
    * Checks start only here (not at preview upload).
    */
   async createFromPreviewPhones(input: {
@@ -477,62 +480,68 @@ export class JobsService {
       });
     }
 
+    const limits = await resolveLimits(this.prisma, { tenantId: input.tenantId });
+    if (input.phones.length > limits.maxCsvRows) {
+      throw new BadRequestException({
+        errorCode: ErrorCodes.VALIDATION_FAILED,
+        message: `Phone count exceeds maxCsvRows (${limits.maxCsvRows})`,
+      });
+    }
+
     const estimate = await this.billing.assertCanAfford({
       tenantId: input.tenantId,
       checkType: input.checkType,
       unitCount: input.phones.length,
     });
 
-    const tenantDir = join(this.config.uploadDir, input.tenantId);
-    await mkdir(tenantDir, { recursive: true });
-    const destPath = join(tenantDir, `${randomUUID()}.csv`);
-    await writeFile(destPath, `${input.phones.join('\n')}\n`, 'utf8');
+    const priceSnapshot = jobPriceSnapshotFromEstimate(estimate);
+    const { job, items } = await this.store.createJobWithItems({
+      tenantId: input.tenantId,
+      checkType: input.checkType,
+      source: 'BULK',
+      phones: input.phones,
+      idempotencyKey: null,
+      createdByUserId: input.createdByUserId ?? null,
+      apiKeyId: null,
+      originalFilename: input.originalFilename ?? null,
+      currency: estimate.currency,
+      priceSnapshot,
+      metadata: {
+        fromPreviewId: input.previewId,
+      },
+    });
 
-    try {
-      const job = await this.store.createJobShell({
-        tenantId: input.tenantId,
-        checkType: input.checkType,
-        source: 'BULK',
-        idempotencyKey: null,
-        createdByUserId: input.createdByUserId ?? null,
-        apiKeyId: null,
-        originalFilename: input.originalFilename ?? null,
-        currency: estimate.currency,
-        priceSnapshot: jobPriceSnapshotFromEstimate(estimate),
-        metadata: {
-          csvPending: true,
-          csvFilePath: destPath,
-          fromPreviewId: input.previewId,
-        },
-      });
+    const storedSettings = await this.store.getRuntimeSettings(input.tenantId);
+    const submitBatchSize =
+      storedSettings.submitBatchSize ?? DEFAULT_JOB_RUNTIME_SETTINGS.submitBatchSize;
+    const batches = chunkArray(
+      items.map((item) => item.id),
+      submitBatchSize,
+    );
+    const requestId = input.requestId?.trim() || undefined;
 
-      await this.processor.enqueueCsvParse({
+    for (const itemIds of batches) {
+      await this.processor.enqueueSubmitBatch({
         jobId: job.id,
         tenantId: job.tenantId,
-        filePath: destPath,
-        ...(input.requestId ? { requestId: input.requestId } : {}),
+        itemIds,
+        ...(requestId ? { requestId } : {}),
       });
-
-      this.logger.log(
-        {
-          message: 'jobs.csv_preview.submitted',
-          jobId: job.id,
-          tenantId: job.tenantId,
-          previewId: input.previewId,
-          phoneCount: input.phones.length,
-        },
-        'Jobs',
-      );
-
-      return { job, progress: computeProgress(job) };
-    } catch (error) {
-      try {
-        await unlink(destPath);
-      } catch {
-        // best-effort
-      }
-      throw error;
     }
+
+    this.logger.log(
+      {
+        message: 'jobs.csv_preview.submitted',
+        jobId: job.id,
+        tenantId: job.tenantId,
+        previewId: input.previewId,
+        phoneCount: input.phones.length,
+        batchesEnqueued: batches.length,
+      },
+      'Jobs',
+    );
+
+    return { job, progress: computeProgress(job) };
   }
 
   /**
