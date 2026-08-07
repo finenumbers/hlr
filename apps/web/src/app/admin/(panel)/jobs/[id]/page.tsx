@@ -15,7 +15,7 @@ import { downloadBlob } from '@/lib/csv';
 import { useI18n, useT } from '@/lib/i18n';
 import { hlrResultRowClassName } from '@/lib/hlr-row-tone';
 import { jobItemResultColumns } from '@/lib/job-item-columns';
-import { labelJobStatus } from '@/lib/status-labels';
+import { labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function AdminJobDetailPage() {
@@ -66,10 +66,7 @@ export default function AdminJobDetailPage() {
   const status = String(j?.status ?? '');
   const canHeal = status === 'QUEUED' || status === 'PROCESSING';
   const isHlr = String(j?.checkType ?? '') === 'HLR';
-  const jobError =
-    j?.errorCode || j?.errorMessage
-      ? [j?.errorCode, j?.errorMessage].filter(Boolean).join(' — ')
-      : null;
+  const jobError = labelJobErrorBanner(j?.errorCode, j?.errorMessage, t);
 
   const exportXlsx = async () => {
     if (!id) return;

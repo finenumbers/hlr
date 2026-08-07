@@ -21,7 +21,7 @@ import {
   isSubmitTimeProviderFailure,
   providerItemErrorLabel,
 } from '@/lib/smsc-err';
-import { labelJobStatus } from '@/lib/status-labels';
+import { labelJobErrorBanner, labelJobStatus } from '@/lib/status-labels';
 import { formatDate } from '@/lib/utils';
 
 export default function CabinetJobDetailPage() {
@@ -56,10 +56,7 @@ export default function CabinetJobDetailPage() {
   const checkType = String(job.data?.checkType ?? '');
   const service = serviceLabel(checkType, t);
   const isHlr = checkType === 'HLR';
-  const jobError =
-    job.data?.errorCode || job.data?.errorMessage
-      ? [job.data?.errorCode, job.data?.errorMessage].filter(Boolean).join(' — ')
-      : null;
+  const jobError = labelJobErrorBanner(job.data?.errorCode, job.data?.errorMessage, t);
 
   const itemRows = (items.data?.items ?? []) as Array<Record<string, unknown>>;
   const uniformProviderError = (() => {

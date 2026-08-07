@@ -235,7 +235,7 @@ export class JobsService {
         where,
         skip,
         take: pageSize,
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: jobItemListSelect,
       }),
       this.prisma.jobItem.count({ where }),
@@ -265,7 +265,7 @@ export class JobsService {
 
   /**
    * Export all job items as a styled XLSX workbook.
-   * Chunked cursor reads — safe for large jobs (materialized into one buffer).
+   * Same order as listItemsForTenant: createdAt asc, id asc.
    */
   async exportItemsXlsxForTenant(input: {
     tenantId: string;
@@ -274,9 +274,8 @@ export class JobsService {
   }) {
     const job = await this.getByIdForTenant(input.tenantId, input.jobId);
     const exportMax = this.config.jobItemsExportMax;
-    const totalItems = await this.prisma.jobItem.count({
-      where: { tenantId: input.tenantId, jobId: input.jobId },
-    });
+    const where = { tenantId: input.tenantId, jobId: input.jobId };
+    const totalItems = await this.prisma.jobItem.count({ where });
     if (totalItems > exportMax) {
       throw new PayloadTooLargeException({
         errorCode: ErrorCodes.PAYLOAD_TOO_LARGE,
@@ -287,20 +286,18 @@ export class JobsService {
 
     const pageSize = 500;
     const items: ReturnType<typeof mapJobItemListRow>[] = [];
-    let cursor: string | undefined;
-    for (;;) {
+    for (let skip = 0; ; skip += pageSize) {
       const rows = await this.prisma.jobItem.findMany({
-        where: { tenantId: input.tenantId, jobId: input.jobId },
+        where,
+        skip,
         take: pageSize,
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-        orderBy: { id: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: jobItemListSelect,
       });
       if (rows.length === 0) break;
       for (const row of rows) {
         items.push(mapJobItemListRow(row));
       }
-      cursor = rows[rows.length - 1]?.id;
       if (rows.length < pageSize) break;
     }
 

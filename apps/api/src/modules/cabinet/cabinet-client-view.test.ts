@@ -71,7 +71,7 @@ describe('cabinet-client-view', () => {
 
     expect(view.unitSellPrice).toBe('2');
     expect(view.errorCode).toBe('CSV_EMPTY');
-    expect(view.errorMessage).toBe('provider callback failed');
+    expect(view.errorMessage).toBe('провайдер callback failed');
     expect(view).not.toHaveProperty('unitProviderCost');
     expect(view).not.toHaveProperty('tariffPlanId');
     expect(JSON.stringify(view)).not.toContain('0.5');
@@ -79,7 +79,8 @@ describe('cabinet-client-view', () => {
   });
 
   it('sanitizes SMSC brand from client error text', () => {
-    expect(sanitizeClientErrorText('SMSC.ru timeout')).toBe('provider timeout');
+    expect(sanitizeClientErrorText('SMSC.ru timeout')).toBe('провайдер timeout');
+    expect(sanitizeClientErrorText('SMSC.ru timeout', 'en')).toBe('provider timeout');
   });
 
   it('redacts provider fields from ledger metadata', () => {

@@ -40,7 +40,23 @@ describe('job-items-xlsx', () => {
     });
 
     expect(buffer.subarray(0, 2).toString('utf8')).toBe('PK');
-    expect(buildJobItemsExportHeader('HLR', 'ru').length).toBeGreaterThan(10);
+    expect(buildJobItemsExportHeader('HLR', 'ru')).toEqual([
+      'Телефон',
+      'Статус',
+      'Результат',
+      'Доступен',
+      'Оператор',
+      'Страна',
+      'Регион',
+      'MCC/MNC',
+      'IMSI',
+      'MSC',
+      'Роуминг',
+      'Страна роуминга',
+      'Оператор роуминга',
+      'Ошибки',
+      'Подробности',
+    ]);
     expect(jobItemsXlsxFilename('HLR', 'job-1')).toBe('hlr-job-1.xlsx');
   });
 
@@ -77,7 +93,6 @@ describe('job-items-xlsx', () => {
     });
 
     const wb = new ExcelJS.Workbook();
-    // exceljs Buffer typing expects ArrayBuffer-like; Node Buffer is fine at runtime
     await wb.xlsx.load(buffer as unknown as ExcelJS.Buffer);
     const sheet = wb.getWorksheet('results');
     expect(sheet).toBeTruthy();
@@ -92,13 +107,15 @@ describe('job-items-xlsx', () => {
     expect(fillOf(3)).toBe('FFFFC7CE'); // fail
     expect(fillOf(4)).toBe('FFFFEB9C'); // error
 
-    const phoneCol = sheet!.getColumn(3); // checkType, service, phone
+    // phone is column 1 after dropping checkType/service
+    const phoneCol = sheet!.getColumn(1);
     expect(Number(phoneCol.width)).toBeGreaterThanOrEqual(longPhone.length);
   });
 
   it('builds PING workbook without HLR fills', async () => {
     const header = buildJobItemsExportHeader('PING', 'en');
-    expect(header).not.toContain('operatorName');
+    expect(header).not.toContain('Operator');
+    expect(header[0]).toBe('Phone');
     const buffer = await buildJobItemsXlsxBuffer({
       checkType: 'PING',
       locale: 'en',

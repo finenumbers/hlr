@@ -11,6 +11,8 @@ export const ru: EnMessages = {
     loading: 'Загрузка…',
     retry: 'Повторить',
     dash: '—',
+    /** Replacement when scrubbing supplier brand from error text. */
+    providerBrand: 'провайдер',
     closeDialogBackdrop: 'Закрыть диалог',
     checkingSession: 'Проверка сессии…',
     accessDeniedTitle: 'Доступ запрещён',
@@ -68,6 +70,17 @@ export const ru: EnMessages = {
       PENDING: 'Ожидание',
       SUCCEEDED: 'Успех',
       FAILED: 'Ошибка',
+    },
+    itemError: {
+      CHECK_TIMEOUT: 'Истекло время ожидания ответа провайдера',
+      QUEUE_DEAD_LETTER: 'Сбой очереди обработки',
+      MISSING_PROVIDER_MESSAGE_ID: 'Нет идентификатора сообщения у провайдера',
+      RESERVED_STALE_TIMEOUT: 'Превышено время ожидания отправки',
+      CSV_EMPTY: 'CSV не содержит номеров телефонов',
+      CSV_TOO_MANY_ROWS: 'CSV превышает лимит строк',
+      CSV_INVALID_PHONES: 'В CSV есть некорректные номера',
+      PRICE_SNAPSHOT_MISSING: 'Не задана цена тарифа',
+      CSV_PARSE_ABANDONED: 'Не удалось разобрать CSV',
     },
   },
   nav: {

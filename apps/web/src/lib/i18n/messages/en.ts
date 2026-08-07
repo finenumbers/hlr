@@ -15,6 +15,8 @@ const enMessages = {
     loading: 'Loading…',
     retry: 'Retry',
     dash: '—',
+    /** Replacement when scrubbing supplier brand from error text. */
+    providerBrand: 'provider',
     closeDialogBackdrop: 'Close dialog backdrop',
     checkingSession: 'Checking session…',
     accessDeniedTitle: 'Access denied',
@@ -72,6 +74,17 @@ const enMessages = {
       PENDING: 'Pending',
       SUCCEEDED: 'Succeeded',
       FAILED: 'Failed',
+    },
+    itemError: {
+      CHECK_TIMEOUT: 'Timed out waiting for provider final status',
+      QUEUE_DEAD_LETTER: 'Processing queue failure',
+      MISSING_PROVIDER_MESSAGE_ID: 'Cannot poll without provider message id',
+      RESERVED_STALE_TIMEOUT: 'Reserved item exceeded check timeout',
+      CSV_EMPTY: 'CSV contained no phone numbers',
+      CSV_TOO_MANY_ROWS: 'CSV exceeds maximum row limit',
+      CSV_INVALID_PHONES: 'CSV contains invalid phone numbers',
+      PRICE_SNAPSHOT_MISSING: 'Tariff price snapshot is missing',
+      CSV_PARSE_ABANDONED: 'Could not parse CSV upload',
     },
   },
   nav: {

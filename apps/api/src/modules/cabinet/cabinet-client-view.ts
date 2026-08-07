@@ -65,12 +65,14 @@ export function toCabinetSellEstimate(estimate: {
   };
 }
 
-/** Strip supplier brand from tenant-visible error text. */
+/** Strip supplier brand from tenant-visible error text (never expose SMSC). */
 export function sanitizeClientErrorText(
   text: string | null | undefined,
+  locale: 'en' | 'ru' = 'ru',
 ): string | null {
   if (text == null || text === '') return text ?? null;
-  return text.replace(/\bSMSC(?:\.ru)?\b/gi, 'provider');
+  const replacement = locale === 'ru' ? 'провайдер' : 'provider';
+  return text.replace(/\bSMSC(?:\.ru)?\b/gi, replacement);
 }
 
 export function toCabinetJobView(job: {

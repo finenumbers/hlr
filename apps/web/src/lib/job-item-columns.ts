@@ -4,6 +4,7 @@ import {
 } from '@/lib/smsc-err';
 import {
   labelBool,
+  labelItemErrorDetails,
   labelJobItemStatus,
   labelResultStatus,
 } from '@/lib/status-labels';
@@ -89,7 +90,7 @@ export function jobItemResultColumns(
     cols.push({
       key: 'error',
       header: t(`${p}.colError`),
-      cell: (r) => text(t, r.errorMessage),
+      cell: (r) => labelItemErrorDetails(r.errorCode, r.errorMessage, t),
     });
   }
 

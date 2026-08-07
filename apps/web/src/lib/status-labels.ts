@@ -88,3 +88,59 @@ export function labelProviderRequestStatus(value: unknown, t: Translate): string
   if (!PROVIDER_REQUEST_STATUSES.has(code)) return code;
   return t(`labels.providerRequestStatus.${code}`);
 }
+
+const ITEM_ERROR_CODES = new Set([
+  'CHECK_TIMEOUT',
+  'QUEUE_DEAD_LETTER',
+  'MISSING_PROVIDER_MESSAGE_ID',
+  'RESERVED_STALE_TIMEOUT',
+  'CSV_EMPTY',
+  'CSV_TOO_MANY_ROWS',
+  'CSV_INVALID_PHONES',
+  'PRICE_SNAPSHOT_MISSING',
+  'CSV_PARSE_ABANDONED',
+]);
+
+/** Strip supplier brand from client-visible error text. */
+export function scrubClientBrandText(text: string, t: Translate): string {
+  return text.replace(/\bSMSC(?:\.ru)?\b/gi, t('common.providerBrand'));
+}
+
+/**
+ * Details column / job error body: prefer mapped platform code, else scrubbed message.
+ */
+export function labelItemErrorDetails(
+  errorCode: unknown,
+  errorMessage: unknown,
+  t: Translate,
+): string {
+  const code = errorCode == null || errorCode === '' ? '' : String(errorCode).trim();
+  if (code && ITEM_ERROR_CODES.has(code)) {
+    const key = `labels.itemError.${code}`;
+    const mapped = t(key);
+    if (mapped && mapped !== key) return mapped;
+  }
+  if (errorMessage == null || errorMessage === '') return dash(t);
+  return scrubClientBrandText(String(errorMessage), t);
+}
+
+/** Job-level error banner: localized code message or code — scrubbed message. */
+export function labelJobErrorBanner(
+  errorCode: unknown,
+  errorMessage: unknown,
+  t: Translate,
+): string | null {
+  const code = errorCode == null || errorCode === '' ? '' : String(errorCode).trim();
+  const message =
+    errorMessage == null || errorMessage === ''
+      ? ''
+      : scrubClientBrandText(String(errorMessage), t);
+  if (code && ITEM_ERROR_CODES.has(code)) {
+    const key = `labels.itemError.${code}`;
+    const mapped = t(key);
+    if (mapped && mapped !== key) return mapped;
+  }
+  if (!code && !message) return null;
+  if (code && message) return `${code} — ${message}`;
+  return code || message;
+}
